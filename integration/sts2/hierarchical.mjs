@@ -70,7 +70,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;}
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
-    stamp:{...requestStamp(state,candidates,reason,routes?mapNodeKeys(map):[]),encounter_key:encounter}});
+    stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
+     // Seen routes carry forward within an act; only a brief that lists them marks them seen.
+     route_act:routes?state.run.act:status.plan?.act===state.run.act?status.plan.route_act??null:null}});
    status.requests++;
    events.push({kind:'strategy_request',reason,request_id:request.id});
   }

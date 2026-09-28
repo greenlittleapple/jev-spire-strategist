@@ -161,8 +161,25 @@ test('a consult off the map does not count as having seen the act routes',async(
   await hierarchicalDeliberate({state:event,candidates:[{id:'a0',command:{action:'choose_event_option',index:0},label:'A'},{id:'a1',command:{action:'choose_event_option',index:1},label:'B'}],
    strategist:{channel,status},ask:async()=>({answers:{move:{type:'choice',choice:'a0',confidence:0.9}},usage:{input_tokens:1}})});
   const seen=await answer;
-  assert.equal(seen.brief.routes,undefined);assert.deepEqual(seen.stamp.route_nodes,[]);
+  assert.equal(seen.brief.routes,undefined);assert.equal(seen.stamp.route_act,null);
   assert.equal(status.plan.route_act,null);
   assert.equal(replanReason(mapState(),status.plan,candidates),'route_plan','the first map screen still asks for a route');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('a consult without routes keeps the route already chosen for this act',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'jev-route-'));
+ try{
+  const channel=fileChannel(dir),status=newStrategyStatus({enabled:true,waitMs:5000});
+  status.plan=stampPlan(plan({route_path:['1,1','1,2','0,3']}),requestStamp(mapState(),candidates,'route_plan',keys));
+  const {current_position,...offMap}=map;
+  const event={...mapState(),state_type:'event',map:offMap};
+  const answer=(async()=>{for(;;){const r=await channel.current();if(r){await channel.answer(r.id,plan({route_path:['1,1','1,2','0,3']}));return r;}await new Promise(x=>setTimeout(x,50));}})();
+  await hierarchicalDeliberate({state:event,candidates:[{id:'a0',command:{action:'choose_event_option',index:0},label:'A'},{id:'a1',command:{action:'choose_event_option',index:1},label:'B'}],
+   strategist:{channel,status},ask:async()=>({answers:{move:{type:'choice',choice:'a0',confidence:0.9}},usage:{input_tokens:1}})});
+  const seen=await answer;
+  assert.equal(seen.brief.routes,undefined);assert.equal(seen.stamp.route_act,run.act);
+  assert.equal(status.plan.route_act,run.act);
+  assert.notEqual(replanReason(mapState(),status.plan,candidates),'route_plan','no new route request');
  }finally{await rm(dir,{recursive:true,force:true});}
 });

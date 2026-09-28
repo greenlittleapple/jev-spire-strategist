@@ -35,7 +35,8 @@ if(command==='wait'){
  const request=await channel.current();
  if(request?.id===id&&Array.isArray(plan.allowed_option_ids))for(const option of plan.allowed_option_ids)
   if(!Object.hasOwn(request.stamp.option_keys,option))errors.push(`allowed_option_ids: ${option} is not an option on this screen`);
- if(request?.id===id&&Array.isArray(plan.route_path))for(const node of plan.route_path)
+ // Screens without map data cannot check nodes; a carried-over route is checked on the next map screen.
+ if(request?.id===id&&Array.isArray(plan.route_path)&&request.stamp.route_nodes?.length)for(const node of plan.route_path)
   if(!(request.stamp.route_nodes??[]).includes(node))errors.push(`route_path: ${node} is not a node on this act's map`);
  if(errors.length){console.error(errors.join('\n'));process.exit(1);}
  await channel.answer(id,plan);

@@ -205,7 +205,10 @@ async function step(token, preview = false) {
       return;
     }
     // The bridge reports when queued game actions are still resolving.
-    if (s.ready === false) { view.message = 'Waiting for the game to finish resolving…'; return; }
+    // Only ordinary combat play waits on the queue. A selection screen (hand_select, card_select…)
+    // is itself what the queued action is waiting for, so it must be answered, not waited on.
+    const busyNow = st => st.ready === false && combatTypes.has(st.state_type);
+    if (busyNow(s)) { view.message = 'Waiting for the game to finish resolving…'; return; }
     waitingSince = 0;
     // Card effects update energy, piles and hand at different animation frames.
     // Require a quiet observation interval before paying for a new decision; with a readiness
@@ -214,7 +217,7 @@ async function step(token, preview = false) {
     await new Promise(resolve => setTimeout(resolve, settle));
     if (token !== generation) return;
     const settled = await observe();
-    if (fingerprint(settled) !== hash || settled.ready === false) { view.message = 'Waiting for animations to settle…'; return; }
+    if (fingerprint(settled) !== hash || busyNow(settled)) { view.message = 'Waiting for animations to settle…'; return; }
     if (view.decisions >= MAX_DECISIONS || view.inputTokens >= MAX_INPUT_TOKENS) {
       stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.'); return;
     }
