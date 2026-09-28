@@ -24,11 +24,12 @@ const shop=(gold=200,removed=false)=>({state_type:'shop',run:run(6),player:{hp:6
   {index:2,category:'card_removal',price:75,is_stocked:true,can_afford:gold>=75}]}});
 const jev=choice=>({model:'t',answers:{move:{type:'choice',choice,confidence:.9,probabilities:{[choice]:.9}}},usage:{input_tokens:1,output_tokens:1}});
 const sessions=[];
-async function withDir(fn){const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));try{return await fn(dir);}finally{sessions.splice(0).forEach(s=>s());await rm(dir,{recursive:true,force:true});}}
+async function withDir(fn){const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));try{return await fn(dir);}finally{await Promise.all(sessions.splice(0).map(s=>s()));await rm(dir,{recursive:true,force:true});}}
 function session(channel,makePlan,seen=[]){
  let stop=false;
- (async()=>{while(!stop){const r=await channel.current();if(r&&!(await channel.pendingAnswer())){seen.push(r);await channel.answer(r.id,makePlan(r));}await new Promise(x=>setTimeout(x,30));}})();
- const halt=()=>{stop=true;};sessions.push(halt);return halt;
+ // The loop is awaited on halt, so the directory is never removed while an answer is being written.
+ const done=(async()=>{while(!stop){const r=await channel.current();if(r&&!(await channel.pendingAnswer())){seen.push(r);await channel.answer(r.id,makePlan(r));}await new Promise(x=>setTimeout(x,30));}})();
+ const halt=async()=>{stop=true;await done.catch(()=>{});};sessions.push(halt);return halt;
 }
 
 test('encounter keys ignore order and form suffixes, count duplicates, and stay fixed for the fight',()=>{
