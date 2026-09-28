@@ -38,3 +38,12 @@ test('a plan is reviewed only when fights since it lost a quarter of max HP on a
  assert.equal(planNeedsReview(m, 'Bowlbug x2', {updatedAt: '2026-02-01'}), true);
  assert.equal(planNeedsReview(m, 'Bowlbug x2', {updatedAt: '2026-04-01'}), false);
 });
+
+test('a plan written during a fight counts as used in that fight',()=>{
+ const m = newFightResults();
+ recordFight(m, fight('monster', 20, 70), '2026-03-01T10:00:00Z');
+ recordFight(m, screen('rewards', 20, 40), '2026-03-01T10:05:00Z');
+ const r = encounterResults(m, 'Bowlbug x2', '2026-03-01T10:00:30Z');
+ assert.equal(r.recent[0].after_plan, true);
+ assert.equal(planNeedsReview(m, 'Bowlbug x2', {updatedAt: '2026-03-01T10:00:30Z'}), true);
+});

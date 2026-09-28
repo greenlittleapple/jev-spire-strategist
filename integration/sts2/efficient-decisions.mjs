@@ -130,7 +130,8 @@ export function reviewReason(state,candidates,chosen,{resourceReviews=false}={})
  if(!combatScreens.has(state.state_type))return null;
  if(chosen.command.action==='end_turn'&&candidates.some(c=>['play_card','use_potion'].includes(c.command.action)))
   return 'Ending while a card or potion can still be used: compare a concrete beneficial alternative, retaliation, self-damage and potion timing. Keeping end turn is valid if those alternatives are harmful or wasteful.';
- if(chosen.forecast?.survives===false)
+ // When no option is forecast to survive, the review has nothing to switch to.
+ if(chosen.forecast?.survives===false&&candidates.some(c=>c.forecast?.survives!==false))
   return 'This prefix has a forecast marked lethal. Check its caveats, continuation and every legal alternative against live rules before accepting it. A partial forecast is not proof of death or safety.';
  return null;
 }

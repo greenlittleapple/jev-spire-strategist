@@ -17,8 +17,9 @@ export function recordIntents(memory, state) {
  const seen = new Map();
  for (const e of state.battle.enemies ?? []) {
   if (!(e.hp > 0) || !e.name) continue;
-  // Same-name enemies in one fight are told apart by their order.
-  const n = (seen.get(e.name) ?? 0) + 1; seen.set(e.name, n);
+  // Same-name enemies in one fight are told apart by entity id (order among the living shifts
+  // when one dies); order is the fallback when ids are missing.
+  const n = e.entity_id ?? (seen.get(e.name) ?? 0) + 1; seen.set(e.name, (seen.get(e.name) ?? 0) + 1);
   const list = memory[e.name] ??= [];
   let entry = list.find(x => x.fight === fight && x.slot === n);
   if (!entry) { entry = {fight, slot: n, moves: {}}; list.push(entry); if (list.length > FIGHTS_PER_ENEMY) list.shift(); }

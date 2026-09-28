@@ -152,3 +152,10 @@ test('the boss potion reserve holds potions outside boss fights unless every oth
  const dying=cands.map(c=>c.id==='potion'?c:{...c,forecast:{...c.forecast,survives:false}});
  assert.equal(combatConstraints(withPotions(fight({type:'elite'}),1),dying,plan({potion_reserve:1})).rules.some(x=>x.kind==='potion_reserve'),false,'kept when everything else dies');
 });
+
+test('a target name covers every living enemy with that name',()=>{
+ const st=fight({enemies:[enemy('a','Bowlbug (Nectar)',20),enemy('b','Bowlbug (Nectar)',20),enemy('c','Bowlbug (Rock)',20)]});
+ const cands=['a','b','c'].map(t=>cand('hit_'+t,{action:'play_card',card_index:0,target:t}));
+ const r=combatConstraints(st,cands,plan({}),{plan:'x',target_priority:['Bowlbug (Nectar)']});
+ assert.deepEqual(ids(r),['hit_a','hit_b']);
+});

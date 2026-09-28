@@ -1,6 +1,7 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
 import {withRageReorders} from './planner.mjs';
-const fixture=()=>JSON.parse(readFileSync(new URL('./fixtures/rage-reorder.json',import.meta.url)));
+// The recorded state carries Smoggy (one Skill per turn), which would forbid these two-Skill lines; it is removed here to test reordering alone.
+const fixture=()=>{const f=JSON.parse(readFileSync(new URL('./fixtures/rage-reorder.json',import.meta.url)));f.state.player.status=f.state.player.status.filter(p=>p.name!=='Smoggy');return f;};
 test('retains original and adds full Rage-first continuation with 3 extra block',()=>{
  const {state,candidates}=fixture(),before=structuredClone({state,candidates}),out=withRageReorders(state,candidates);
  assert.equal(out.length,2);assert.deepEqual(out[0],candidates[0]);assert.equal(out[1].label,'Rage → Strike → Gas Bomb → Strike → Gas Bomb → Defend');assert.equal(out[1].forecast.block,11);assert.equal(out[1].forecast.damage,candidates[0].forecast.damage);assert.deepEqual({state,candidates},before);

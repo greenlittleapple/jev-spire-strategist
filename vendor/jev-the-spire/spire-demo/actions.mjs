@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 
 export function fingerprint(state) {
-  const { ready, busy, ...content } = state ?? {};
+  // saved_run is re-read from the save file every few seconds; its save time and history
+  // change without the live screen changing, so it is not part of the screen's identity.
+  const { ready, busy, saved_run, ...content } = state ?? {};
   return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 

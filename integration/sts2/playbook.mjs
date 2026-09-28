@@ -1,7 +1,7 @@
 // Per-encounter fight plans written by the strategist and reused whenever the same
 // encounter recurs, in this run or later ones. Keyed by the enemy names seen when the
 // fight starts (summons later in the fight do not change the key).
-import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 
 const combatScreens=new Set(['monster','elite','boss']);
@@ -30,9 +30,12 @@ export function currentEncounter(state,fights) {
 
 export function filePlaybook(dir) {
  const path=join(dir,'playbook.json');
- let cache=null;
+ // Re-read when the file changes, so edits made while the runner is up are not overwritten.
+ let cache=null,mtime=null;
  const load=async()=>{
-  if(cache)return cache;
+  const now=await stat(path).then(s=>s.mtimeMs,()=>null);
+  if(cache&&now===mtime)return cache;
+  mtime=now;
   try{cache=JSON.parse(await readFile(path,'utf8'));}catch{cache={entries:{}};}
   cache.entries??={};
   return cache;
@@ -52,6 +55,7 @@ export function filePlaybook(dir) {
    await mkdir(dir,{recursive:true});
    await writeFile(path+'.tmp',JSON.stringify(book,null,1));
    await rename(path+'.tmp',path);
+   mtime=await stat(path).then(s=>s.mtimeMs,()=>null);
   },
   async all(){return (await load()).entries;},
  };

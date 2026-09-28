@@ -27,7 +27,8 @@ import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { actionsFor, fingerprint, factsFor } from './actions.mjs';
-import { decisionCandidates, decisionQuestion, POLICY_VERSION } from './planner.mjs';
+import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
+const turnHits = {}, lampMemory = {};
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 4317);
@@ -104,8 +105,25 @@ async function log(event) {
   const entry = { time: new Date().toISOString(), ...event };
   view.events.unshift(entry); view.events.length = Math.min(view.events.length, 60);
   await appendFile(logFile, JSON.stringify(entry) + '\n', { mode: 0o600 });
-  await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
-  await rename(snapshotFile + '.tmp', snapshotFile);
+  persistSnapshot();
+}
+// The dashboard snapshot (about 2 MB) is written at most every 2 s; the run log above is the record.
+let snapshotDirty = false, snapshotWriting = false;
+function persistSnapshot() {
+  snapshotDirty = true;
+  if (snapshotWriting) return;
+  snapshotWriting = true;
+  setTimeout(async () => {
+    try {
+      while (snapshotDirty) {
+        snapshotDirty = false;
+        await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
+        await rename(snapshotFile + '.tmp', snapshotFile);
+        if (snapshotDirty) await new Promise(r => setTimeout(r, 2000));
+      }
+    } catch (error) { console.error('Snapshot write failed:', error.message); }
+    finally { snapshotWriting = false; }
+  }, 2000);
 }
 async function gameRequest(path = '/api/v1/singleplayer', command) {
   const response = await fetch(bridge + path, {
@@ -201,7 +219,7 @@ async function step(token, preview = false) {
       stop(`Waiting at ${s.state_type}. Resolve this screen in the game, then resume.`); return;
     }
     if(strategist){recordIntents(strategist.movesets,s);if(strategist.fightResults)recordFight(strategist.fightResults,s);}
-    const planningState=facingState(s,view.events);
+    const planningState=markLampUsed(lampMemory,markHitsThisTurn(turnHits,facingState(s,view.events)));
     const actions = decisionCandidates(rewardState(planningState,view.events));
     if (!actions.length) {
       waitingSince ||= Date.now();
@@ -298,6 +316,7 @@ async function step(token, preview = false) {
     view.message = token === generation ? chosen.label : 'Paused. The last dispatched move was accepted; wait for its animation before taking over.';
     nextDecisionAt = Date.now() + (s.ready === true ? 0 : COOLDOWN_MS);
     await log({ ...event, outcome: 'executed', result: outcome });
+    noteDebuffCard(lampMemory, s, chosen);
   } catch (error) {
     stop(error.message === 'fetch failed' ? 'Game bridge unavailable. Launch Slay the Spire 2 with STS2_MCP enabled.' : error.message);
     await log({ kind: 'error', message: view.message });

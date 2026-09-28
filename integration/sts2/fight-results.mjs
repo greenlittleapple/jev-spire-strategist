@@ -13,11 +13,13 @@ const RESULTS_PER_ENCOUNTER = 6;
 
 export function newFightResults() { return {open: {}, encounters: {}}; }
 
-const close = (memory, run, result) => {
+// A fight is timed when it ends, so a plan written during the fight counts as used in it,
+// whether the fight was recorded live or rebuilt from the log.
+const close = (memory, run, result, time) => {
  const f = memory.open[run]; delete memory.open[run];
  if (!f) return;
  const list = memory.encounters[f.key] ??= [];
- list.push({...f, ...result});
+ list.push({...f, ...result, time: time ?? f.time});
  if (list.length > RESULTS_PER_ENCOUNTER) list.shift();
 };
 
@@ -28,7 +30,7 @@ export function recordFight(memory, state, time = new Date().toISOString()) {
  const open = memory.open[run];
  if (combat.has(state.state_type) && state.battle) {
   const fight = `${state.run.act}:${state.run.floor}`;
-  if (open && open.fight !== fight) close(memory, run, {hp_end: open.hp_last, won: true});
+  if (open && open.fight !== fight) close(memory, run, {hp_end: open.hp_last, won: true}, time);
   if (!memory.open[run]) memory.open[run] = {key: encounterKey(state.battle.enemies), fight, run, kind: state.state_type,
    time, hp_start: state.player?.hp ?? null, max_hp: state.player?.max_hp ?? null, rounds: 0, hp_last: state.player?.hp ?? null};
   const f = memory.open[run];
@@ -38,13 +40,13 @@ export function recordFight(memory, state, time = new Date().toISOString()) {
  }
  if (!open) return;
  // Game over at 0 HP is a loss; with HP left the run ended another way (a win or an abandon).
- if (state.state_type === 'game_over') { const hp = state.player?.hp ?? 0; close(memory, run, {hp_end: hp, won: hp > 0}); }
+ if (state.state_type === 'game_over') { const hp = state.player?.hp ?? 0; close(memory, run, {hp_end: hp, won: hp > 0}, time); }
  else if (after.has(state.state_type) || `${state.run.act}:${state.run.floor}` !== open.fight)
-  close(memory, run, {hp_end: state.player?.hp ?? open.hp_last, won: true});
+  close(memory, run, {hp_end: state.player?.hp ?? open.hp_last, won: true}, time);
 }
 
 // Recent results for one encounter, newest first, plus the average HP lost.
-// since: an ISO time; results from fights that started later are marked after_plan.
+// since: an ISO time; results from fights that ended later are marked after_plan.
 export function encounterResults(memory, key, since = null) {
  const list = (memory?.encounters?.[key] ?? []).slice().reverse();
  if (!list.length) return null;

@@ -14,10 +14,20 @@ const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? f
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
 const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang"]);
 const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch']);
-const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact']);
-const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy']);
+const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced']);
+const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
+  'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
+  // No effect within a player turn, or the effect is already in live status, energy or card text
+  // (Oddly Smooth Stone as Dexterity, Red Mask as Weak, Ember Tea as Strength, Miniature Cannon in upgraded Attack text).
+  'BIG_MUSHROOM','BLACK_BLOOD','BONE_TEA','BOOMING_CONCH','BOWLER_HAT','EMBER_TEA','EUREKA_RUNE','FESTIVE_POPPER','FISHING_ROD',
+  'HAPPY_FLOWER','JEWELED_MASK','JUZU_BRACELET','LANTERN','LAVA_ROCK','LOST_COFFER','LUCKY_FYSH','MEAL_TICKET','MERCURY_HOURGLASS',
+  'MINIATURE_CANNON','NEOWS_BONES','NEOWS_TALISMAN','NUTRITIOUS_OYSTER','ODDLY_SMOOTH_STONE','PETRIFIED_TOAD','PHIAL_HOLSTER','POMANDER',
+  'PRECISE_SCISSORS','RED_MASK','REGAL_PILLOW','SCROLL_BOXES','SMALL_CAPSULE','TOUCH_OF_OROBAS','VENERABLE_TEA_SET','WAR_PAINT',
+  'YUMMY_COOKIE','TOASTY_MITTENS','ICE_CREAM','BRONZE_SCALES']);
 
+const hasRelic=(s,id)=>(s.player.relics??[]).some(r=>r.id===id);
+function letterProgress(s){const r=(s.player.relics??[]).find(r=>r.id==='LETTER_OPENER');return r&&Number.isInteger(r.counter)?r.counter:null;}
 function initial(s) {
   const warnings = [];
   const runes = modeledRunes(s);
@@ -28,6 +38,8 @@ function initial(s) {
     && !(r.id === 'FLYING_KICK_RUNE' && runes.flyingKick)) warnings.push(`Unmodeled relic: ${r.name}`);
   const fan = (s.player.relics ?? []).find(r => r.id === 'ORNAMENTAL_FAN');
   const fanProgress = Number.isInteger(fan?.counter) ? fan.counter : null;
+  if (hasRelic(s,'UNSETTLING_LAMP') && typeof s.player.lamp_used !== 'boolean') warnings.push('Unsettling Lamp: whether it was used this combat is unknown; debuffs are not doubled.');
+  if (hasRelic(s,'LETTER_OPENER') && letterProgress(s) === null) warnings.push('Letter Opener counter unavailable: forecast omits its damage.');
   if (fan && fanProgress === null) warnings.push('Ornamental Fan counter unavailable: forecast omits its extra block.');
   return {
     runes, runeEvents: [], unsupportedRunes: unsupportedRuneRules(s),
@@ -54,6 +66,14 @@ function initial(s) {
     cruelty:amount(s.player.status,'Cruelty'),
     rage: amount(s.player.status,'Rage'), plating: amount(s.player.status,'Plating'), metallicize: amount(s.player.status,'Metallicize'),
     attacks: 0, fan: Boolean(fan), fanProgress, steps: [], warnings,
+    // Cloak Clasp: 1 Block per card in hand at end of turn. Charon's Ashes / Forgotten Soul: damage on exhaust.
+    cloakClasp:hasRelic(s,'CLOAK_CLASP'), charonsAshes:hasRelic(s,'CHARONS_ASHES'), forgottenSoul:hasRelic(s,'FORGOTTEN_SOUL'),
+    // Letter Opener: every 3rd Skill in a turn deals 5 to all enemies; counter = Skills played this turn.
+    letterOpener:letterProgress(s), skills:0,
+    // Smoggy: one Skill per turn. The live hand already reflects Skills played before this plan.
+    smoggy:amount(s.player.status,'Smoggy')>0,
+    // Unsettling Lamp: the first debuffing card each combat has its debuff doubled; lamp_used comes from the runner.
+    lampReady:hasRelic(s,'UNSETTLING_LAMP')&&s.player.lamp_used===false,
     // Unknown interactions stop search expansion; never invent complete outcomes.
     unsupported: false, boundary: null, freeAttack: amount(s.player.status,'Free Attack') > 0,
     originalVulnerable:Object.fromEntries(s.battle.enemies.map(e=>[e.entity_id,amount(e.status,'Vulnerable')])),
@@ -74,7 +94,7 @@ function cost(card, m) {
 
 function available(m, rootState) {
   const virtual = { ...rootState, player: { ...rootState.player, energy:m.energy, hand:m.hand.map((c,i) => ({
-    ...c, index:i, can_play: cost(c,m) <= m.energy && (c.can_play || (/energy/i.test(c.unplayable_reason ?? '') && !/BlockedByHook/i.test(c.unplayable_reason ?? ''))),
+    ...c, index:i, can_play: cost(c,m) <= m.energy && !(m.smoggy && m.skills > 0 && c.type === 'Skill') && (c.can_play || (/energy/i.test(c.unplayable_reason ?? '') && !/BlockedByHook/i.test(c.unplayable_reason ?? ''))),
   })), potions:m.potions }, battle:{...rootState.battle,enemies:m.enemies} };
   return actionsFor(virtual);
 }
@@ -91,14 +111,21 @@ function hit(m, enemy, value, attack) {
   enemy.block = (enemy.block ?? 0) - blocked; damage -= blocked;
   const slippery = (enemy.status ?? []).find(p => p.name.toLowerCase() === 'slippery' && p.amount > 0);
   if (damage > 0 && slippery) { damage = 1; slippery.amount--; m.removedCharges++; }
-  // Per-turn HP-loss caps (Hardened Shell): count only this plan's losses; earlier ones this turn are not observed.
-  const turnCap = (enemy.status ?? []).map(p => (p.description ?? '').match(/cannot lose more than (\d+) HP each turn/i)).find(Boolean);
-  if (turnCap) {
-    damage = Math.min(damage, Math.max(0, Number(turnCap[1]) - (enemy.lostThisTurn ?? 0)));
-    m.warnings.push(`${enemy.name} loses at most ${turnCap[1]} HP per turn; HP lost earlier this turn is not observed.`);
+  // Per-turn HP-loss caps (Hardened Shell). Its amount is the HP it can still lose this turn;
+  // without it, only this plan's losses count and earlier ones are not observed.
+  const capPower = (enemy.status ?? []).find(p => /cannot lose more than (\d+) HP each turn/i.test(p.description ?? ''));
+  if (capPower) {
+    const left = Number.isInteger(capPower.amount) ? capPower.amount : Number(capPower.description.match(/cannot lose more than (\d+)/i)[1]);
+    damage = Math.min(damage, Math.max(0, left - (enemy.lostThisTurn ?? 0)));
+    if (!Number.isInteger(capPower.amount)) m.warnings.push(`${enemy.name} has a per-turn HP-loss cap; HP lost earlier this turn is not observed.`);
   }
   const lost = Math.min(enemy.hp, damage); enemy.hp -= lost; m.cardDamage += lost;
   enemy.lostThisTurn = (enemy.lostThisTurn ?? 0) + lost;
+  if (attack && enemy.hp > 0 && !enemy.hit_this_turn) {
+    const skittish = (enemy.status ?? []).find(p => p.name?.toLowerCase() === 'skittish');
+    if (skittish) enemy.block = (enemy.block ?? 0) + number(skittish.description ?? '', /gains (\d+) Block/i, skittish.amount ?? 0);
+  }
+  if (attack) enemy.hit_this_turn = true;
   if (m.runes.flyingKick && lost > 0) {
     const rune = m.runes.flyingKick;
     // Native game uses decimal arithmetic. Scaled integer comparison preserves
@@ -160,6 +187,12 @@ function gainBlock(m, n) {
 // One card leaves the hand to the exhaust pile. Unknown on-exhaust triggers stop the plan.
 function exhaustCard(m, card) {
   m.exhaustCount++; gainBlock(m, m.feelNoPain); m.exhaustedThisTurn = true;
+  if (m.charonsAshes) for (const e of m.enemies.filter(e => e.hp > 0)) hit(m, e, 3, false);
+  if (m.forgottenSoul) {
+    const living = m.enemies.filter(e => e.hp > 0);
+    if (living.length === 1) hit(m, living[0], 1, false);
+    else if (living.length > 1) { m.boundary ??= 'random'; m.warnings.push('Forgotten Soul hits a random enemy; re-observe.'); }
+  }
   if (/when(?: this is)? exhausted|whenever you exhaust/i.test(card.description ?? '')) {
     m.unsupported = true; m.boundary = 'unsupported';
     m.warnings.push(`${card.name} has an on-exhaust effect that is not modeled; re-observe.`);
@@ -256,6 +289,11 @@ function apply(m0, a) {
     if(m.freeAttack) { m.freeAttack=false; m.boundary='free_attack_consumed'; m.warnings.push('Re-read card costs after consuming Free Attack.'); }
     if (m.fan && m.fanProgress !== null && (m.fanProgress + m.attacks) % 3 === 0) gainBlock(m, 4);
   }
+  if (!potion && item.type === 'Skill') {
+    m.skills++;
+    if (m.letterOpener !== null && m.letterOpener !== undefined && (m.letterOpener + m.skills) % 3 === 0)
+      for (const e of m.enemies.filter(e => e.hp > 0)) hit(m, e, 5, false);
+  }
   if (name==='thrash') exhaustRandom(m, c=>c.type==='Attack', 'Thrash');
   if (name==='cinder') exhaustRandom(m, ()=>true, 'Cinder');
   if (m.unsupported) return true;
@@ -316,8 +354,11 @@ function apply(m0, a) {
   if (name === 'offering' && !m.noEnergyGain) m.energy += number(text,/Gain (\d+) Energy/i,(text.match(/\[[^\]]*energy_icon[^\]]*\]/g)??[]).length);
   if (!potion && replay===0 && /(?:^|[.!]\s*)Exhaust\.?$/i.test(text.trim())) {gainBlock(m,m.feelNoPain);m.exhaustCount++;m.exhaustedThisTurn=true;}
   if(name==='armaments'){m.boundary='upgrade';m.warnings.push('Armaments block is included; re-observe card upgrades before continuing.');}
+  // Unsettling Lamp doubles the first debuffing card of the combat (Weak and Vulnerable are modeled).
+  const lamp = !potion && m.lampReady && /Apply \d+ /i.test(text) ? 2 : 1;
+  if (lamp === 2) { m.lampReady = false; if (/Apply \d+ (?!Weak|Vulnerable)/i.test(text)) m.warnings.push(`Unsettling Lamp doubles ${item.name}; only its Weak and Vulnerable are modeled.`); }
   for (const e of targets) {
-    const weak = number(text,/Apply (\d+) Weak/i), vuln = number(text,/Apply (\d+) Vulnerable/i);
+    const weak = number(text,/Apply (\d+) Weak/i)*lamp, vuln = number(text,/Apply (\d+) Vulnerable/i)*lamp;
     if (weak) applyPower(e,'Weak',weak);
     let applied=false;
     if (vuln) applied=applyPower(e,'Vulnerable',vuln);
@@ -404,7 +445,7 @@ function forecast(m, s) {
     },0),
     deathRules:(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')).map(p=>p.description),
   }));
-  const block = (m.block + m.plating) * (m.runes.grounded ? 2 : 1) + m.metallicize;
+  const block = (m.block + m.plating) * (m.runes.grounded ? 2 : 1) + m.metallicize + (m.cloakClasp ? m.hand.length : 0);
   const positioningUnknown = [...(s.player.status??[]),...s.battle.enemies.flatMap(e=>e.status??[])].some(p=>/from behind|orientation/i.test(p.description??''));
   const lethalTurnRule=m.enemies.filter(e=>e.hp>0&&!m.stunned.includes(e.entity_id)).flatMap(e=>e.status??[]).some(p=>/takes? (?:its|their) turn.*(?:you.*die|kill you)/i.test(p.description??''));
   const facingProjection=positioningUnknown?facingDamage(s,m.steps,m.enemies):null;
@@ -589,4 +630,32 @@ export function decisionQuestion(s,candidates) {
       criteria:Object.fromEntries(candidates.map(c=>[c.id,JSON.stringify({sequence:c.plan,forecast:c.forecast,first_action_rules:c.details.description})])),
     }},
   };
+}
+
+// Marks enemies already hit this player turn (hit_this_turn), for once-per-turn effects such as
+// Skittish. The state does not say so directly: an enemy counts as hit once its HP fell or its
+// Block rose since the turn's first observation. memory persists between observations.
+export function markHitsThisTurn(memory, state) {
+  if (!state?.battle?.enemies || state.battle.turn !== 'player') return state;
+  const key = `${state.run?.live_id}:${state.run?.floor}:${state.battle.round}`;
+  if (memory.key !== key) { memory.key = key; memory.start = {}; memory.hit = new Set(); }
+  const enemies = state.battle.enemies.map(e => {
+    const start = memory.start[e.entity_id] ??= {hp: e.hp, block: e.block ?? 0};
+    if (e.hp < start.hp || (e.block ?? 0) > start.block) memory.hit.add(e.entity_id);
+    return memory.hit.has(e.entity_id) ? {...e, hit_this_turn: true} : e;
+  });
+  return {...state, battle: {...state.battle, enemies}};
+}
+
+// Unsettling Lamp is spent by the first card played each combat that applies a debuff.
+// memory: {fight: true} for fights where that card has been played.
+const fightOf = s => `${s.run?.live_id}:${s.run?.act}:${s.run?.floor}`;
+export function noteDebuffCard(memory, state, chosen) {
+  if (chosen?.command?.action !== 'play_card' || !state?.battle) return;
+  const card = (state.player?.hand ?? []).find(c => c.index === chosen.command.card_index);
+  if (/Apply \d+ /i.test(card?.description ?? '')) { memory[fightOf(state)] = true; const keys = Object.keys(memory); if (keys.length > 50) delete memory[keys[0]]; }
+}
+export function markLampUsed(memory, state) {
+  if (!state?.battle || !(state.player?.relics ?? []).some(r => r.id === 'UNSETTLING_LAMP')) return state;
+  return {...state, player: {...state.player, lamp_used: Boolean(memory[fightOf(state)])}};
 }

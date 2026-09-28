@@ -21,3 +21,14 @@ test('same-name enemies in one fight are kept apart and only the last three figh
  assert.equal(m.Bug.length,3);
  assert.equal(recordIntents({},{...state(9,1,[]),battle:{round:1,turn:'enemy',enemies:[]}}),false,'enemy turns are not recorded');
 });
+
+test('a death does not move the next same-name enemy into its record', () => {
+ const m = {};
+ const st = (round, enemies) => ({state_type: 'monster', run: {live_id: 'r', act: 1, floor: 3}, battle: {round, turn: 'player', enemies}});
+ const toad = (id, hp, label) => ({entity_id: id, name: 'Toadpole', hp, intents: [{type: 'Attack', label}]});
+ recordIntents(m, st(1, [toad('T0', 20, '5'), toad('T1', 20, '7')]));
+ recordIntents(m, st(2, [toad('T0', 0, '5'), toad('T1', 20, '9')]));
+ const [first, second] = m.Toadpole;
+ assert.deepEqual(first.moves, {1: 'Attack 5'});
+ assert.deepEqual(second.moves, {1: 'Attack 7', 2: 'Attack 9'});
+});
