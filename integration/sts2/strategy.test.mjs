@@ -22,7 +22,7 @@ const boss=()=>({state_type:'boss',run:run(16),player:{hp:60,max_hp:80,gold:90,e
  hand:[{index:0,id:'STRIKE',name:'Strike',cost:'1',type:'Attack',description:'Deal 6 damage.',can_play:true,target_type:'AnyEnemy'}]},
  battle:{round:1,turn:'player',is_play_phase:true,enemies:[{entity_id:'b',name:'Boss',hp:200,max_hp:200,block:0,status:[],intents:[{type:'Attack',label:'12',description:'Attack for 12.'}]}]}});
 const plan=(extra={})=>({archetype:'Strength',summary:'Scale strength, block big hits.',priorities:['Preserve HP'],
- combat:{risk_tolerance:'low',potion_policy:'Save for boss',focus:'Kill attackers first',hallway_potion_below_hp_percent:100,focus_enemy:''},
+ combat:{risk_tolerance:'low',potion_policy:'Save for boss',focus:'Kill attackers first',hallway_potion_below_hp_percent:100},fight:{plan:'',target_priority:[]},
  card_reward:{desired:['draw'],avoid:['weak attacks'],skip_when:'No scaling'},shop:{gold_reserve:0,priorities:['Remove Strike']},
  route:'Elites while HP > 60%',route_path:[],elite_min_hp_percent:0,rest:'Upgrade unless below 50%',replan_below_hp_percent:25,allowed_option_ids:[],option_note:'',...extra});
 const adopted=(state,candidates,reason,extra)=>stampPlan(plan(extra),requestStamp(state,candidates,reason));
@@ -42,9 +42,10 @@ test('deterministic triggers fire on run, act, boss, HP, shop and relic events o
  assert.equal(replanReason(low,p),'low_hp');
  assert.equal(replanReason(low,adopted(low,[],'low_hp')),null);
  const other={...shop(),run:run(6)};
- assert.equal(replanReason(other,p),'rich_shop');
- assert.equal(replanReason({...other,player:{...other.player,gold:100}},p),null);
- const newRelic={...shop(100),run:run(8)};newRelic.player.relics=[relic,{id:'VAJRA',name:'Vajra',description:'+1 Strength.'}];
+ assert.equal(replanReason(other,p),'owned_screen','the strategist decides every shop');
+ assert.equal(replanReason(other,p,[],{ownScreens:false}),'rich_shop');
+ assert.equal(replanReason({...other,player:{...other.player,gold:100}},p,[],{ownScreens:false}),null);
+ const newRelic={...shop(100),state_type:'rewards',run:run(8)};newRelic.player.relics=[relic,{id:'VAJRA',name:'Vajra',description:'+1 Strength.'}];
  assert.equal(replanReason(newRelic,p),'new_relic');
  assert.equal(replanReason({...newRelic,run:run(7)},p),null,'relic triggers wait three floors after the last plan');
 });
@@ -61,12 +62,15 @@ test('escalation needs an important screen, low confidence and no plan for this 
 test('constrained mode enforces allowed options and gold reserve; advisory mode only informs',()=>{
  const s=shop(),c=decisionCandidates(s);
  const p=adopted(s,c,'rich_shop',{allowed_option_ids:['a2','a3']});
- assert.deepEqual(constrainCandidates(s,c,p).candidates.map(x=>x.id),['a2','a3']);
+ // Owned screens take the first listed option still offered.
+ assert.deepEqual(constrainCandidates(s,c,p),{candidates:[c[2]],constraint:{kind:'strategist_choice',removed:3}});
+ const rewards={...s,state_type:'rewards'},rp=adopted(rewards,c,'new_relic',{allowed_option_ids:['a2','a3']});
+ assert.deepEqual(constrainCandidates(rewards,c,rp).candidates.map(x=>x.id),['a2','a3'],'other screens keep a filtered set');
  assert.equal(constrainCandidates(s,c,p,'advisory').candidates.length,4);
  assert.deepEqual(strategyContext(p,s).recommended_options,['Remove a card — 75 gold','Continue to the map']);
  // The same index with a different label is a different option.
  const relabeled=c.map(x=>x.id==='a2'?{...x,label:'Something else — 75 gold'}:x);
- assert.deepEqual(constrainCandidates(s,relabeled,p).candidates.map(x=>x.id),['a3']);
+ assert.deepEqual(constrainCandidates(s,relabeled,p).candidates.map(x=>x.id),['a3'],'the next listed option is taken');
  const reserve=adopted({...s,run:run(4)},c,'run_start',{shop:{gold_reserve:150,priorities:[]}});
  assert.deepEqual(constrainCandidates(s,c,reserve).candidates.map(x=>x.id),['a3'],'every purchase would breach the reserve');
  const rich=shop(260);
@@ -106,6 +110,7 @@ function session(channel,makePlan){
 
 test('run start waits for the session plan, then Jev sees it and Claude-constrained options',()=>withChannel(async channel=>{
  const s=shop(),c=decisionCandidates(s),status=newStrategyStatus({enabled:true,waitMs:5000}),requests=[];
+ status.ownScreens=false;
  const stop=session(channel,r=>plan({allowed_option_ids:['a0','a3'],option_note:'Buy Ashen Strike, then leave.'}));
  const result=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},
   ask:async q=>{requests.push(q);return jev('a0');}});
@@ -128,7 +133,7 @@ test('a single allowed option is taken without a Jev call',()=>withChannel(async
 }));
 
 test('uncertain Jev on a run-shaping screen escalates once and re-asks with the new plan',()=>withChannel(async channel=>{
- const s=shop(),c=decisionCandidates(s),status=newStrategyStatus({waitMs:5000});
+ const s=shop(),c=decisionCandidates(s),status=newStrategyStatus({waitMs:5000,ownScreens:false});
  status.plan=adopted({...s,run:run(4),player:{...s.player,gold:100}},c,'run_start');
  const stop=session(channel,r=>{assert.equal(r.stamp.reason,'jev_uncertain');return plan({allowed_option_ids:['a2','a3']});});
  const asked=[];

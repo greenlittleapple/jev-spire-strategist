@@ -1,44 +1,67 @@
 // Jev decides every move; Claude refreshes a persistent strategy on triggers.
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
 import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
-import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,
+import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext} from './strategy.mjs';
+import {currentEncounter,fightId} from './playbook.mjs';
+import {replayChoice} from './replay.mjs';
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const addUsage=(a,b)=>({input_tokens:(a?.input_tokens??0)+(b?.input_tokens??0),output_tokens:(a?.output_tokens??0)+(b?.output_tokens??0)});
+const noUsage={input_tokens:0,output_tokens:0};
+const direct=(decisionSource,model,choice,extra={})=>({decisionSource,model,usage:noUsage,deliberation:null,...extra,
+ answers:{move:{type:'choice',choice:choice.id,confidence:null,probabilities:{}}}});
 
-export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.35,waitMs=300000}={}) {
+export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.35,waitMs=300000,ownScreens=true}={}) {
  if(!['constrained','advisory'].includes(mode))throw Error('CLAUDE_PLAN_MODE must be constrained or advisory');
  if(!(threshold>0&&threshold<1)||!(waitMs>=0))throw Error('Invalid Claude strategy settings');
- return {enabled,mode,threshold,waitMs,plan:null,available:true,requests:0,answers:0,timeouts:0};
+ return {enabled,mode,threshold,waitMs,ownScreens,plan:null,available:true,requests:0,answers:0,timeouts:0};
 }
 
-// strategist = {channel, status}; status is the persisted dashboard record.
+// strategist = {channel, status, playbook}; status is the persisted dashboard record and
+// playbook holds per-encounter fight plans (optional).
+// replay = the active reference run from replay.mjs, or null.
 // factsVersion 2 or 3 adds exact route/resource facts (jev-compact-v2/v3); strategy uses v3.
 // mapMemory = {runId, act, map, position} from the runner's last map screen.
-export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,cancelled=()=>false}) {
+export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
  const version=strategist?3:factsVersion,factsPolicy=version>=3?FACTS_V3_POLICY:FACTS_POLICY;
  const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
  // v3 also enables the potion and shop resource reviews.
  const resourceReviews=version>=3;
- if(!strategist)return efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews});
- const {channel,status}=strategist,events=[];
+ const events=[];
+ const replayed=replayChoice(replay,state,candidates);
+ if(replay&&!replayed&&isOwnedScreen(state)&&!replay.diverged.has(screenKey(state))){
+  replay.diverged.add(screenKey(state));
+  events.push({kind:'replay_diverged',screen:screenKey(state),source_run:replay.source});
+ }
+ if(!strategist){
+  if(replayed)return {...direct('replay','Reference run',replayed),strategyEvents:events};
+  return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
+ }
+ const {channel,status,playbook=null}=strategist;
  const {map,position}=currentMap(state,mapMemory);
+ status.fights??={};status.encountersAsked??=[];
+ const encounter=currentEncounter(state,status.fights);
  const adopt=async()=>{
   const request=await channel.current();
   const answer=request&&await channel.take(request.id);
   if(!answer)return false;
   status.plan=stampPlan(answer.plan,request.stamp,{request_id:request.id,answeredAt:answer.answeredAt});
   status.answers++;status.available=true;
+  if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
+   await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
   events.push({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,plan:status.plan});
   return true;
  };
  const consult=async reason=>{
   const key=`${reason}:${screenKey(state)}`,current=await channel.current();
   if(current?.key!==key){
-   const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,
-    brief:strategistBrief(state,candidates,reason,status.plan,{routes:distinctRoutes(map,position),facts}),stamp:requestStamp(state,candidates,reason,mapNodeKeys(map))});
+   const fight=playbook&&encounter?await playbook.get(encounter):null;
+   const brief=strategistBrief(state,candidates,reason,status.plan,{routes:distinctRoutes(map,position),facts});
+   if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;}
+   const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
+    stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter}});
    status.requests++;
    events.push({kind:'strategy_request',reason,request_id:request.id});
   }
@@ -56,15 +79,24 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   return false;
  };
  const decide=async()=>{
-  const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode);
+  if(replayed)return direct('replay','Reference run',replayed);
+  const fight=playbook&&encounter?await playbook.get(encounter):null;
+  const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false});
   // A single allowed option is Claude's choice; no Jev call is needed.
-  if(constraint&&options.length===1)return {decisionSource:'claude',model:'Claude strategy',usage:{input_tokens:0,output_tokens:0},deliberation:null,constraint,
-   answers:{move:{type:'choice',choice:options[0].id,confidence:null,probabilities:{}}}};
-  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state)}),constraint};
+  if(constraint&&options.length===1)return direct('claude','Claude strategy',options[0],{constraint});
+  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state,fight)}),constraint};
  };
 
  await adopt();
- const trigger=replanReason(state,status.plan,candidates);
+ let trigger=replanReason(state,status.plan,candidates,{ownScreens:status.ownScreens!==false});
+ // A replayed screen needs no strategist decision.
+ if(trigger==='owned_screen'&&replayed)trigger=null;
+ // A normal fight's first sight of an encounter with no saved plan asks for one, once per fight.
+ if(!trigger&&state.state_type==='monster'&&playbook&&encounter&&!status.encountersAsked.includes(fightId(state))&&!await playbook.get(encounter)){
+  status.encountersAsked.push(fightId(state));
+  if(status.encountersAsked.length>100)status.encountersAsked.shift();
+  trigger='new_encounter';
+ }
  if(trigger)await consult(trigger);
  let result=await decide();
  const escalation=result.decisionSource==='jev'&&escalationReason(state,result.answers.move,status.plan,status.threshold);

@@ -5,21 +5,25 @@ import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
 import {nodeKey} from './route-facts.mjs';
 
-export const STRATEGY_POLICY = 'claude-strategy-v2.1';
+export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
 // Run-shaping screens where an unsure Jev answer is worth a Claude consult.
 export const IMPORTANT_SCREENS = new Set(['card_reward','shop','hextech_rune','rest_site']);
+// Screens the strategist decides outright: Claude is consulted on every one of them.
+export const OWNED_SCREENS = new Set(['card_reward','shop','event','rest_site','treasure','hextech_rune','card_select']);
+export const isOwnedScreen = s => OWNED_SCREENS.has(s.state_type) && !(s.state_type==='card_select' && s.battle);
 
 const text = {type:'string'};
 const list = {type:'array',items:text};
 export const PLAN_SCHEMA = {
  type:'object',additionalProperties:false,
- required:['archetype','summary','priorities','combat','card_reward','shop','route','route_path','elite_min_hp_percent','rest','replan_below_hp_percent','allowed_option_ids','option_note'],
+ required:['archetype','summary','priorities','combat','card_reward','shop','route','route_path','elite_min_hp_percent','rest','replan_below_hp_percent','fight','allowed_option_ids','option_note'],
  properties:{
   archetype:text, summary:text, priorities:list,
-  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus','hallway_potion_below_hp_percent','focus_enemy'],
+  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus','hallway_potion_below_hp_percent'],
    properties:{risk_tolerance:{type:'string',enum:['low','medium','high']},potion_policy:text,focus:text,
-    hallway_potion_below_hp_percent:{type:'integer'},focus_enemy:text}},
+    hallway_potion_below_hp_percent:{type:'integer'}}},
+  fight:{type:'object',additionalProperties:false,required:['plan','target_priority'],properties:{plan:text,target_priority:list}},
   card_reward:{type:'object',additionalProperties:false,required:['desired','avoid','skip_when'],
    properties:{desired:list,avoid:list,skip_when:text}},
   shop:{type:'object',additionalProperties:false,required:['gold_reserve','priorities'],
@@ -35,10 +39,9 @@ export const STRATEGIST_INSTRUCTIONS = `You are the strategist for an automated 
 Write a compact, persistent run strategy grounded in the actual deck, relics, runes, HP, gold and act. Keep every string short and concrete. Priorities: at most 5, most important first. Do not invent hidden information (future card offers, unrevealed rooms, enemy moves not shown).
 
 Fields:
-- combat: risk tolerance, when potions should be spent, and what to focus (for a boss or elite trigger, a concrete plan for this fight from the visible enemies, intents and powers). Two combat rules are enforced by code and persist until you change them:
-  - hallway_potion_below_hp_percent: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
-  - focus_enemy: the name of a visible enemy whose death matters most (e.g. a leader whose minions leave when it dies), or "". While it and another enemy are alive, single-target plays aimed at other enemies are removed unless they kill that enemy. Area attacks and self-target cards are unaffected. Use only when you are sure.
+- combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
   Code also removes plays forecast to be fatal when another play is forecast to survive, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
+- fight: when the trigger is a fight start (new_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. On other triggers use {"plan":"","target_priority":[]}; the saved fight plans are unaffected.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed).
@@ -46,7 +49,7 @@ Fields:
 - elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, you are consulted again before entering it (0 = never).
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact.
 - replan_below_hp_percent: HP percentage at which you want to be consulted again (10-60; 25 is typical).
-- allowed_option_ids: only for a non-combat screen whose current_options you were shown. List the IDs Jev may choose from (one ID means that choice is taken directly; include every option you consider reasonable). Use [] in combat, when no options are shown, or to leave the choice fully to Jev.
+- allowed_option_ids: only for a non-combat screen whose current_options you were shown. On card rewards, shops, events, rest sites, treasure, runes and card selections outside combat you decide: list the option IDs in the order to take them; the first one still offered is taken directly each time (a shop list of purchases ending with leaving buys them in order, skipping any no longer offered). You are asked again if none of your IDs is offered. Use [] in combat or when no options are shown.
 - option_note: one sentence on the current screen, or "".`;
 
 const pct = p => p?.max_hp ? Math.round(100*p.hp/p.max_hp) : null;
@@ -99,7 +102,15 @@ export function planFields(plan) {
 // Deterministic triggers evaluated before Jev. Returns a reason or null.
 const routeOptions=(candidates,plan)=>candidates.filter(c=>c.command?.action==='choose_map_node'&&c.details?.col!=null&&plan.route_path.includes(nodeKey(c.details)));
 
-export function replanReason(state,plan,candidates=[]) {
+// The first option in the plan's order that is still offered.
+const orderedAllowed=(candidates,plan)=>{
+ for(const key of plan.allowed_options??[]){const c=candidates.find(x=>optionKey(x)===key);if(c)return c;}
+ return null;
+};
+
+// ownScreens: the strategist decides owned screens outright (default); off, it is only
+// consulted there when Jev is unsure (escalationReason).
+export function replanReason(state,plan,candidates=[],{ownScreens=true}={}) {
  const run=state.run;
  if(!run?.live_id)return null;
  if(!plan||plan.run_id!==run.live_id)return 'run_start';
@@ -108,6 +119,9 @@ export function replanReason(state,plan,candidates=[]) {
   return `${state.state_type}_start`;
  const threshold=Math.min(60,Math.max(10,plan.replan_below_hp_percent||25)),hp=pct(state.player);
  if(hp!=null&&hp<threshold&&(plan.hp_percent??100)>=threshold)return 'low_hp';
+ // Owned screens: ask on arrival, and again when none of the chosen options is offered
+ // (a new event page, or a shop list that is used up).
+ if(ownScreens&&isOwnedScreen(state)&&(plan.screen!==screenKey(state)||(plan.allowed_options?.length&&!orderedAllowed(candidates,plan))))return 'owned_screen';
  if(state.state_type==='shop'&&(state.player?.gold??0)>=150&&plan.screen!==screenKey(state))return 'rich_shop';
  if(state.state_type==='map'&&state.map?.nodes?.length&&plan.screen!==screenKey(state)){
   // The first map screen of an act is where the whole route is visible.
@@ -219,7 +233,8 @@ export function restConstraint(state,candidates) {
 }
 
 // Combat rules, applied in order; each keeps at least one option and records what it removed.
-export function combatConstraints(state,candidates,plan) {
+// fight = the saved plan for the current encounter ({plan, target_priority}) or null.
+export function combatConstraints(state,candidates,plan,fight=null) {
  if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
  let kept=candidates;const rules=[];
  const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
@@ -235,10 +250,16 @@ export function combatConstraints(state,candidates,plan) {
  const end=kept.find(c=>c.command.action==='end_turn');
  if(end?.forecast?.hpLoss===0&&end.forecast.quality!=='unknown'&&!usesBlock(state))
   apply('block_not_needed',kept.filter(c=>!(c.command.action==='play_card'&&pureBlock(c.details))));
- const name=plan?.combat?.focus_enemy?.trim().toLowerCase();
- const enemies=alive(state),focus=name&&enemies.find(e=>e.name?.toLowerCase().includes(name));
+ // Target priority: the highest-priority enemy still alive is the focus.
+ const enemies=alive(state);
+ let focus=null;
+ for(const wanted of fight?.target_priority??[]){
+  const name=String(wanted).trim().toLowerCase();
+  focus=name&&enemies.find(e=>e.name?.toLowerCase().includes(name));
+  if(focus)break;
+ }
  if(focus&&enemies.length>1){
-  apply('focus_enemy',kept.filter(c=>{
+  apply('target_priority',kept.filter(c=>{
    const target=c.command.target;
    if(!target||target===focus.entity_id||!['play_card','use_potion'].includes(c.command.action))return true;
    return (c.forecast?.defeatedEnemies??[]).some(d=>d.id===target);
@@ -248,11 +269,15 @@ export function combatConstraints(state,candidates,plan) {
 }
 
 // Constrained mode: code enforces the parts of the plan that are checkable.
-export function constrainCandidates(state,candidates,plan,mode='constrained') {
+export function constrainCandidates(state,candidates,plan,mode='constrained',{fight=null,ownScreens=true}={}) {
  if(!plan||mode!=='constrained'||plan.run_id!==state.run?.live_id)return {candidates,constraint:null};
  if(combatScreens.has(state.state_type)){
-  const {candidates:kept,rules}=combatConstraints(state,candidates,plan);
+  const {candidates:kept,rules}=combatConstraints(state,candidates,plan,fight);
   return {candidates:kept,constraint:rules.length?{kind:'combat',rules,removed:candidates.length-kept.length}:null};
+ }
+ if(ownScreens&&plan.screen===screenKey(state)&&plan.allowed_options?.length&&isOwnedScreen(state)){
+  const first=orderedAllowed(candidates,plan);
+  if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1}};
  }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){
   const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
@@ -277,9 +302,11 @@ export function constrainCandidates(state,candidates,plan,mode='constrained') {
 }
 
 // What Jev sees: stable fields, not the strategist's reasoning.
-export function strategyContext(plan,state) {
+export function strategyContext(plan,state,fight=null) {
  if(!plan||plan.run_id!==state.run?.live_id)return null;
  const context={source:'Claude run strategy, written at act '+plan.act+' floor '+plan.floor+' ('+plan.reason+')',...planFields(plan)};
+ // Fight plans are scoped to their encounter, so they never carry into another fight.
+ if(fight?.plan)context.fight_plan={plan:fight.plan,target_priority:fight.target_priority??[]};
  if(plan.screen===screenKey(state)){
   if(plan.option_note)context.current_screen_note=plan.option_note;
   if(plan.recommended_options?.length)context.recommended_options=plan.recommended_options;

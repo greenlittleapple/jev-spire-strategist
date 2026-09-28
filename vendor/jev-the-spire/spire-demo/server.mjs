@@ -6,6 +6,8 @@ import { unlinkSync } from 'node:fs';
 import {rewardState} from './rewards.mjs';
 import {efficientDeliberate,EFFICIENT_POLICY} from '../../../integration/sts2/efficient-decisions.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts2/hierarchical.mjs';
+import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
+import {replayer} from '../../../integration/sts2/replay.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
 import {STRATEGY_POLICY} from '../../../integration/sts2/strategy.mjs';
 import {FACTS_POLICY,FACTS_V3_POLICY} from '../../../integration/sts2/route-facts.mjs';
@@ -61,7 +63,10 @@ view.forcedActions ??= 0;
 // exact route/resource facts), jev_facts_v3 (jev-compact-v3: order-aware route facts)
 // and claude (v3 facts + Claude strategy).
 const strategyAvailable=process.env.CLAUDE_STRATEGIST!=='off'&&!lunaEnabled&&!planBenefitEnabled;
-const strategist=strategyAvailable?{channel:fileChannel(process.env.STRATEGY_DIR??resolve(logDir,'../strategy')),
+const strategyDir=process.env.STRATEGY_DIR??resolve(logDir,'../strategy');
+// Replay mode: .private/sts2/replay.json {source_run, target_run} (written by start-run --replay-from).
+const replaySource=replayer({configPath:resolve(logDir,'../replay.json'),runsDir:logDir});
+const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;
@@ -206,7 +211,7 @@ async function step(token, preview = false) {
     const memory=encounterMemory(s,view.events);
     if(planBenefitEnabled)memory.persistentPlan=persistentPlan(s,view.events);
     const result = await (lunaEnabled?assistedDeliberate:planBenefitEnabled?planBenefitDeliberate:hierarchicalDeliberate)({state:planningState,candidates:actions,
-      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,cancelled:()=>token!==generation,
+      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,replay:await replaySource.forState(planningState),cancelled:()=>token!==generation,
       onStage:stage=>{view.message=stage;view.pending.stage=stage;},
       ask:async payload=>{
         if(token!==generation)throw Error('Decision cancelled.');

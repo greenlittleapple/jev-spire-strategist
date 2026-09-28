@@ -29,7 +29,7 @@ const candidates=[
  {id:'a1',label:'Travel to Elite (column 1)',command:{action:'choose_map_node',index:1},details:{index:1,col:1,row:1,type:'Elite'}}];
 const run={live_id:'run-1',act:1,floor:1,ascension:0};
 const mapState=(hp=80)=>({state_type:'map',run,map,player:{hp,max_hp:80,gold:120,potions:[{name:'Block Potion'}],max_potion_slots:3,relics:[],deck:[]}});
-const plan=(extra={})=>({archetype:'x',summary:'x',priorities:[],combat:{risk_tolerance:'low',potion_policy:'x',focus:'x',hallway_potion_below_hp_percent:100,focus_enemy:''},
+const plan=(extra={})=>({archetype:'x',summary:'x',priorities:[],combat:{risk_tolerance:'low',potion_policy:'x',focus:'x',hallway_potion_below_hp_percent:100},fight:{plan:'',target_priority:[]},
  card_reward:{desired:[],avoid:[],skip_when:''},shop:{gold_reserve:0,priorities:[]},route:'x',route_path:[],elite_min_hp_percent:0,
  rest:'x',replan_below_hp_percent:25,allowed_option_ids:[],option_note:'',...extra});
 const keys=['0,0','0,1','1,1','0,2','1,2','0,3','0,4'];

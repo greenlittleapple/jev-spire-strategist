@@ -7,7 +7,7 @@ const fight=({type='monster',hp=60,enemies=[enemy('a','Leader',50)]}={})=>({stat
  player:{hp,max_hp:80},battle:{round:2,enemies}});
 const cand=(id,command,forecast={},plan)=>({id,label:id,command,forecast:{quality:'partial',survives:true,defeatedEnemies:[],...forecast},...(plan?{plan}:{})});
 const ids=r=>r.candidates.map(c=>c.id);
-const plan=combat=>({run_id:'run',combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100,focus_enemy:'',...combat}});
+const plan=combat=>({run_id:'run',combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100,...combat}});
 
 test('plays forecast to be fatal are removed only when another play survives',()=>{
  const cands=[cand('defend',{action:'play_card',card_index:0},{survives:false}),cand('beckon',{action:'play_card',card_index:1}),cand('end',{action:'end_turn'},{survives:false})];
@@ -30,14 +30,17 @@ test('hallway potions wait until HP falls below the plan floor, unless everythin
  assert.equal(combatConstraints(fight({hp:60}),cands,plan({})).candidates.length,3,'100 means no limit');
 });
 
-test('focus enemy removes single-target plays at others unless they kill',()=>{
+test('target priority removes single-target plays at others unless they kill',()=>{
  const enemies=[enemy('q','Queen',300),enemy('m','Torch Head Amalgam',150,[{name:'Minion'}]),enemy('s','Small Minion',5,[{name:'Minion'}])];
  const cands=[cand('hitQueen',{action:'play_card',card_index:0,target:'q'}),cand('hitMinion',{action:'play_card',card_index:1,target:'m'}),
   cand('killSmall',{action:'play_card',card_index:2,target:'s'},{defeatedEnemies:[{id:'s'}]}),cand('aoe',{action:'play_card',card_index:3}),cand('end',{action:'end_turn'})];
- const r=combatConstraints(fight({type:'boss',enemies}),cands,plan({focus_enemy:'queen'}));
- assert.deepEqual(ids(r),['hitQueen','killSmall','aoe','end']);assert.equal(r.rules[0].enemy,'Queen');
+ const r=combatConstraints(fight({type:'boss',enemies}),cands,plan({}),{plan:'Kill the Queen',target_priority:['queen','Torch Head Amalgam']});
+ assert.deepEqual(ids(r),['hitQueen','killSmall','aoe','end']);assert.equal(r.rules[0].enemy,'Queen');assert.equal(r.rules[0].kind,'target_priority');
  const gone=[enemy('q','Queen',0),enemies[1]];
- assert.equal(combatConstraints(fight({type:'boss',enemies:gone}),cands,plan({focus_enemy:'queen'})).candidates.length,5,'no focus once it is dead');
+ // With the Queen dead the next name in priority becomes the focus; one enemy left means no filter.
+ assert.equal(combatConstraints(fight({type:'boss',enemies:gone}),cands,plan({}),{plan:'x',target_priority:['queen','Torch Head Amalgam']}).candidates.length,5);
+ const two=[enemy('q','Queen',0),enemies[1],enemies[2]];
+ assert.deepEqual(ids(combatConstraints(fight({type:'boss',enemies:two}),cands,plan({}),{plan:'x',target_priority:['queen','Torch Head Amalgam']})),['hitMinion','killSmall','aoe','end']);
 });
 
 test('combat rules apply only in constrained mode for the plan run, and plans validate the floor',()=>{
@@ -47,7 +50,7 @@ test('combat rules apply only in constrained mode for the plan run, and plans va
  assert.equal(constrainCandidates(fight(),cands,p,'advisory').candidates.length,2);
  assert.equal(constrainCandidates(fight(),cands,{...p,run_id:'other'}).candidates.length,2);
  const full={archetype:'x',summary:'x',priorities:[],combat:{...p.combat,hallway_potion_below_hp_percent:120},card_reward:{desired:[],avoid:[],skip_when:''},
-  shop:{gold_reserve:0,priorities:[]},route:'',route_path:[],elite_min_hp_percent:0,rest:'',replan_below_hp_percent:25,allowed_option_ids:[],option_note:''};
+  shop:{gold_reserve:0,priorities:[]},route:'',route_path:[],elite_min_hp_percent:0,rest:'',replan_below_hp_percent:25,fight:{plan:'',target_priority:[]},allowed_option_ids:[],option_note:''};
  assert.match(validatePlan(full).join(),/hallway_potion_below_hp_percent must be 0-100/);
 });
 
