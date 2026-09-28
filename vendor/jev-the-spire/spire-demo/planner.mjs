@@ -14,7 +14,7 @@ const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? f
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
 const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang"]);
 const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict','colossus']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
   'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
@@ -45,7 +45,8 @@ function initial(s) {
     runes, runeEvents: [], unsupportedRunes: unsupportedRuneRules(s),
     retaliationEvents:[],
     retaliationModifiers:(s.player.status??[]).some(p=>!['strength','dexterity','weak','frail','no energy gain','no draw','free attack'].includes(p.name.toLowerCase())),
-    colossus:amount(s.player.status,'Colossus')>0,
+    // Colossus active at the start: displayed intents of already Vulnerable enemies include its reduction.
+    colossus:false, colossusStart:amount(s.player.status,'Colossus')>0,
     noEnergyGain:amount(s.player.status,'No Energy Gain')>0,
     exhaustCount:s.player.exhaust_pile_count ?? s.player.exhaust_pile?.length ?? 0,
     noDraw:amount(s.player.status,'No Draw')>0,
@@ -431,7 +432,9 @@ function forecast(m, s) {
         if (weak) m.warnings.push('Strength loss on a Weak enemy may differ by 1 damage per hit.');
       }
       if (amount(before?.status,'Weak') === 0 && amount(e.status,'Weak') > 0) perHit = Math.floor(perHit*.75);
-      if(m.colossus && amount(e.status,'Vulnerable')>0)perHit=Math.floor(perHit*.5);
+      // Halve only what the displayed intent does not already include: Colossus played in this plan,
+      // or an active Colossus against an enemy made Vulnerable in this plan.
+      if((m.colossus||m.colossusStart) && amount(e.status,'Vulnerable')>0 && !(m.colossusStart && (m.originalVulnerable[e.entity_id]??0)>0))perHit=Math.floor(perHit*.5);
       incoming += perHit * Number(match[2] ?? 1);
       for (let i = 0; i < Number(match[2] ?? 1); i++) hitList.push(perHit);
     }

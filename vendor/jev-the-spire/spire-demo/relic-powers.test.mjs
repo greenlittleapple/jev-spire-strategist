@@ -84,3 +84,12 @@ test('an active Regen heals at the end of the turn before the attack',()=>{
  const f=projectSequence(s,[]);assert.equal(f.hpLoss,7);assert.equal(f.hpAfter,53);
  s.player.hp=s.player.max_hp;assert.equal(projectSequence(s,[]).hpLoss,12,'no heal above max HP');
 });
+
+test('an active Colossus is already in the displayed intent of a Vulnerable enemy',()=>{
+ const s=state();s.player.status=[{name:'Colossus',amount:1,type:'Buff',description:'You receive 50% less damage from Vulnerable enemies this turn.'}];
+ s.battle.enemies[0].status=[{name:'Vulnerable',amount:2,type:'Debuff',description:'Receive 50% more damage.'}];
+ assert.equal(projectSequence(s,[]).hpLoss,12,'the shown 12 already includes the halving');
+ const fresh=state();fresh.player.status=[{name:'Colossus',amount:1,type:'Buff',description:'You receive 50% less damage from Vulnerable enemies this turn.'}];
+ fresh.battle.enemies[0].status=[];fresh.player.hand[1]={...fresh.player.hand[1],name:'Bash',type:'Attack',target_type:'AnyEnemy',cost:'2',description:'Deal 8 damage. Apply 2 Vulnerable.'};fresh.player.energy=2;
+ assert.equal(projectSequence(fresh,['Bash → Seapunk']).hpLoss,6,'made Vulnerable in the plan: halve');
+});

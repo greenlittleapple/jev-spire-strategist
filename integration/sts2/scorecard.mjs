@@ -49,7 +49,10 @@ function score(r) {
  }
 
  // The killing blow is usually not observed; reaching a later floor proves it.
- for (const b of bosses) if ((last?.run?.floor ?? 0) > b.floor) b.killed = true;
+ // A later floor or act, or a reward screen on the boss floor, proves it (the next act's first
+ // screens can still report the boss floor).
+ for (const b of bosses) if ((last?.run?.floor ?? 0) > b.floor || (last?.run?.act ?? 0) > b.act
+  || states.some(s => s.run?.floor === b.floor && s.run?.act === b.act && ['rewards','card_reward'].includes(s.state_type))) b.killed = true;
  for (const b of bosses) { b.hp_removed_pct = b.killed ? 100 : Math.round(100 * (1 - b.min_hp / b.max_hp)); delete b.key; delete b.min_hp; }
  const potions = executed.filter(e => e.chosen?.command?.action === 'use_potion')
   .map(e => `${e.state.state_type}@f${e.state.run.floor}`);
