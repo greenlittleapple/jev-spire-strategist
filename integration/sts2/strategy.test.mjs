@@ -22,7 +22,7 @@ const boss=()=>({state_type:'boss',run:run(16),player:{hp:60,max_hp:80,gold:90,e
  hand:[{index:0,id:'STRIKE',name:'Strike',cost:'1',type:'Attack',description:'Deal 6 damage.',can_play:true,target_type:'AnyEnemy'}]},
  battle:{round:1,turn:'player',is_play_phase:true,enemies:[{entity_id:'b',name:'Boss',hp:200,max_hp:200,block:0,status:[],intents:[{type:'Attack',label:'12',description:'Attack for 12.'}]}]}});
 const plan=(extra={})=>({archetype:'Strength',summary:'Scale strength, block big hits.',priorities:['Preserve HP'],
- combat:{risk_tolerance:'low',potion_policy:'Save for boss',focus:'Kill attackers first'},
+ combat:{risk_tolerance:'low',potion_policy:'Save for boss',focus:'Kill attackers first',hallway_potion_below_hp_percent:100,focus_enemy:''},
  card_reward:{desired:['draw'],avoid:['weak attacks'],skip_when:'No scaling'},shop:{gold_reserve:0,priorities:['Remove Strike']},
  route:'Elites while HP > 60%',route_path:[],elite_min_hp_percent:0,rest:'Upgrade unless below 50%',replan_below_hp_percent:25,allowed_option_ids:[],option_note:'',...extra});
 const adopted=(state,candidates,reason,extra)=>stampPlan(plan(extra),requestStamp(state,candidates,reason));

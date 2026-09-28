@@ -17,8 +17,9 @@ export const PLAN_SCHEMA = {
  required:['archetype','summary','priorities','combat','card_reward','shop','route','route_path','elite_min_hp_percent','rest','replan_below_hp_percent','allowed_option_ids','option_note'],
  properties:{
   archetype:text, summary:text, priorities:list,
-  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus'],
-   properties:{risk_tolerance:{type:'string',enum:['low','medium','high']},potion_policy:text,focus:text}},
+  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus','hallway_potion_below_hp_percent','focus_enemy'],
+   properties:{risk_tolerance:{type:'string',enum:['low','medium','high']},potion_policy:text,focus:text,
+    hallway_potion_below_hp_percent:{type:'integer'},focus_enemy:text}},
   card_reward:{type:'object',additionalProperties:false,required:['desired','avoid','skip_when'],
    properties:{desired:list,avoid:list,skip_when:text}},
   shop:{type:'object',additionalProperties:false,required:['gold_reserve','priorities'],
@@ -34,7 +35,10 @@ export const STRATEGIST_INSTRUCTIONS = `You are the strategist for an automated 
 Write a compact, persistent run strategy grounded in the actual deck, relics, runes, HP, gold and act. Keep every string short and concrete. Priorities: at most 5, most important first. Do not invent hidden information (future card offers, unrevealed rooms, enemy moves not shown).
 
 Fields:
-- combat: risk tolerance, when potions should be spent, and what to focus (for a boss or elite trigger, a concrete plan for this fight from the visible enemies, intents and powers).
+- combat: risk tolerance, when potions should be spent, and what to focus (for a boss or elite trigger, a concrete plan for this fight from the visible enemies, intents and powers). Two combat rules are enforced by code and persist until you change them:
+  - hallway_potion_below_hp_percent: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
+  - focus_enemy: the name of a visible enemy whose death matters most (e.g. a leader whose minions leave when it dies), or "". While it and another enemy are alive, single-target plays aimed at other enemies are removed unless they kill that enemy. Area attacks and self-target cards are unaffected. Use only when you are sure.
+  Code also removes plays forecast to be fatal when another play is forecast to survive.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed).
@@ -164,14 +168,52 @@ export function validatePlan(value,schema=PLAN_SCHEMA,path='plan') {
   if(value.replan_below_hp_percent<10||value.replan_below_hp_percent>60)errors.push('plan.replan_below_hp_percent must be 10-60');
   if(value.shop.gold_reserve<0)errors.push('plan.shop.gold_reserve must be >= 0');
   if(value.elite_min_hp_percent<0||value.elite_min_hp_percent>100)errors.push('plan.elite_min_hp_percent must be 0-100');
+  const potionFloor=value.combat.hallway_potion_below_hp_percent;
+  if(potionFloor<0||potionFloor>100)errors.push('plan.combat.hallway_potion_below_hp_percent must be 0-100');
   for(const n of value.route_path)if(!/^\d+,\d+$/.test(n))errors.push(`plan.route_path entry ${n} must be "col,row"`);
  }
  return errors;
 }
 
+const alive=state=>(state.battle?.enemies??[]).filter(e=>e.hp>0);
+const usesPotion=c=>c.command.action==='use_potion'||(c.plan??[]).some(s=>s.command?.action==='use_potion');
+// A plan forecast to be fatal, when another plan is forecast to survive. Partial forecasts
+// count: they omit some effects but still use the visible intents and known block.
+const fatal=c=>c.forecast?.survives===false;
+const survives=c=>c.forecast?.survives===true;
+
+// Combat rules, applied in order; each keeps at least one option and records what it removed.
+export function combatConstraints(state,candidates,plan) {
+ if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
+ let kept=candidates;const rules=[];
+ const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
+ if(kept.some(survives))apply('avoid_fatal',kept.filter(c=>!fatal(c)));
+ const floor=plan?.combat?.hallway_potion_below_hp_percent;
+ const hp=pct(state.player);
+ if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp>=floor){
+  const next=kept.filter(c=>!usesPotion(c));
+  // Keep potions when every remaining option without one is forecast to die.
+  if(next.some(c=>c.forecast?.survives!==false))apply('hallway_potion',next,{hp_percent:hp,floor});
+ }
+ const name=plan?.combat?.focus_enemy?.trim().toLowerCase();
+ const enemies=alive(state),focus=name&&enemies.find(e=>e.name?.toLowerCase().includes(name));
+ if(focus&&enemies.length>1){
+  apply('focus_enemy',kept.filter(c=>{
+   const target=c.command.target;
+   if(!target||target===focus.entity_id||!['play_card','use_potion'].includes(c.command.action))return true;
+   return (c.forecast?.defeatedEnemies??[]).some(d=>d.id===target);
+  }),{enemy:focus.name});
+ }
+ return {candidates:kept,rules};
+}
+
 // Constrained mode: code enforces the parts of the plan that are checkable.
 export function constrainCandidates(state,candidates,plan,mode='constrained') {
  if(!plan||mode!=='constrained'||plan.run_id!==state.run?.live_id)return {candidates,constraint:null};
+ if(combatScreens.has(state.state_type)){
+  const {candidates:kept,rules}=combatConstraints(state,candidates,plan);
+  return {candidates:kept,constraint:rules.length?{kind:'combat',rules,removed:candidates.length-kept.length}:null};
+ }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){
   const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
   if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length}};
