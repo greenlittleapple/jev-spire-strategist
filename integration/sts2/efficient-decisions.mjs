@@ -8,7 +8,7 @@ import {FACTS_POLICY} from './route-facts.mjs';
 export const EFFICIENT_POLICY = 'jev-compact-v1';
 const combatScreens = new Set(['monster','elite','boss']);
 const instructions = {
- combat: 'Win the encounter while preserving the run. Compare focused kills, defense, useful scaling and potion timing. Read enemy intents and powers, death/revival effects, retaliation, facing and play limits. Apply live rules before partial forecasts; unknown is not zero. Compare affordable card order and remaining energy, including draw/setup payoffs. A plan is a prefix, not a forced end of turn. Re-observe after its first action. Avoid ending with a useful playable action, but do not play into harmful triggers. Use observed HP/Strength trends to detect a losing race; never invent future intents or phases.',
+ combat: 'Win the encounter while preserving the run. Compare focused kills, defense, useful scaling and potion timing. Read enemy intents and powers, death/revival effects, retaliation, facing and play limits. Apply live rules before partial forecasts; unknown is not zero. Compare affordable card order and remaining energy, including draw/setup payoffs. A plan is a prefix, not a forced end of turn. Re-observe after its first action. Avoid ending with a useful playable action, but do not play into harmful triggers. Use observed HP/Strength trends to detect a losing race; never invent future intents or phases. Forecasts cover this turn only. Quality partial or unknown, or a notModeled card, means effects are missing, not zero. lastingEffects keep working for the rest of combat and are not in the forecast numbers; value them over the remaining fight.',
  card_reward: 'Compare every offered card with skipping using the actual deck, rune/relic interactions, energy, draw consistency and remaining needs. Value the marginal copy, not a hypothetical archetype. Current deck and live rules determine what is useful.',
  shop: 'Compare affordable purchase combinations, removal, potion capacity and leaving. Pick the first purchase of a useful basket or leave if poor value. Preserve gold for a concrete better opportunity; do not invent future stock.',
  map: 'Compare visible routes using current HP, deck strength, potions and the available rest sites, elites, shops and rewards. Balance survival and future strength. Unrevealed rooms remain unknown.',
@@ -105,8 +105,28 @@ export function resourceReviewReason(state,candidates,chosen) {
  return null;
 }
 
+// Turn key -> reviewed. One order review per turn keeps the cost bounded.
+const orderReviews=new Set();
+// An attack chosen first while a non-attack setup card leads to more forecast damage this turn.
+export function orderReviewReason(state,candidates,chosen,{minGain=3}={}) {
+ if(!combatScreens.has(state.state_type)||chosen.command.action!=='play_card')return null;
+ const hand=state.player?.hand??[],cardOf=c=>hand.find(h=>h.index===c.command.card_index)??hand[c.command.card_index];
+ if(cardOf(chosen)?.type!=='Attack')return null;
+ const key=c=>JSON.stringify(c.command),best=new Map();
+ for(const c of candidates){const d=c.forecast?.damage;if(typeof d==='number')best.set(key(c),Math.max(best.get(key(c))??-1,d));}
+ const mine=best.get(key(chosen));
+ if(mine==null)return null;
+ const setups=candidates.filter(c=>c.command.action==='play_card'&&cardOf(c)&&cardOf(c).type!=='Attack'&&(best.get(key(c))??-1)>=mine+minGain);
+ if(!setups.length)return null;
+ const turn=`${state.run?.live_id}:${state.run?.floor}:${state.battle?.round}`;
+ if(orderReviews.has(turn))return null;
+ orderReviews.add(turn);if(orderReviews.size>200)orderReviews.delete(orderReviews.keys().next().value);
+ const top=[...new Map(setups.map(c=>[key(c),c])).values()].sort((a,b)=>best.get(key(b))-best.get(key(a))).slice(0,2);
+ return `Card order: this attacks first, but playing ${top.map(c=>`${cardOf(c).name} first (up to ${best.get(key(c))} forecast damage this turn)`).join(' or ')} beats the best attack-first line (${mine}). Setup such as Strength, Vulnerable or Cruelty should come before the attacks it boosts. Keep attacking first only if it kills, avoids a harmful trigger, or block and energy make the setup line worse.`;
+}
+
 export function reviewReason(state,candidates,chosen,{resourceReviews=false}={}) {
- if(resourceReviews){const reason=resourceReviewReason(state,candidates,chosen);if(reason)return reason;}
+ if(resourceReviews){const reason=resourceReviewReason(state,candidates,chosen)??orderReviewReason(state,candidates,chosen);if(reason)return reason;}
  if(!combatScreens.has(state.state_type))return null;
  if(chosen.command.action==='end_turn'&&candidates.some(c=>['play_card','use_potion'].includes(c.command.action)))
   return 'Ending while a card or potion can still be used: compare a concrete beneficial alternative, retaliation, self-damage and potion timing. Keeping end turn is valid if those alternatives are harmful or wasteful.';

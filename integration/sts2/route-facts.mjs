@@ -1,7 +1,7 @@
 // Exact counts over the visible act map and live resources. These are facts for
 // Jev and the strategist; they never remove options.
 export const FACTS_POLICY = 'jev-compact-v2';
-export const FACTS_V3_POLICY = 'jev-compact-v3';
+export const FACTS_V3_POLICY = 'jev-compact-v3.1';
 const ROOM = {Monster:'M',Elite:'E',RestSite:'R',Shop:'$',Treasure:'T',Unknown:'?',Ancient:'A',Boss:'B'};
 const TRACK = {Elite:'elites',RestSite:'rests',Shop:'shops',Unknown:'unknowns',Monster:'monsters',Treasure:'treasures'};
 const combatScreens = new Set(['monster','elite','boss']);

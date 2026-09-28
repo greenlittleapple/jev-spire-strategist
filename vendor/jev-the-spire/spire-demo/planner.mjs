@@ -12,9 +12,9 @@ export const POLICY_VERSION = 'jev-visible-v24-hextech';
 const amount = (powers, name) => (powers ?? []).filter(p => p.name?.toLowerCase() === name.toLowerCase()).reduce((n,p) => n + Number(p.amount ?? 0), 0);
 const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? fallback);
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
-const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end"]);
-const supportedPotions = new Set(['fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain']);
+const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed"]);
+const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK']);
 
@@ -39,13 +39,15 @@ function initial(s) {
     noDraw:amount(s.player.status,'No Draw')>0,
     unmovable:amount(s.player.status,'Unmovable')>0,
     ringing: (s.player.status??[]).some(p=>p.name==='Ringing' || /cannot play more than \d+ cards each turn/i.test(p.description??'')),
-    energy: s.player.energy, hp: s.player.hp, block: s.player.block ?? 0,
+    energy: s.player.energy, hp: s.player.hp, startHp: s.player.hp, maxHp: s.player.max_hp, block: s.player.block ?? 0,
     hand: structuredClone(s.player.hand).map(c => ({ ...c, sourceIndex: c.index })),
     potions: structuredClone(s.player.potions ?? []), enemies: structuredClone(s.battle.enemies),
     dexterityDelta: 0, frailFactor: amount(s.player.status,'Frail') > 0 ? .75 : 1,
     strengthDelta: 0, weakFactor: amount(s.player.status,'Weak') > 0 ? .75 : 1,
     feelNoPain:amount(s.player.status,'Feel No Pain'),
     vicious:amount(s.player.status,'Vicious'),
+    // Cruelty: extra percent damage against Vulnerable enemies (status amount is the percent).
+    cruelty:amount(s.player.status,'Cruelty'),
     rage: amount(s.player.status,'Rage'), plating: amount(s.player.status,'Plating'), metallicize: amount(s.player.status,'Metallicize'),
     attacks: 0, fan: Boolean(fan), fanProgress, steps: [], warnings,
     // Unknown interactions stop search expansion; never invent complete outcomes.
@@ -75,7 +77,7 @@ function available(m, rootState) {
 function hit(m, enemy, value, attack) {
   if (enemy.hp <= 0) return;
   let damage = Math.max(0, value);
-  if (attack && amount(enemy.status,'Vulnerable') > 0) damage = Math.floor(damage * 1.5);
+  if (attack && amount(enemy.status,'Vulnerable') > 0) damage = Math.floor(damage * (1.5 + (m.cruelty ?? 0) / 100));
   for(const power of enemy.status??[]) {
     const cap=(power.description??'').match(/Reduce all damage taken and HP (?:loss|lost)(?:\s+.*?)?\s+to (\d+)/i);
     if(cap)damage=Math.min(damage,Number(cap[1]));
@@ -181,7 +183,7 @@ function apply(m0, a) {
       }
     }
     for (const e of targets) {
-      const hits = name === 'whirlwind' ? spent : name==='twin strike' ? 2 : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
+      const hits = name === 'whirlwind' ? spent : name==='twin strike' ? 2 : name==='spite' ? (m.hp < m.startHp ? 2 : 1) : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
       retaliationHits=hits;
       const bonus=name==='bully' ? number(text,/Deals (\d+) additional damage/i)*(amount(e.status,'Vulnerable')-(m.originalVulnerable[e.entity_id]??0)) : 0;
       for (let i=0; i<hits && e.hp>0; i++) hit(m,e,dmg+bonus,isAttack);
@@ -249,7 +251,13 @@ function apply(m0, a) {
     if(applied && m.vicious>0 && !m.noDraw){m.boundary='draw';m.warnings.push('Vicious draws unknown cards: re-observe before continuing.');}
 
   }
+  if(name==='cruelty')m.cruelty+=number(text,/additional (d+)% damage/i,25);
   if(name==='vicious')m.vicious+=number(text,/draw (\d+) card/i,1);
+  if(name==='spite' && m.hp >= m.startHp)m.warnings.push('Spite: HP lost earlier this turn is not observed; it may hit twice.');
+  if(name==='blood potion' && m.maxHp)m.hp=Math.min(m.maxHp,m.hp+Math.floor(m.maxHp*number(text,/Heal for (\d+)%/i,20)/100));
+  if(name==='pillage' && !m.noDraw){m.boundary='draw';m.warnings.push('Pillage draws unknown cards: re-observe before continuing.');}
+  if(name==='headbutt'){m.boundary='selection';m.warnings.push('Headbutt damage is included; re-observe the discard-to-top choice before continuing.');}
+  if(name==='true grit'){m.block+=m.feelNoPain;m.exhaustCount++;m.boundary='selection';m.warnings.push('True Grit block and one exhaust are included; the exhausted card is re-observed.');}
   if (name!=='vicious' && name!=='relax' && !m.noDraw && /Draw \d+ cards?/i.test(text)) { m.boundary = 'draw'; m.warnings.push('Stops before unknown drawn cards; re-observe before continuing.'); }
   if(name==='battle trance')m.noDraw=true;
   if(!potion && m.unmovable && /Gain \d+ Block/i.test(text) && name!=='rage' && name!=='feel no pain'){m.boundary='block_modifier_consumed';m.warnings.push('Re-read live block values after Unmovable: first-card doubling must not be reused.');}
@@ -336,6 +344,9 @@ function forecast(m, s) {
     survives: uncertain ? null : m.hp > projectedLoss,
     bossStunned:m.stunned.length>0, bossThresholds:m.enemies.flatMap(e=>(e.status??[]).filter(p=>p.name.toLowerCase()==='plow').map(p=>({enemy:e.name,damageToStun:Math.max(0,e.hp-p.amount)}))),
     energyLeft:m.unsupported || m.unsupportedRunes.length ? null : m.energy, slipperyRemoved:m.removedCharges, strengthGained:m.extraStrength,
+    // Powers keep working after this turn; the numbers above cover this turn only.
+    lastingEffects:m.steps.filter(x=>x.command.action==='play_card'&&x.details?.type==='Power').map(x=>`${x.details.name}: ${x.details.description}`),
+    notModeled:m.unsupported&&m.steps.length?[m.steps.at(-1).details?.name??m.steps.at(-1).label]:[],
     quality:uncertain?'unknown':warnings.length?'partial':'calculated',
     boundary:m.boundary, warnings,
     assumption:'Forecast if this prefix is followed by ending the turn. Known-effects estimate; unmodeled interactions are omitted when marked partial. Displayed damage intents and explicit end-of-turn damage from remaining hand; no prediction of hidden draws or future turns. Extra block from an unavailable Fan counter is omitted.',

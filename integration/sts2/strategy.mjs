@@ -5,7 +5,7 @@ import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
 import {nodeKey} from './route-facts.mjs';
 
-export const STRATEGY_POLICY = 'claude-strategy-v2';
+export const STRATEGY_POLICY = 'claude-strategy-v2.1';
 const combatScreens = new Set(['monster','elite','boss']);
 // Run-shaping screens where an unsure Jev answer is worth a Claude consult.
 export const IMPORTANT_SCREENS = new Set(['card_reward','shop','hextech_rune','rest_site']);
