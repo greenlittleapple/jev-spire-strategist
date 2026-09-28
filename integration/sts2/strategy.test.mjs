@@ -186,3 +186,9 @@ test('the CLI validates plans and answers only the request that was read',()=>wi
  assert.match((await cli('answer',request.id,file)).stdout,/Delivered/);
  assert.equal((await channel.take(request.id)).plan.archetype,'Strength');
 }));
+
+test('every run-shaping screen type is owned, independent of Jev confidence',async()=>{
+ const {OWNED_SCREENS,isOwnedScreen}=await import('./strategy.mjs');
+ for(const t of ['card_reward','shop','fake_merchant','event','rest_site','treasure','hextech_rune','card_select','bundle_select','relic_select','crystal_sphere'])assert.ok(OWNED_SCREENS.has(t),t);
+ assert.equal(isOwnedScreen({state_type:'card_select',battle:{}}),false,'in-combat card choices stay with Jev');
+});
