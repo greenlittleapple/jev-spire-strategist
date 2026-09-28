@@ -19,7 +19,7 @@ export function unmodeledNames(candidates) {
 // The visible text of a named power, relic or card in this state.
 export function mechanicText(state,name) {
  const same=x=>String(x?.name??'').replace(/\+$/,'').toLowerCase()===name.toLowerCase();
- const all=[...(state.player?.status??[]),...(state.player?.relics??[]),...(state.player?.hand??[]),
+ const all=[...(state.player?.status??[]),...(state.player?.relics??[]),...(state.player?.hand??[]),...(state.player?.potions??[]),
   ...(state.battle?.enemies??[]).flatMap(e=>(e.status??[]).map(p=>({...p,owner:e.name})))];
  const hit=all.find(same);
  return hit?(hit.owner?hit.owner+': ':'')+(hit.description??''):'';
@@ -27,7 +27,7 @@ export function mechanicText(state,name) {
 
 // Names present in a state (powers, relics, hand cards), for showing saved explanations.
 export function presentNames(state) {
- return new Set([...(state.player?.status??[]),...(state.player?.relics??[]),...(state.player?.hand??[]),
+ return new Set([...(state.player?.status??[]),...(state.player?.relics??[]),...(state.player?.hand??[]),...(state.player?.potions??[]),
   ...(state.battle?.enemies??[]).flatMap(e=>e.status??[])].map(x=>String(x?.name??'').replace(/\+$/,'')).filter(Boolean));
 }
 
