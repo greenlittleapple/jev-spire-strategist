@@ -71,18 +71,14 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    status.requests++;
    events.push({kind:'strategy_request',reason,request_id:request.id});
   }
-  // After a timeout the request stays posted, but play does not block on it again
-  // until an answer arrives or the operator restarts Autoplay.
-  if(!status.available)return false;
+  // Claude strategy mode never falls back to Jev: play waits for the answer until
+  // it arrives or the operator pauses (which cancels the decision).
   onStage('Waiting for Claude to update the run strategy');
-  for(const deadline=Date.now()+status.waitMs;Date.now()<deadline;){
+  for(;;){
    if(cancelled())throw Error('Decision cancelled.');
    await sleep(1000);
    if(await adopt())return true;
   }
-  status.available=false;status.timeouts++;
-  events.push({kind:'strategy_timeout',reason});
-  return false;
  };
  const decide=async()=>{
   if(replayed)return direct('replay','Reference run',replayed);

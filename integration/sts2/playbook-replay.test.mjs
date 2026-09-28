@@ -99,8 +99,9 @@ test('a replayed owned screen skips the strategist; a changed one is logged as d
  const replay={source:'ref',table:replayTable([{kind:'decision',state:s,candidates:c,chosen:{label:leave.label}}]),used:{},diverged:new Set()};
  const r=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},replay,ask:()=>assert.fail('no Jev call')});
  assert.equal(r.decisionSource,'replay');assert.equal(r.answers.move.choice,leave.id);assert.equal(status.requests,0);
- const other=shop(200,true);
- const d=await hierarchicalDeliberate({state:other,candidates:decisionCandidates(other),strategist:{channel,status},replay,ask:async q=>jev(Object.keys(q.questions.move.criteria)[0])});
+ const other=shop(200,true),oc=decisionCandidates(other);
+ session(channel,()=>plan({allowed_option_ids:[oc.find(x=>x.command.action==='proceed').id]}));
+ const d=await hierarchicalDeliberate({state:other,candidates:oc,strategist:{channel,status},replay,ask:async q=>jev(Object.keys(q.questions.move.criteria)[0])});
  assert.ok(d.strategyEvents.some(e=>e.kind==='replay_diverged'));
 }));
 

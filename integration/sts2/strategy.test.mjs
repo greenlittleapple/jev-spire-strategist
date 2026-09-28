@@ -146,19 +146,17 @@ test('uncertain Jev on a run-shaping screen escalates once and re-asks with the 
  assert.deepEqual(result.usage,{input_tokens:200,output_tokens:2});
 }));
 
-test('without an answer, play continues on the old plan and stops waiting until one arrives',()=>withChannel(async channel=>{
- const s=shop(100),c=decisionCandidates(s),status=newStrategyStatus({waitMs:1500,ownScreens:false});
- let result=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:async()=>jev('a3')});
- assert.equal(result.answers.move.choice,'a3');
- assert.equal(status.available,false);assert.equal(status.timeouts,1);assert.equal(status.plan,null);
- const started=Date.now();
- await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:async()=>jev('a3')});
- assert.ok(Date.now()-started<1000,'does not block again');assert.equal(status.requests,1,'same trigger is not re-posted');
- const pending=await channel.current();
- await channel.answer(pending.id,plan());
- result=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:async()=>jev('a3')});
- assert.equal(status.available,true);assert.equal(status.plan.reason,'run_start');
- assert.deepEqual(result.strategyEvents.map(e=>e.kind),['strategy_adopted']);
+test('Claude strategy mode waits for the answer and never falls back to Jev',()=>withChannel(async channel=>{
+ const s=shop(100),c=decisionCandidates(s),status=newStrategyStatus({ownScreens:false});
+ let settled=false;
+ const pending=hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:async()=>jev('a3')}).then(r=>{settled=true;return r;});
+ await new Promise(r=>setTimeout(r,2500));
+ assert.equal(settled,false,'still waiting for Claude');assert.equal(status.requests,1);
+ const request=await channel.current();
+ await channel.answer(request.id,plan());
+ const result=await pending;
+ assert.equal(status.plan.reason,'run_start');
+ assert.deepEqual(result.strategyEvents.map(e=>e.kind),['strategy_request','strategy_adopted']);
 }));
 
 test('forced transitions never consult Claude',()=>withChannel(async channel=>{

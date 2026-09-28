@@ -96,7 +96,7 @@ Forced transitions never trigger a request. Replaying the recorded 640-move A0 r
 
 **Constrained vs advisory** (`CLAUDE_PLAN_MODE`, default `constrained`). Constrained mode removes options outside Claude's `allowed_option_ids` on that exact screen (matched by command and label, so a reroll or purchase can't redirect an index), and removes purchases that would take gold below `shop.gold_reserve`. If only one option remains, it executes without a Jev call (`decisionSource: claude`). Advisory mode passes the same choices to Jev as `recommended_options` and removes nothing. Every execution still goes through the runner's freshness check, pause and dispatch logging.
 
-**Session channel.** The runner writes `.private/sts2/strategy/request.json` and waits up to `CLAUDE_WAIT_SECONDS` (default 300) for `answer.json` with the same request ID. On timeout it plays on with the previous plan (or Jev alone) and stops blocking until an answer arrives or Autoplay is pressed again. The request remains posted, and a late answer is used from the next decision, constraining only the screen it was written for. Pause cancels a wait. `CLAUDE_STRATEGIST=off` restores Jev-only play. The dashboard shows the current plan and the request, answer and timeout counts.
+**Session channel.** The runner writes `.private/sts2/strategy/request.json` and waits for `answer.json` with the same request ID for as long as it takes (since 2026-09-28 there is no timeout, so Claude strategy mode never hands a strategist decision to Jev). Pause cancels a wait. `CLAUDE_STRATEGIST=off` restores Jev-only play. The dashboard shows the current plan and the request and answer counts; each entry in the decision stream is labelled Claude, Jev, Replay or Forced, with any Claude plan constraint that limited Jev.
 
 **Operating as strategist (Claude Code session):**
 
@@ -105,9 +105,9 @@ Forced transitions never trigger a request. Replaying the recorded 640-move A0 r
 3. Write the plan JSON to a scratch file and deliver it with `npm run sts2:strategy -- answer <id> <file>`. The CLI rejects schema errors, invalid option IDs, and a request that has since been replaced.
 4. Restart the watcher.
 
-Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `strategy_timeout` events.
+Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `replay_diverged` events.
 
-Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Those runs used advisory combat plans.
+Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, waiting without timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Those runs used advisory combat plans.
 
 ## Scorecard
 
