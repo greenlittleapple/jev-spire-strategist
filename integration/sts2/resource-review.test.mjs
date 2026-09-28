@@ -42,3 +42,13 @@ test('v3 asks Jev a second time when it leaves a rich shop; v2 does not',async()
   if(expected===2){assert.match(requests[1].state.proposed_action.reason_for_review,/Leaving the shop/);assert.equal(result.deliberation.calls,2);}
  }
 });
+
+test('potion review runs once per fight unless HP drops by a fifth of max',()=>{
+ const at=(floor,hp)=>({state_type:'monster',run:{live_id:'once',act:1,floor,ascension:0},player:{hp,max_hp:80,potions:[{}],max_potion_slots:3}});
+ const r=s=>reviewReason(s,[],potion,{resourceReviews:true});
+ assert.ok(r(at(7,80)));
+ assert.equal(r(at(7,79)),null,'same fight, small HP change');
+ assert.equal(r(at(7,65)),null,'dropped 15, under 16');
+ assert.ok(r(at(7,63)),'dropped 17 since the last review');
+ assert.ok(r(at(8,80)),'a new fight reviews again');
+});

@@ -82,9 +82,20 @@ export function isForcedChoice(state,candidates) {
 
 // v3 adds two resource reviews: potions in normal fights (always drunk in round 1 at
 // full HP in logged runs) and leaving a shop with gold for an affordable removal or potion.
+// Fight key -> HP at the last potion review. Without this the review repeats every
+// turn when a potion is the only alternative to ending the turn.
+const potionReviews=new Map();
+export function potionReviewDue(state){
+ const p=state.player??{},key=`${state.run?.live_id}:${state.run?.act}:${state.run?.floor}`,last=potionReviews.get(key);
+ if(last!=null&&!(p.max_hp&&last-p.hp>=0.2*p.max_hp))return false;
+ potionReviews.set(key,p.hp);
+ if(potionReviews.size>50)potionReviews.delete(potionReviews.keys().next().value);
+ return true;
+}
+
 export function resourceReviewReason(state,candidates,chosen) {
  const p=state.player??{},action=chosen.command.action;
- if(state.state_type==='monster'&&action==='use_potion')
+ if(state.state_type==='monster'&&action==='use_potion'&&potionReviewDue(state))
   return 'This spends a potion in a normal (non-elite, non-boss) fight. Potions are scarce and elites and the boss are harder. Using computed_facts (potions held, floors to boss) and the visible enemy intents, compare the HP this fight can realistically cost without the potion against keeping it. Keep the potion choice only if this fight threatens a large HP loss or death.';
  if(state.state_type==='shop'&&action==='proceed'&&(p.gold??0)>=100){
   const slotFree=(p.potions?.length??0)<(p.max_potion_slots??0);
