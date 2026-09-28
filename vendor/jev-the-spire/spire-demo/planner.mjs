@@ -473,7 +473,9 @@ function forecast(m, s) {
     return loss;
   };
   const projectedLoss = m.buffer > 0 && m.enemies.some(e=>e.hp>0) ? bufferedLoss() : endTurnCardHpLoss + Math.max(0,incoming+endTurnCardDamage-block);
-  const loss = Math.max(0,s.player.hp-m.hp + projectedLoss);
+  // Regen already active heals at the end of this turn, before the enemy attacks.
+  const regenHeal = m.enemies.some(e=>e.hp>0) ? Math.max(0, Math.min(amount(s.player.status,'Regen'), (m.maxHp ?? m.hp) - m.hp)) : 0;
+  const loss = Math.max(0,s.player.hp-m.hp + projectedLoss - regenHeal);
   const warnings = [...new Set(m.warnings)];
   if(m.unsupportedRunes.length)warnings.push('Active Hextech effects require live rule interpretation: '+m.unsupportedRunes.map(r=>r.name).join(', ')+'. Numeric outcomes are unknown; use a single legal action and re-observe.');
   if(lethalTurnRule)warnings.push('A visible rule says the enemy taking its turn kills you regardless of ordinary block. Attack-only HP estimates cannot establish survival; prevent that turn using a supported kill or stated interruption.');
@@ -492,8 +494,8 @@ function forecast(m, s) {
     departedMinions:m.enemies.filter(e=>e.departedWithLeader).map(e=>({id:e.entity_id,name:e.name,leader:e.departedWithLeader,reason:'Visible rule: abandons combat without its leader; departure is not a death.'})),
     delayedDeathEffects:m.enemies.filter(e=>!e.departedWithLeader).flatMap(e=>(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')).map(p=>({enemy:e.name,rule:p.description,note:'Not included in current-turn attack total; death may not end combat.'}))),
     hpLoss: uncertain ? null : loss,
-    hpAfter: uncertain ? null : Math.max(0,m.hp-projectedLoss),
-    survives: uncertain ? null : m.hp > projectedLoss,
+    hpAfter: uncertain ? null : Math.max(0,m.hp+regenHeal-projectedLoss),
+    survives: uncertain ? null : m.hp+regenHeal > projectedLoss,
     bossStunned:m.stunned.length>0, bossThresholds:m.enemies.flatMap(e=>(e.status??[]).filter(p=>p.name.toLowerCase()==='plow').map(p=>({enemy:e.name,damageToStun:Math.max(0,e.hp-p.amount)}))),
     energyLeft:m.unsupported || m.unsupportedRunes.length ? null : m.energy, slipperyRemoved:m.removedCharges, strengthGained:m.extraStrength,
     // Powers keep working after this turn; the numbers above cover this turn only.

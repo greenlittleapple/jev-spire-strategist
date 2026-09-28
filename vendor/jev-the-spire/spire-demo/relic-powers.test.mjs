@@ -78,3 +78,9 @@ test('end-of-turn debuff damage counts as blockable damage, Constrict only while
  assert.equal(projectSequence(c,[]).hpLoss,12,'no Strangler in this fight');
  c.battle.enemies[0].name='Slithering Strangler';assert.equal(projectSequence(c,[]).hpLoss,15);
 });
+
+test('an active Regen heals at the end of the turn before the attack',()=>{
+ const s=state();s.player.hp=60;s.player.status=[{name:'Regen',amount:5,type:'Buff',description:'At the end of your turn, heal 5 HP.'}];
+ const f=projectSequence(s,[]);assert.equal(f.hpLoss,7);assert.equal(f.hpAfter,53);
+ s.player.hp=s.player.max_hp;assert.equal(projectSequence(s,[]).hpLoss,12,'no heal above max HP');
+});

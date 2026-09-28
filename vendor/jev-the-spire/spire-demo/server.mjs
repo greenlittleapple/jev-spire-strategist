@@ -112,16 +112,19 @@ async function log(event) {
 // The dashboard snapshot (about 2 MB) is written at most every 2 s; the run log above is the record.
 // Writes are serialized through one chain so a flush and a throttled write never race on the .tmp file.
 let snapshotChain = Promise.resolve(), snapshotTimer = null;
+// The returned promise rejects on failure (a failed dispatch-marker write must stop the step
+// before the command is sent); the chain itself continues for later writes.
 function writeSnapshot() {
-  snapshotChain = snapshotChain.then(async () => {
+  const write = snapshotChain.then(async () => {
     await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
     await rename(snapshotFile + '.tmp', snapshotFile);
-  }).catch(error => console.error('Snapshot write failed:', error.message));
-  return snapshotChain;
+  });
+  snapshotChain = write.catch(error => console.error('Snapshot write failed:', error.message));
+  return write;
 }
 function persistSnapshot() {
   if (snapshotTimer) return;
-  snapshotTimer = setTimeout(() => { snapshotTimer = null; writeSnapshot(); }, 2000);
+  snapshotTimer = setTimeout(() => { snapshotTimer = null; writeSnapshot().catch(() => {}); }, 2000);
 }
 async function flushSnapshot() {
   if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = null; }
@@ -194,7 +197,10 @@ async function step(token, preview = false) {
   if (busy || Date.now() < nextDecisionAt) return;
   busy = true;
   try {
+    // Observation latency, logged per decision: a slowing game shows here before play stalls.
+    const observedAt = Date.now();
     const s = await observe();
+    view.observeMs = Date.now() - observedAt;
     if (token !== generation) return;
     if (view.uncertainAction) throw Error('A previous action has an uncertain result. Inspect the game and acknowledge it before resuming.');
     if (s.state_type === 'game_over') {
@@ -287,7 +293,7 @@ async function step(token, preview = false) {
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY, decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, preview };
+    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY, decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();
@@ -409,7 +415,7 @@ async function shutdown() {
   shuttingDown = true; stop('Stopped'); server.close();
   // Pending dispatch was persisted before sending; retain that marker on interruption,
   // and write the latest snapshot (counters, strategist status) before exiting.
-  await flushSnapshot();
+  await flushSnapshot().catch(() => {});
   await unlink(lockFile).catch(() => {});
   process.exit(0);
 }
