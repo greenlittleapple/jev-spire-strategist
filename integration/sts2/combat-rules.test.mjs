@@ -121,3 +121,13 @@ test('ending the turn is removed while an affordable Beckon is still in hand',()
  s.player.energy=0;
  assert.equal(combatConstraints(s,cands,null).candidates.length,2,'no energy to play it');
 });
+
+test('while every enemy is Intangible only the least-HP-loss plays remain',()=>{
+ const s=fight({type:'boss',enemies:[enemy('f','Soul Fysh',123,[{name:'Intangible',amount:1}])]});
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'f'},{hpLoss:13}),cand('uppercut',{action:'play_card',card_index:1,target:'f'},{hpLoss:9}),
+  cand('mystery',{action:'play_card',card_index:2},{hpLoss:null,quality:'unknown',survives:null}),cand('end',{action:'end_turn'},{hpLoss:13})];
+ const r=combatConstraints(s,cands,null);
+ assert.deepEqual(ids(r),['uppercut','mystery']);assert.equal(r.rules[0].kind,'intangible_defense');
+ const normal=fight({type:'boss',enemies:[enemy('f','Soul Fysh',123)]});
+ assert.equal(combatConstraints(normal,cands,null).candidates.length,4,'no rule without Intangible');
+});
