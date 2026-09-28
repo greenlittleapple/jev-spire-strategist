@@ -96,7 +96,7 @@ test('the strategist brief is compact run context without combat piles',()=>{
  assert.equal(brief.current_options.length,4);
  const b=strategistBrief(boss(),[],'boss_start',plan());
  assert.equal(b.current_options,undefined);assert.equal(b.enemies[0].name,'Boss');assert.equal(b.previous_plan.archetype,'Strength');
- assert.equal(JSON.stringify(b).includes('hand'),false);
+ assert.ok(b.combat_state,'combat consults include the player side');assert.equal(JSON.stringify(b).includes('draw_pile":['),false,'pile contents stay out; counts only');
 });
 
 async function withChannel(fn){

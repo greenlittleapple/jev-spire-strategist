@@ -39,7 +39,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(replayed)return {...direct('replay','Reference run',replayed),strategyEvents:events};
   return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
  }
- const {channel,status,playbook=null}=strategist;
+ const {channel,status,playbook=null,glossary=null}=strategist;
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -69,6 +69,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const routes=distinctRoutes(map,position);
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;}
+   // Descriptions for named cards and relics the options mention but do not explain.
+   if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
     stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
      // Seen routes carry forward within an act; only a brief that lists them marks them seen.

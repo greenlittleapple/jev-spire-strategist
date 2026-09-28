@@ -83,14 +83,35 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   history:summarizeHistory(state.saved_run)?.history_summary ?? null,
   screen:state.state_type,
  };
+ // In combat the strategist also needs the player's side: energy, block, powers and hand.
+ if(state.battle)brief.combat_state={round:state.battle.round,energy:p.energy,max_energy:p.max_energy,block:p.block??0,
+  status:(p.status??[]).map(({name,amount,description})=>({name,amount,description})),
+  hand:(p.hand??[]).map(({name,cost,type,description})=>({name,cost,type,description})),
+  draw_pile:p.draw_pile_count??null,discard_pile:p.discard_pile_count??null,exhaust_pile:p.exhaust_pile_count??null};
  if(state.battle)brief.enemies=state.battle.enemies.map(({name,hp,max_hp,block,status,intents})=>({name,hp,max_hp,block,
   status:(status??[]).map(({name,amount,description})=>({name,amount,description})),intents:(intents??[]).map(({title,label,description})=>({title,label,description}))}));
  if(routes)brief.routes=routes;
  if(facts)brief.facts=facts;
- if(!combatScreens.has(state.state_type))brief.current_options=candidates.map(c=>({id:c.id,label:c.label,
-  ...(c.details?.description??c.details?.card_description?{description:c.details.description??c.details.card_description}:{})}));
+ if(!combatScreens.has(state.state_type)){
+  brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
+  // Keyword definitions attached to offered cards and relics (Exhaust, Ethereal, Dazed...).
+  const keywords=new Map();
+  for(const c of candidates)for(const k of c.details?.keywords??[])if(k?.name&&k.description&&!keywords.has(k.name))keywords.set(k.name,k.description);
+  if(keywords.size)brief.keywords=Object.fromEntries(keywords);
+ }
  if(previous)brief.previous_plan=planFields(previous);
  return brief;
+}
+
+// Every description the bridge sends for an option: shop items carry card_, relic_ or
+// potion_description; event options may name a relic with its own description. A reward
+// "description" that only repeats the label is not a description.
+function optionText(c) {
+ const d=c.details??{};
+ const own=[d.description,d.card_description,d.relic_description,d.potion_description].find(t=>t&&t.trim()!==String(c.label).trim());
+ const extra=d.relic_description&&own!==d.relic_description&&d.relic_name?`${d.relic_name}: ${d.relic_description}`:null;
+ const description=[own,extra].filter(Boolean).join(' ');
+ return description?{description}:{};
 }
 
 export function planFields(plan) {
