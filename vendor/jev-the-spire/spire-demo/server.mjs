@@ -161,13 +161,13 @@ function sidecarView(source = view) {
     player: source.state?.player ? { hp: source.state.player.hp, maxHp: source.state.player.max_hp, energy: source.state.player.energy, block: source.state.player.block } : null,
     room: source.state?.state_type, decisions: compactDecisions.slice(0, 8), spotlight: compactDecisions.find(e => e.options.length > 1) ?? compactDecisions[0] ?? null };
 }
-async function observe() {
+async function observe(retries = 2) {
   // State reads are read-only; a failed read (a transition-time exception or timeout) is retried
   // twice before the step fails and pauses.
   let live;
   for (let attempt = 0; ; attempt++) {
     try { live = await gameRequest(); break; }
-    catch (error) { if (attempt >= 2) throw error; await new Promise(r => setTimeout(r, 1500)); }
+    catch (error) { if (attempt >= retries) throw error; await new Promise(r => setTimeout(r, 1500)); }
   }
   const id = live.run?.live_id;
   if (id && view.runId && id !== view.runId) {
@@ -343,10 +343,13 @@ async function step(token, preview = false) {
 
 // Sequential runner: at most one model request and one action in flight.
 let lastIdleObserve = 0;
+let idleObserving = false;
 setInterval(async () => {
   if (busy) return;
   if (view.mode === 'running') await step(generation);
-  else if (Date.now() - lastIdleObserve >= 600) { lastIdleObserve = Date.now(); try { await observe(); } catch { view.connected = false; } }
+  // One idle read at a time and no retries: the next idle tick is the retry, and a slow game
+  // must not accumulate overlapping reads.
+  else if (!idleObserving && Date.now() - lastIdleObserve >= 600) { lastIdleObserve = Date.now(); idleObserving = true; try { await observe(0); } catch { view.connected = false; } finally { idleObserving = false; } }
 }, TICK_MS).unref();
 
 const server = http.createServer(async (req, res) => {
