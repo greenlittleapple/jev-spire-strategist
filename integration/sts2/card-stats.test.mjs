@@ -25,5 +25,5 @@ test('shop purchases count as picks, the pick floor is excluded, and replays of 
  }
  recordDecision(s,at('r3',30,'shop',{state:{shop:{items:[{index:2,category:'card',card_name:'Pillage'}]}},chosen:{label:'Pillage — 50 gold',command:{action:'shop_purchase',index:2}}}));
  recordDecision(s,at('r3',31,'monster',{state:{player:{hand:[]}},chosen:{command:{action:'end_turn'}}}));
- assert.deepEqual(cardSummary(s,'Pillage'),{offered:0,picked:3,seeds:2,plays_per_fight_after_pick:0.5,floor_reached_when_picked:19});
+ assert.deepEqual(cardSummary(s,'Pillage'),{offered:3,picked:3,seeds:2,plays_per_fight_after_pick:0.5,floor_reached_when_picked:19});
 });

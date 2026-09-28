@@ -306,7 +306,9 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  // A fully forecast win ends the fight: take it, using as few potions as possible.
  // Runs after the hallway potion rule, so a win that needs a held-back potion is not forced.
  // A win whose forecast names an unmodeled enemy power or an unobserved per-turn cap is not trusted.
- const trusted=c=>!(c.forecast.warnings??[]).some(w=>/Unmodeled enemy power|not observed/i.test(w));
+ // Ravenous (a survivor eats the dead) cannot trigger with one enemy left.
+ const lone=alive(state).length===1;
+ const trusted=c=>!(c.forecast.warnings??[]).some(w=>/Unmodeled enemy power|not observed/i.test(w)&&!(lone&&/Unmodeled enemy power: Ravenous/i.test(w)));
  const wins=kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown'&&trusted(c));
  if(wins.length){
   const potions=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;

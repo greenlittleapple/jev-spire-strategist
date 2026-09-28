@@ -105,25 +105,27 @@ async function log(event) {
   const entry = { time: new Date().toISOString(), ...event };
   view.events.unshift(entry); view.events.length = Math.min(view.events.length, 60);
   await appendFile(logFile, JSON.stringify(entry) + '\n', { mode: 0o600 });
-  persistSnapshot();
+  // The dispatch marker (uncertainAction) must be on disk before a command is sent, so a crash
+  // or stop can be reconciled on restart; other snapshots are throttled.
+  if (entry.kind === 'dispatch') await flushSnapshot(); else persistSnapshot();
 }
 // The dashboard snapshot (about 2 MB) is written at most every 2 s; the run log above is the record.
-let snapshotDirty = false, snapshotWriting = false;
+// Writes are serialized through one chain so a flush and a throttled write never race on the .tmp file.
+let snapshotChain = Promise.resolve(), snapshotTimer = null;
+function writeSnapshot() {
+  snapshotChain = snapshotChain.then(async () => {
+    await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
+    await rename(snapshotFile + '.tmp', snapshotFile);
+  }).catch(error => console.error('Snapshot write failed:', error.message));
+  return snapshotChain;
+}
 function persistSnapshot() {
-  snapshotDirty = true;
-  if (snapshotWriting) return;
-  snapshotWriting = true;
-  setTimeout(async () => {
-    try {
-      while (snapshotDirty) {
-        snapshotDirty = false;
-        await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
-        await rename(snapshotFile + '.tmp', snapshotFile);
-        if (snapshotDirty) await new Promise(r => setTimeout(r, 2000));
-      }
-    } catch (error) { console.error('Snapshot write failed:', error.message); }
-    finally { snapshotWriting = false; }
-  }, 2000);
+  if (snapshotTimer) return;
+  snapshotTimer = setTimeout(() => { snapshotTimer = null; writeSnapshot(); }, 2000);
+}
+async function flushSnapshot() {
+  if (snapshotTimer) { clearTimeout(snapshotTimer); snapshotTimer = null; }
+  await writeSnapshot();
 }
 async function gameRequest(path = '/api/v1/singleplayer', command) {
   const response = await fetch(bridge + path, {
@@ -405,7 +407,9 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true; stop('Stopped'); server.close();
-  // Pending dispatch was persisted before sending; retain that marker on interruption.
+  // Pending dispatch was persisted before sending; retain that marker on interruption,
+  // and write the latest snapshot (counters, strategist status) before exiting.
+  await flushSnapshot();
   await unlink(lockFile).catch(() => {});
   process.exit(0);
 }

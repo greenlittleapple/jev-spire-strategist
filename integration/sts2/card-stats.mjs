@@ -15,6 +15,7 @@ export const baseCard = name => String(name ?? '').replace(/\s+[—-]\s+\d+\s+go
 export function newCardStats(seeds = {}) { return {runs: {}, cards: {}, seeds}; }
 
 const pick = (stats, r, name, floor) => { (stats.cards[name] ??= {offered: 0, picked: 0}).picked++; r.picks[name] ??= floor; };
+const offer = (stats, name) => { (stats.cards[name] ??= {offered: 0, picked: 0}).offered++; };
 
 // Folds one logged decision into the stats.
 export function recordDecision(stats, e) {
@@ -30,7 +31,8 @@ export function recordDecision(stats, e) {
  }
  if (s.state_type === 'shop' && e.chosen?.command?.action === 'shop_purchase') {
   const item = (s.shop?.items ?? []).find(i => i.index === e.chosen.command.index);
-  if (item?.category === 'card') pick(stats, r, baseCard(item.card_name ?? e.chosen.label), s.run.floor ?? 0);
+  // A purchase counts as offered and picked, so picked never exceeds offered.
+  if (item?.category === 'card') { const n = baseCard(item.card_name ?? e.chosen.label); offer(stats, n); pick(stats, r, n, s.run.floor ?? 0); }
  }
  if (combat.has(s.state_type)) {
   const fight = `${s.run.act}:${s.run.floor}`; r.fights.add(fight);

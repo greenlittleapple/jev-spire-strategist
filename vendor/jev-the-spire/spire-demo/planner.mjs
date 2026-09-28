@@ -14,7 +14,7 @@ const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? f
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
 const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang"]);
 const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
   'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
@@ -453,7 +453,15 @@ function forecast(m, s) {
   const facingUsable=facingProjection&&!facingEffectsChanged&&!m.unsupported;
   if(facingUsable)incoming=facingProjection.incomingMax;
   const uncertain = m.unsupportedRunes.length > 0 || lethalTurnRule || (positioningUnknown&&!facingUsable) || m.unsupported || m.deathUnresolved || defeatedEnemies.some(e=>e.deathRules.length) || !parsed;
-  const endTurnCardDamage = m.enemies.some(e=>e.hp>0) ? m.hand.reduce((sum,c)=>sum+(/At the end of your turn, if this is in your Hand, take (\d+) damage/i.test(c.description??'') ? number(c.description,/take (\d+) damage/i) : 0),0) : 0;
+  // Player debuffs that deal damage at the end of the turn (Disintegration; Constrict while its
+  // source is alive). Damage, so Block reduces it, like the hand cards below.
+  const endTurnStatusDamage = m.enemies.some(e=>e.hp>0) ? (s.player.status??[]).reduce((sum,p)=>{
+    const d=(p.description??'').match(/^(?:While (?:the )?(.+?) is alive, )?at the end of your turn, take (\d+) damage\.?$/i);
+    if(!d)return sum;
+    if(d[1]&&!m.enemies.some(e=>e.hp>0&&e.name?.toLowerCase().includes(d[1].toLowerCase())))return sum;
+    return sum+Number(d[2]);
+  },0) : 0;
+  const endTurnCardDamage = endTurnStatusDamage + (m.enemies.some(e=>e.hp>0) ? m.hand.reduce((sum,c)=>sum+(/At the end of your turn, if this is in your Hand, take (\d+) damage/i.test(c.description??'') ? number(c.description,/take (\d+) damage/i) : 0),0) : 0);
   const endTurnCardHpLoss = m.enemies.some(e=>e.hp>0) ? m.hand.reduce((sum,c)=>sum+number(c.description,/At the end of your turn, if this is in your Hand,\s+lose (\d+) HP/i),0) : 0;
   // Buffer cancels whole HP-loss events, so with Buffer the loss is counted event by event:
   // held-card HP loss first, then end-of-turn card damage, then each enemy hit through block.
@@ -634,14 +642,15 @@ export function decisionQuestion(s,candidates) {
 
 // Marks enemies already hit this player turn (hit_this_turn), for once-per-turn effects such as
 // Skittish. The state does not say so directly: an enemy counts as hit once its HP fell or its
-// Block rose since the turn's first observation. memory persists between observations.
+// Block changed since the turn's first observation. memory persists between observations.
 export function markHitsThisTurn(memory, state) {
   if (!state?.battle?.enemies || state.battle.turn !== 'player') return state;
   const key = `${state.run?.live_id}:${state.run?.floor}:${state.battle.round}`;
   if (memory.key !== key) { memory.key = key; memory.start = {}; memory.hit = new Set(); }
   const enemies = state.battle.enemies.map(e => {
     const start = memory.start[e.entity_id] ??= {hp: e.hp, block: e.block ?? 0};
-    if (e.hp < start.hp || (e.block ?? 0) > start.block) memory.hit.add(e.entity_id);
+    // Any change in Block counts: a first hit absorbed by existing Block can lower it by more than Skittish adds.
+    if (e.hp < start.hp || (e.block ?? 0) !== start.block) memory.hit.add(e.entity_id);
     return memory.hit.has(e.entity_id) ? {...e, hit_this_turn: true} : e;
   });
   return {...state, battle: {...state.battle, enemies}};

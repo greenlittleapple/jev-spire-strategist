@@ -69,3 +69,12 @@ test('Smoggy allows one Skill per turn within a plan',()=>{
  assert.throws(()=>projectSequence(s,['Defend','Defend']),/not available/);
  assert.equal(projectSequence(s,['Defend']).hpLoss,7);
 });
+
+test('end-of-turn debuff damage counts as blockable damage, Constrict only while its source lives',()=>{
+ const s=state();s.player.status=[{name:'Disintegration',amount:6,type:'Debuff',description:'At the end of your turn, take 6 damage.'}];
+ assert.equal(projectSequence(s,[]).hpLoss,18);
+ assert.equal(projectSequence(s,['Defend']).hpLoss,13);
+ const c=state();c.player.status=[{name:'Constrict',amount:3,type:'Debuff',description:'While the Slithering Strangler is alive, at the end of your turn, take 3 damage.'}];
+ assert.equal(projectSequence(c,[]).hpLoss,12,'no Strangler in this fight');
+ c.battle.enemies[0].name='Slithering Strangler';assert.equal(projectSequence(c,[]).hpLoss,15);
+});
