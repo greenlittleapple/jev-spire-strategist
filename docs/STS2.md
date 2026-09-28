@@ -102,7 +102,7 @@ Forced transitions never trigger a request. Replaying the recorded 640-move A0 r
 
 Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `strategy_timeout` events.
 
-Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, timeout and cancellation. A live game cycle is **not yet verified**: this setup has not been exercised in a new run.
+Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Combat plans are advisory only: Jev receives them as context and no combat option is filtered.
 
 ## Scorecard
 
