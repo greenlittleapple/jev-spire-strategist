@@ -9,6 +9,7 @@ import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts
 import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
 import {makeGlossary,bridgeLookup} from '../../../integration/sts2/glossary.mjs';
 import {loadMovesets,recordIntents} from '../../../integration/sts2/movesets.mjs';
+import {loadFightResults,recordFight} from '../../../integration/sts2/fight-results.mjs';
 import {loadCardStats} from '../../../integration/sts2/card-stats.mjs';
 import {replayer} from '../../../integration/sts2/replay.mjs';
 import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
@@ -82,6 +83,8 @@ loadHistory(logFile).then(h=>{if(h.length)view.strategyHistory=h;});
 if(strategist)loadMovesets(logFile).then(m=>{for(const [k,v] of Object.entries(m))strategist.movesets[k]??=v;});
 // How earlier card picks worked out, shown on card reward and shop options.
 if(strategist)loadCardStats(logFile).then(c=>{strategist.cardStats=c;});
+// How each encounter went, shown with its saved plan and used to re-review plans that did badly.
+if(strategist)loadFightResults(logFile).then(r=>{strategist.fightResults=r;});
 const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
@@ -175,6 +178,7 @@ async function step(token, preview = false) {
     if (token !== generation) return;
     if (view.uncertainAction) throw Error('A previous action has an uncertain result. Inspect the game and acknowledge it before resuming.');
     if (s.state_type === 'game_over') {
+      if(strategist?.fightResults)recordFight(strategist.fightResults,s);
       stop(s.player?.hp <= 0 ? 'Run ended in defeat.' : 'Run ended. Verify the result in the game.');
       await log({ kind: 'run_end', state: s }); return;
     }
@@ -196,7 +200,7 @@ async function step(token, preview = false) {
     if (['menu', 'overlay'].includes(s.state_type)) {
       stop(`Waiting at ${s.state_type}. Resolve this screen in the game, then resume.`); return;
     }
-    if(strategist)recordIntents(strategist.movesets,s);
+    if(strategist){recordIntents(strategist.movesets,s);if(strategist.fightResults)recordFight(strategist.fightResults,s);}
     const planningState=facingState(s,view.events);
     const actions = decisionCandidates(rewardState(planningState,view.events));
     if (!actions.length) {

@@ -6,6 +6,7 @@ import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationRea
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
+import {encounterResults,planNeedsReview} from './fight-results.mjs';
 import {replayChoice} from './replay.mjs';
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -43,6 +44,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  }
  const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
  const cardStats=()=>strategist.cardStats??null;
+ const fightResults=()=>strategist.fightResults??null;
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -72,7 +74,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const routes=distinctRoutes(map,position);
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;
-    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}}
+    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}
+    // How this encounter went before (HP, rounds, win), marking fights played since the saved plan.
+    const results=fightResults()&&encounterResults(fightResults(),encounter,fight?.updatedAt??null);if(results)brief.encounter_results=results;}
    // Intents each enemy showed round by round in recent fights (this one included).
    if(movesets&&brief.enemies)for(const e of brief.enemies){const seen=patternFor(movesets,e.name);if(seen.length)e.seen_pattern=seen;}
    // Earlier runs: how often an offered card was taken, played per fight afterwards, and run depth.
@@ -113,10 +117,16 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  // A replayed screen needs no strategist decision.
  if(trigger==='owned_screen'&&replayed)trigger=null;
  // A normal fight's first sight of an encounter with no saved plan asks for one, once per fight.
- if(!trigger&&state.state_type==='monster'&&playbook&&encounter&&!status.encountersAsked.includes(fightId(state))&&!await playbook.get(encounter)){
-  status.encountersAsked.push(fightId(state));
-  if(status.encountersAsked.length>100)status.encountersAsked.shift();
-  trigger='new_encounter';
+ // A saved plan that went badly since it was written (a loss, or a quarter of max HP lost on average)
+ // is reviewed once per fight.
+ if(!trigger&&state.state_type==='monster'&&playbook&&encounter&&!status.encountersAsked.includes(fightId(state))){
+  const saved=await playbook.get(encounter);
+  const next=!saved?'new_encounter':planNeedsReview(fightResults(),encounter,saved)?'review_encounter':null;
+  if(next){
+   status.encountersAsked.push(fightId(state));
+   if(status.encountersAsked.length>100)status.encountersAsked.shift();
+   trigger=next;
+  }
  }
  if(trigger)await consult(trigger);
  let result=await decide();
