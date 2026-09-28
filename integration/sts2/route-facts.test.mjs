@@ -41,8 +41,8 @@ test('route summaries count every path to the boss per option',()=>{
  const ahead=remainingRoute(map,{col:0,row:1});
  assert.equal(ahead.paths_to_boss,2);assert.equal(ahead.floors_to_boss,3);assert.equal(ahead.shops,'0-1');
  const routes=distinctRoutes(map,map.current_position);
- assert.deepEqual(routes.routes.map(r=>r.rooms),['M$RB','M?RB','E?RB']);
- assert.deepEqual(routes.routes[2].nodes,['1,1','1,2','0,3','0,4']);
+ assert.deepEqual(routes.routes.map(r=>r.rooms),['M$RB','E?RB','M?RB']);
+ assert.deepEqual(routes.routes[1].nodes,['1,1','1,2','0,3','0,4']);
  assert.equal(routes.total_paths,3);
 });
 
@@ -99,7 +99,7 @@ test('strategy mode sends the route list and a single routed option moves withou
   const result=await hierarchicalDeliberate({state:mapState(),candidates,strategist:{channel,status},ask:()=>assert.fail('route move needs no Jev call')});
   await answer;
   assert.equal(seen.stamp.reason,'route_plan');
-  assert.deepEqual(seen.brief.routes.routes.map(r=>r.rooms),['M$RB','M?RB','E?RB']);
+  assert.deepEqual(seen.brief.routes.routes.map(r=>r.rooms),['M$RB','E?RB','M?RB']);
   assert.ok(seen.brief.facts.route_options);
   assert.deepEqual(seen.stamp.route_nodes,keys);
   assert.equal(result.decisionSource,'claude');assert.equal(result.answers.move.choice,'a1');

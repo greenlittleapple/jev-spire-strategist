@@ -87,7 +87,12 @@ export function distinctRoutes(map, position, {maxPaths=5000, maxRoutes=30}={}) 
   for (const [c,r] of node.children) walk(`${c},${r}`, nextRooms, nextPath);
  };
  for (const key of childKeys(nodes, position)) walk(key, '', []);
- const routes = [...seen].slice(0, maxRoutes).map(([rooms, path]) => ({rooms, nodes: path}));
+ // Take routes from each next node in turn so truncation never hides an option.
+ const byFirst = new Map();
+ for (const [rooms, path] of seen) { const list = byFirst.get(path[0]) ?? []; list.push({rooms, nodes: path}); byFirst.set(path[0], list); }
+ const groups = [...byFirst.values()], routes = [];
+ for (let i = 0; routes.length < maxRoutes && groups.some(g => i < g.length); i++)
+  for (const g of groups) if (i < g.length && routes.length < maxRoutes) routes.push(g[i]);
  return {legend: 'M monster, E elite, R rest, $ shop, T treasure, ? unknown, A ancient, B boss',
   from: nodeKey(position), total_paths: total, distinct_room_sequences: seen.size,
   truncated: truncated || seen.size > maxRoutes, routes};
