@@ -87,7 +87,14 @@ function hit(m, enemy, value, attack) {
   enemy.block = (enemy.block ?? 0) - blocked; damage -= blocked;
   const slippery = (enemy.status ?? []).find(p => p.name.toLowerCase() === 'slippery' && p.amount > 0);
   if (damage > 0 && slippery) { damage = 1; slippery.amount--; m.removedCharges++; }
+  // Per-turn HP-loss caps (Hardened Shell): count only this plan's losses; earlier ones this turn are not observed.
+  const turnCap = (enemy.status ?? []).map(p => (p.description ?? '').match(/cannot lose more than (\d+) HP each turn/i)).find(Boolean);
+  if (turnCap) {
+    damage = Math.min(damage, Math.max(0, Number(turnCap[1]) - (enemy.lostThisTurn ?? 0)));
+    m.warnings.push(`${enemy.name} loses at most ${turnCap[1]} HP per turn; HP lost earlier this turn is not observed.`);
+  }
   const lost = Math.min(enemy.hp, damage); enemy.hp -= lost; m.cardDamage += lost;
+  enemy.lostThisTurn = (enemy.lostThisTurn ?? 0) + lost;
   if (m.runes.flyingKick && lost > 0) {
     const rune = m.runes.flyingKick;
     // Native game uses decimal arithmetic. Scaled integer comparison preserves

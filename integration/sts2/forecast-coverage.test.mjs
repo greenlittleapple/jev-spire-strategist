@@ -79,3 +79,10 @@ test('Shackling Potion lowers each forecast enemy hit',()=>{
  const c=decisionCandidates(s).find(x=>x.command.action==='use_potion');
  assert.ok(c,'potion is offered');assert.equal(c.forecast.incoming,4);
 });
+
+test('a per-turn HP-loss cap limits forecast damage',()=>{
+ const s=fight([big(0),big(1)],{enemyStatus:[{name:'Hardened Shell',amount:20,description:'Skulking Colony cannot lose more than 20 HP each turn.'}]});
+ s.battle.enemies[0].hp=75;
+ const c=byLabel(decisionCandidates(s),'Strike → E → Strike → E');
+ assert.equal(c.forecast.damage,20);assert.notEqual(c.forecast.boundary,'combat_won');
+});
