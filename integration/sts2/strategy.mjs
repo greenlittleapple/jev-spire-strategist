@@ -38,7 +38,7 @@ Fields:
 - combat: risk tolerance, when potions should be spent, and what to focus (for a boss or elite trigger, a concrete plan for this fight from the visible enemies, intents and powers). Two combat rules are enforced by code and persist until you change them:
   - hallway_potion_below_hp_percent: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
   - focus_enemy: the name of a visible enemy whose death matters most (e.g. a leader whose minions leave when it dies), or "". While it and another enemy are alive, single-target plays aimed at other enemies are removed unless they kill that enemy. Area attacks and self-target cards are unaffected. Use only when you are sure.
-  Code also removes plays forecast to be fatal when another play is forecast to survive.
+  Code also removes plays forecast to be fatal when another play is forecast to survive, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed).
@@ -182,6 +182,42 @@ const usesPotion=c=>c.command.action==='use_potion'||(c.plan??[]).some(s=>s.comm
 const fatal=c=>c.forecast?.survives===false;
 const survives=c=>c.forecast?.survives===true;
 
+const pureBlock=card=>/^Gain \d+ Block\.?$/i.test((card?.description??'').trim());
+// Block that carries over or is turned into damage keeps block useful with nothing incoming.
+const usesBlock=state=>(state.player?.status??[]).some(p=>/juggernaut|barricade|blur/i.test(p.name))
+ ||(state.player?.relics??[]).some(r=>r.id==='CALIPERS')
+ ||(state.player?.hand??[]).some(c=>/equal to your Block|double your Block|Block is not removed/i.test(c.description??''));
+
+// Single-card exhaust choice: status and curse cards, cards that pay off when exhausted,
+// then plain Strikes and Defends, before anything else.
+export function exhaustConstraint(state,candidates) {
+ const select=state.hand_select;
+ if(state.state_type!=='hand_select'||!/^Choose a card to Exhaust/i.test(select?.prompt??''))return null;
+ const card=c=>c.command.action==='combat_select_card'?(select.cards??[]).find(x=>x.index===c.command.card_index):null;
+ const tiers=[
+  x=>['Status','Curse'].includes(x.type)||/when (?:this card is )?exhausted/i.test(x.description??''),
+  // Below 30% HP, keep Defends when a Strike can go instead.
+  x=>x.name==='Strike'&&!x.is_upgraded&&(pct(state.player)??100)<30,
+  x=>/^(Strike|Defend)$/.test(x.name)&&!x.is_upgraded];
+ for(const tier of tiers){
+  const kept=candidates.filter(c=>{const x=card(c);return x&&tier(x);});
+  if(kept.length&&kept.length<candidates.length)return {candidates:kept,constraint:{kind:'exhaust_choice',removed:candidates.length-kept.length}};
+  if(kept.length)return null;
+ }
+ return null;
+}
+
+// Resting that wastes at least half its heal, when Smith is offered.
+export function restConstraint(state,candidates) {
+ if(state.state_type!=='rest_site')return null;
+ const heal=candidates.find(c=>c.details?.id==='HEAL'),smith=candidates.some(c=>c.details?.id==='SMITH'&&c.details.is_enabled!==false);
+ const amount=Number(heal?.details?.description?.match(/\((\d+)\)/)?.[1]),p=state.player??{};
+ if(!heal||!smith||!Number.isFinite(amount)||!p.max_hp)return null;
+ const wasted=amount-(p.max_hp-p.hp);
+ if(wasted<amount/2)return null;
+ return {candidates:candidates.filter(c=>c!==heal),constraint:{kind:'rest_waste',heal:amount,wasted}};
+}
+
 // Combat rules, applied in order; each keeps at least one option and records what it removed.
 export function combatConstraints(state,candidates,plan) {
  if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
@@ -195,6 +231,10 @@ export function combatConstraints(state,candidates,plan) {
   // Keep potions when every remaining option without one is forecast to die.
   if(next.some(c=>c.forecast?.survives!==false))apply('hallway_potion',next,{hp_percent:hp,floor});
  }
+ // Pure block does nothing when ending the turn now loses no HP and nothing uses block.
+ const end=kept.find(c=>c.command.action==='end_turn');
+ if(end?.forecast?.hpLoss===0&&end.forecast.quality!=='unknown'&&!usesBlock(state))
+  apply('block_not_needed',kept.filter(c=>!(c.command.action==='play_card'&&pureBlock(c.details))));
  const name=plan?.combat?.focus_enemy?.trim().toLowerCase();
  const enemies=alive(state),focus=name&&enemies.find(e=>e.name?.toLowerCase().includes(name));
  if(focus&&enemies.length>1){
@@ -218,6 +258,8 @@ export function constrainCandidates(state,candidates,plan,mode='constrained') {
   const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
   if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length}};
  }
+ const fixed=exhaustConstraint(state,candidates)??restConstraint(state,candidates);
+ if(fixed)return fixed;
  if(state.state_type==='map'&&plan.route_path?.length&&plan.route_act===state.run.act){
   const kept=routeOptions(candidates,plan);
   if(kept.length)return {candidates:kept,constraint:{kind:'route',removed:candidates.length-kept.length}};

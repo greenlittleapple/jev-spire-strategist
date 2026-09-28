@@ -50,3 +50,40 @@ test('combat rules apply only in constrained mode for the plan run, and plans va
   shop:{gold_reserve:0,priorities:[]},route:'',route_path:[],elite_min_hp_percent:0,rest:'',replan_below_hp_percent:25,allowed_option_ids:[],option_note:''};
  assert.match(validatePlan(full).join(),/hallway_potion_below_hp_percent must be 0-100/);
 });
+
+test('pure block is removed when ending the turn loses no HP and nothing uses block',()=>{
+ const defend={type:'Skill',description:'Gain 5 Block.'};
+ const cands=[{id:'defend',label:'Defend',command:{action:'play_card',card_index:0},details:defend,forecast:{hpLoss:0,quality:'partial',survives:true}},
+  {id:'shrug',label:'Shrug',command:{action:'play_card',card_index:1},details:{type:'Skill',description:'Gain 8 Block. Draw 1 card.'},forecast:{hpLoss:0,quality:'partial',survives:true}},
+  {id:'end',label:'End turn',command:{action:'end_turn'},forecast:{hpLoss:0,quality:'partial',survives:true}}];
+ const s=fight();s.player.hand=[];s.player.status=[];s.player.relics=[];
+ assert.deepEqual(ids(combatConstraints(s,cands,null)),['shrug','end']);
+ const hit=cands.map(c=>c.id==='end'?{...c,forecast:{...c.forecast,hpLoss:6}}:c);
+ assert.equal(combatConstraints(s,hit,null).candidates.length,3,'block matters when damage is coming');
+ const jug={...s,player:{...s.player,status:[{name:'Juggernaut',amount:6}]}};
+ assert.equal(combatConstraints(jug,cands,null).candidates.length,3,'Juggernaut turns block into damage');
+});
+
+test('exhaust choice prefers junk and payoff cards, then plain Strikes and Defends',async()=>{
+ const {exhaustConstraint}=await import('./strategy.mjs');
+ const card=(index,name,type,extra={})=>({index,name,type,description:'',...extra});
+ const state=(cards,hp=60)=>({state_type:'hand_select',player:{hp,max_hp:80},hand_select:{prompt:'Choose a card to Exhaust.',cards}});
+ const cands=cards=>cards.map(c=>({id:'c'+c.index,label:c.name,command:{action:'combat_select_card',card_index:c.index}}));
+ const basic=[card(0,'Bash','Attack'),card(1,'Strike','Attack'),card(2,'Defend','Skill'),card(3,'Strike','Attack',{is_upgraded:true})];
+ assert.deepEqual(ids(exhaustConstraint(state(basic),cands(basic))),['c1','c2']);
+ assert.deepEqual(ids(exhaustConstraint(state(basic,20),cands(basic))),['c1'],'low HP keeps Defends');
+ const junk=[...basic,card(4,'Dazed','Status'),card(5,'Drum of Battle','Skill',{description:'Draw 2 cards. When this card is Exhausted, gain 3 energy.'})];
+ assert.deepEqual(ids(exhaustConstraint(state(junk),cands(junk))),['c4','c5']);
+ const none=[card(0,'Bash','Attack'),card(1,'Inflame','Power')];
+ assert.equal(exhaustConstraint(state(none),cands(none)),null);
+ assert.equal(exhaustConstraint({...state(basic),hand_select:{prompt:'Choose any number of cards to Exhaust.',cards:basic}},cands(basic)),null);
+});
+
+test('resting that wastes half its heal is removed when Smith is offered',async()=>{
+ const {restConstraint}=await import('./strategy.mjs');
+ const cands=[{id:'rest',label:'Rest',details:{id:'HEAL',description:'Heal for 30% of your Max HP (24).'}},{id:'smith',label:'Smith',details:{id:'SMITH',is_enabled:true}}];
+ const at=hp=>({state_type:'rest_site',player:{hp,max_hp:80}});
+ assert.deepEqual(ids(restConstraint(at(72),cands)),['smith']);
+ assert.equal(restConstraint(at(60),cands),null,'20 of 24 heal used');
+ assert.equal(restConstraint(at(72),cands.slice(0,1)),null,'no Smith offered');
+});
