@@ -41,6 +41,8 @@ const snapshotFile = resolve(logDir, 'session.json');
 const saved = JSON.parse(await readFile(snapshotFile, 'utf8').catch(() => 'null'));
 const sessionId = saved?.sessionId ?? new Date().toISOString().replaceAll(':', '-');
 const logFile = resolve(logDir, `${sessionId}.jsonl`);
+// Pinned so a new provider default can't change the model mid-comparison.
+const JEV_MODEL = process.env.JEV_MODEL ?? 'jev-1.13.0';
 const MAX_DECISIONS = Number(process.env.MAX_DECISIONS ?? 2000);
 const MAX_INPUT_TOKENS = Number(process.env.MAX_INPUT_TOKENS ?? 30000000);
 if (!Number.isSafeInteger(MAX_DECISIONS) || MAX_DECISIONS < 1
@@ -212,7 +214,7 @@ async function step(token, preview = false) {
         view.runeAwareness = payload.state?.hextech_runes ?? null;
         const response=await fetch('https://api.typesafe.ai/v1/systemone',{
           method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
-          body:JSON.stringify(payload),signal:AbortSignal.timeout(30000),
+          body:JSON.stringify({model:JEV_MODEL,...payload}),signal:AbortSignal.timeout(30000),
         });
         if(!response.ok){
           // Report a bounded error code only, never a provider echo of request data.
