@@ -23,9 +23,9 @@ export const PLAN_SCHEMA = {
  required:['archetype','summary','priorities','combat','card_reward','shop','route','route_path','elite_min_hp_percent','rest','replan_below_hp_percent','fight','allowed_option_ids','option_note'],
  properties:{
   archetype:text, summary:text, priorities:list,
-  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus','hallway_potion_below_hp_percent'],
+  combat:{type:'object',additionalProperties:false,required:['risk_tolerance','potion_policy','focus','hallway_potion_below_hp_percent','potion_reserve'],
    properties:{risk_tolerance:{type:'string',enum:['low','medium','high']},potion_policy:text,focus:text,
-    hallway_potion_below_hp_percent:{type:'integer'}}},
+    hallway_potion_below_hp_percent:{type:'integer'},potion_reserve:{type:'integer'}}},
   fight:{type:'object',additionalProperties:false,required:['plan','target_priority'],properties:{plan:text,target_priority:list}},
   card_reward:{type:'object',additionalProperties:false,required:['desired','avoid','skip_when'],
    properties:{desired:list,avoid:list,skip_when:text}},
@@ -42,12 +42,12 @@ export const STRATEGIST_INSTRUCTIONS = `You are the strategist for an automated 
 Write a compact, persistent run strategy grounded in the actual deck, relics, runes, HP, gold and act. Keep every string short and concrete. Priorities: at most 5, most important first. Do not invent hidden information (future card offers, unrevealed rooms, enemy moves not shown).
 
 Fields:
-- combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
+- combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). potion_reserve is enforced: outside boss fights, potion plays that would leave fewer potions than this are removed unless every other option is forecast to die; set it (usually 1) when the boss is near and potions matter there, 0 otherwise. hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
   Code also takes a play forecast to win the fight when one exists, removes plays forecast to be fatal when another play is forecast to survive, ending the turn while an affordable Beckon-style card is in hand, plays that lose more HP than the best while every enemy is Intangible, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
 - fight: when the trigger is a fight start (new_encounter, review_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names or the selectors lowest_hp, biggest_attack, can_kill, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. Each enemy may carry seen_pattern: the intents it showed round by round in recent fights; plan around the turns it repeats. encounter_results shows how this encounter went before (HP start→end, rounds, won; after_plan marks fights played with the saved plan). review_encounter means the saved plan did badly: write a better one. On other triggers use {"plan":"","target_priority":[]}; the saved fight plans are unaffected. brief.glossary and brief.keywords explain names and keywords the options mention; combat_state is your hand, energy, block and powers. Card options may carry past_runs from earlier logged runs (different seeds and policies): times offered and picked, plays per fight after picking, and the floor those runs reached; treat it as a rough signal.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
-- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed).
+- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
 - elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, you are consulted again before entering it (0 = never).
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact.
@@ -212,6 +212,7 @@ export function validatePlan(value,schema=PLAN_SCHEMA,path='plan') {
   if(value.elite_min_hp_percent<0||value.elite_min_hp_percent>100)errors.push('plan.elite_min_hp_percent must be 0-100');
   const potionFloor=value.combat.hallway_potion_below_hp_percent;
   if(potionFloor<0||potionFloor>100)errors.push('plan.combat.hallway_potion_below_hp_percent must be 0-100');
+  if(value.combat.potion_reserve<0||value.combat.potion_reserve>5)errors.push('plan.combat.potion_reserve must be 0-5');
   for(const n of value.route_path)if(!/^\d+,\d+$/.test(n))errors.push(`plan.route_path entry ${n} must be "col,row"`);
  }
  return errors;
@@ -293,6 +294,14 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const next=kept.filter(c=>!usesPotion(c));
   // Keep potions when every remaining option without one is forecast to die.
   if(next.some(c=>c.forecast?.survives!==false))apply('hallway_potion',next,{hp_percent:hp,floor});
+ }
+ // Potions kept for the boss: outside boss fights, plays that would leave fewer than the
+ // reserve are removed, unless every option that keeps the reserve is forecast to die.
+ const reserve=plan?.combat?.potion_reserve,held=state.player?.potions?.length??0;
+ if(state.state_type!=='boss'&&Number.isInteger(reserve)&&reserve>0){
+  const potionCount=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
+  const next=kept.filter(c=>held-potionCount(c)>=reserve||!usesPotion(c));
+  if(next.some(c=>c.forecast?.survives!==false))apply('potion_reserve',next,{held,reserve});
  }
  // A fully forecast win ends the fight: take it, using as few potions as possible.
  // Runs after the hallway potion rule, so a win that needs a held-back potion is not forced.

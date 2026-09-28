@@ -29,7 +29,7 @@ function currentPlan(st){
  const c=p.combat??{},cr=p.card_reward??{},sh=p.shop??{},fi=p.fight??{};
  row('Priorities',p.priorities?.length?'<ol>'+p.priorities.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>':'');
  row('Fight'+(p.encounter_key?' · '+p.encounter_key:''),fi.plan?lines([esc(fi.plan),fi.target_priority?.length?'Target priority: '+esc(fi.target_priority.join(' > ')):'']):'');
- row('Combat',lines([c.focus?esc(c.focus):'',[c.risk_tolerance?'Risk '+esc(c.risk_tolerance):'',Number.isInteger(c.hallway_potion_below_hp_percent)?(c.hallway_potion_below_hp_percent>=100?'Potions in any fight':'Normal-fight potions below '+c.hallway_potion_below_hp_percent+'% HP'):''].filter(Boolean).join(' · '),c.potion_policy?'Potions: '+esc(c.potion_policy):'']));
+ row('Combat',lines([c.focus?esc(c.focus):'',[c.risk_tolerance?'Risk '+esc(c.risk_tolerance):'',Number.isInteger(c.hallway_potion_below_hp_percent)?(c.hallway_potion_below_hp_percent>=100?'Potions in any fight':'Normal-fight potions below '+c.hallway_potion_below_hp_percent+'% HP'):'',c.potion_reserve>0?'Keep '+c.potion_reserve+' for the boss':''].filter(Boolean).join(' · '),c.potion_policy?'Potions: '+esc(c.potion_policy):'']));
  row('Card rewards',lines([cr.desired?.length?'Want: '+esc(cr.desired.join(', ')):'',cr.avoid?.length?'Avoid: '+esc(cr.avoid.join(', ')):'',cr.skip_when?'Skip: '+esc(cr.skip_when):'']));
  row('Shop',lines([sh.priorities?.length?esc(sh.priorities.join('; ')):'',sh.gold_reserve?'Keep '+sh.gold_reserve+' gold':'']));
  row('Route',lines([p.route?esc(p.route):'',Number.isInteger(p.elite_min_hp_percent)?'Elites at '+p.elite_min_hp_percent+'% HP or more':'',p.route_path?.length?'<span class="path">'+esc(p.route_path.join(' → '))+'</span>':'']));

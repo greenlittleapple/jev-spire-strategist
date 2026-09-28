@@ -88,19 +88,22 @@ The tracker harness runs with .NET9: build `integration/sts2-draw-tests/DrawTest
 
 `CLAUDE_STRATEGIST=off` hides the Claude mode.
 
-With strategy on, Jev still makes every move. Claude, running in the operator's Claude Code session on the subscription plan (no Anthropic API key or SDK), writes a persistent run strategy on specific triggers. This is event-triggered hierarchical control: a slow planner, a fast decider, and deterministic code between them. Policy label: `claude-strategy-v1` (Jev-only decisions keep `jev-compact-v1`, so logs separate the two for comparison).
+With strategy on, the strategist decides run-shaping screens (see `claude-strategy-v3` above) and Jev plays combat within enforced combat rules (`combatConstraints`: avoid_fatal, hallway_potion, potion_reserve, take_lethal, intangible_defense, play_hp_loss_cards, block_not_needed, target_priority). Claude, running in the operator's Claude Code session on the subscription plan (no Anthropic API key or SDK), writes a persistent run strategy on specific triggers. This is event-triggered hierarchical control: a slow planner, a fast decider, and deterministic code between them. Policy labels: `claude-strategy-v1` to `v3` over time (Jev-only decisions keep `jev-compact-v1`, so logs separate the two for comparison).
 
-**Triggers** (`integration/sts2/strategy.mjs`), evaluated before Jev on every non-forced decision:
+**Triggers** (`integration/sts2/strategy.mjs`, `hierarchical.mjs`), evaluated before Jev on every non-forced decision:
 
 - `run_start`, `new_act`, `boss_start`, `elite_start` (round 1 of that fight)
+- `owned_screen`: every card reward, shop, event, rest site, treasure, Hextech rune, card selection outside combat, bundle or relic selection, crystal sphere, Fake Merchant, and rewards offering a potion with every slot full
+- `route_plan`: the first map screen of each act with routes in the brief
+- `new_encounter`: a normal fight whose encounter has no saved plan; `review_encounter`: its saved plan did badly since it was written (once per fight)
 - `low_hp`: HP falls below the plan's `replan_below_hp_percent` (Claude sets 10-60; default 25)
-- `rich_shop`: entering a shop with 150+ gold
-- `new_relic`: a relic or rune gained at least three floors after the last plan
+- `rich_shop`: entering a shop with 150+ gold (only when owned screens are off)
+- `new_relic`: the first screen outside combat after any new relic
 - `jev_uncertain`: after Jev answers, confidence below `CLAUDE_ESCALATE_BELOW` (default 0.35) on a card reward, shop, Hextech rune or rest site, once per screen. Jev is asked again with the new plan.
 
 Forced transitions never trigger a request. Replaying the recorded 640-move A0 run through these triggers gives 30 requests (9-12 per act). That count uses the old run's confidences, so it estimates frequency only; it says nothing about playing strength.
 
-**Plan.** A fixed JSON schema: archetype, summary, up to five priorities, combat risk/potion/focus, card-reward wants/avoids/skip rule, shop gold reserve and priorities, route, rest policy, replan HP threshold, and optional `allowed_option_ids` for the current non-combat screen. Jev receives the stable fields as `run_strategy` plus an instruction that live rules and legal actions take precedence.
+**Plan.** A fixed JSON schema: archetype, summary, up to five priorities, combat risk/potion/focus with the enforced `hallway_potion_below_hp_percent` and `potion_reserve` (potions kept for the boss), per-encounter fight plan, card-reward wants/avoids/skip rule, shop gold reserve and priorities, route, rest policy, replan HP threshold, and optional `allowed_option_ids` for the current non-combat screen. Jev receives the stable fields as `run_strategy` plus an instruction that live rules and legal actions take precedence.
 
 **Constrained vs advisory** (`CLAUDE_PLAN_MODE`, default `constrained`). Constrained mode removes options outside Claude's `allowed_option_ids` on that exact screen (matched by command and label, so a reroll or purchase can't redirect an index), and removes purchases that would take gold below `shop.gold_reserve`. If only one option remains, it executes without a Jev call (`decisionSource: claude`). Advisory mode passes the same choices to Jev as `recommended_options` and removes nothing. Every execution still goes through the runner's freshness check, pause and dispatch logging.
 
@@ -115,7 +118,7 @@ Forced transitions never trigger a request. Replaying the recorded 640-move A0 r
 
 Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `replay_diverged` events.
 
-Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, waiting without timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Those runs used advisory combat plans.
+Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, waiting without timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Those two runs used advisory combat plans; later JEV1 runs (v3) used the enforced combat rules. `npm run sts2:scorecard` reports per-run rule counts (`rules`: times each rule removed options, and times it left a single option) and gold and potions at each boss entry.
 
 ## Scorecard
 

@@ -11,7 +11,7 @@ import {fileChannel} from './strategy-channel.mjs';
 import {requestStamp,stampPlan} from './strategy.mjs';
 
 const run=(floor=5)=>({live_id:'run-1',act:1,floor,ascension:0});
-const plan=(extra={})=>({archetype:'x',summary:'x',priorities:[],combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100},
+const plan=(extra={})=>({archetype:'x',summary:'x',priorities:[],combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100,potion_reserve:0},
  fight:{plan:'',target_priority:[]},card_reward:{desired:[],avoid:[],skip_when:''},shop:{gold_reserve:0,priorities:[]},route:'',route_path:[],
  elite_min_hp_percent:0,rest:'',replan_below_hp_percent:25,allowed_option_ids:[],option_note:'',...extra});
 const strike=(index,target)=>({index,id:'STRIKE',name:'Strike',cost:'1',type:'Attack',description:'Deal 6 damage.',can_play:true,target_type:'AnyEnemy'});

@@ -39,7 +39,7 @@ function score(r) {
   if (!b) {
    const main = [...e.state.battle.enemies].sort((a,b) => b.max_hp - a.max_hp)[0];
    b = {key, act:e.state.run.act, floor:e.state.run.floor, name:main.name, max_hp:main.max_hp,
-    entry_hp:`${e.state.player.hp}/${e.state.player.max_hp}`, potions_at_entry:e.state.player.potions?.length ?? 0, min_hp:main.hp, killed:false, rounds:0};
+    entry_hp:`${e.state.player.hp}/${e.state.player.max_hp}`, gold_at_entry:e.state.player.gold ?? null, potions_at_entry:e.state.player.potions?.length ?? 0, min_hp:main.hp, killed:false, rounds:0};
    bosses.push(b);
   }
   b.rounds = Math.max(b.rounds, e.state.battle.round);
@@ -55,6 +55,17 @@ function score(r) {
   .map(e => `${e.state.state_type}@f${e.state.run.floor}`);
  const elites = new Set(executed.filter(e => e.state.state_type === 'elite').map(e => e.state.run.floor));
  const eliteOffers = executed.filter(e => e.state.state_type === 'map' && e.state.map?.next_options?.some(o => o.type === 'Elite') && e.state.map.next_options.length > 1);
+ // Enforced rules: decisions where each removed options, and where it left a single option
+ // (the move was then taken without asking Jev). Jev was only asked about the options left,
+ // so whether Jev would have picked a removed option is not known.
+ const rules = {};
+ for (const e of executed) {
+  const c = e.strategyConstraint; if (!c) continue;
+  const forced = e.decisionSource === "claude" && combat.has(e.state.state_type);
+  for (const k of (c.rules ?? [c]).filter(x => (x.removed ?? 1) > 0).map(x => x.kind)) {
+   const n = rules[k] ??= {fired: 0, forced: 0}; n.fired++; if (forced) n.forced++;
+  }
+ }
  const policies = [...new Set(r.decisions.map(e => e.policy).filter(Boolean))];
  return {
   run: r.id, started: r.first, policy: policies.join('+') || null,
@@ -66,16 +77,17 @@ function score(r) {
   relics_end: last?.player?.relics?.length ?? null, gold_end: last?.player?.gold ?? null,
   potions_used: potions, potions_used_outside_elites_bosses: potions.filter(p => p.startsWith('monster')).length,
   moves: executed.length, jev_requests: requests.length, input_tokens: tokens,
+  rules,
   claude_consults: r.decisions.filter(e => e.decisionSource === 'claude').length,
  };
 }
 
 function table(rows) {
  const line = s => {
-  const boss = s.bosses.map(b => `${b.name} ${b.killed ? 'killed' : b.hp_removed_pct + '%'} (entry ${b.entry_hp}, ${b.potions_at_entry} pot, ${b.rounds}r)`).join('; ') || '-';
+  const boss = s.bosses.map(b => `${b.name} ${b.killed ? 'killed' : b.hp_removed_pct + '%'} (entry ${b.entry_hp}, ${b.potions_at_entry} pot, ${b.gold_at_entry}g, ${b.rounds}r)`).join('; ') || '-';
   return [s.run.split(':').pop(), s.modifiers + (s.seed ? ` seed ${s.seed}` : ''), s.policy, s.result, `A${s.ascension} act ${s.act} f${s.floor}`, boss,
    `elites ${s.elites_fought} (chose ${s.elite_choices_taken}/${s.elite_choices_offered})`, `relics ${s.relics_end}`, `gold ${s.gold_end}`,
-   `potions ${s.potions_used.length} (${s.potions_used_outside_elites_bosses} hallway)`, `${s.moves} moves`, `${(s.input_tokens/1e6).toFixed(2)}M tok`].join(' | ');
+   `potions ${s.potions_used.length} (${s.potions_used_outside_elites_bosses} hallway)`, `${s.moves} moves`, `rules ${Object.entries(s.rules).map(([k,v]) => `${k} ${v.fired}${v.forced ? `/${v.forced} forced` : ""}`).join(", ") || "-"}`, `${(s.input_tokens/1e6).toFixed(2)}M tok`].join(' | ');
  };
  return rows.map(line).join('\n');
 }

@@ -1,6 +1,6 @@
 # STS2 verification
 
-Last updated 2026-09-27. Integration installed; autoplay paused before another run.
+Last updated 2026-09-28. Integration and readiness bridge installed; runner paused, no run in progress.
 
 Verified: imported player passes 197 offline tests. Twenty-five local save/Hextech/dialogue/history/pile/efficient-decision tests pass; the 18 original framework tests previously passed and their code is unchanged. Bridge builds against installed v0.111.0 with no warnings/errors. The prior dashboard rendered correctly with no captured browser warnings/errors; the latest cost-label rendering is UNVERIFIED because browser automation currently reports no available browsers. API key is configured in `.env`; never print it. An initial live Jev 1.13.0 fixture request returned a legal choice, using 8,184 input tokens.
 
@@ -35,3 +35,9 @@ All 640 recorded positions passed offline checks for candidate IDs, current HP a
 Actual Jev replay of 30 recorded positions used 252,803 input tokens in 32 requests, including two selective reviews, versus 1,171,853 historical tokens: **78.427% fewer**. At the checked $0.042/M rate, the replay cost about $0.01062, outside the controller counter. Evidence: `.private/verification/efficient-cost-report.json`. The sample covers screen types and later-room states but is not a randomized strength benchmark. Some decisions changed; no new game actions were sent. Full-run cost, win rate and A10 strength remain unverified.
 
 All 565 entries passed request-routing checks again using the cached installed Hextech catalog and the new question builder; this was not a fresh in-game registry read. The current 25 local and 197 upstream tests pass. No native bridge changes were needed. The dashboard was restarted and its status verified paused, with 640 historical actions and no pending or uncertain action. Usage totals were preserved. The game remains closed and no new run was started. Forced decisions are labeled as rules with zero API usage rather than model confidence; final browser rendering of these labels remains UNVERIFIED due to unavailable browser automation.
+
+## Strategist runs, 2026-09-28
+
+Seeded standard A0 runs with the strategist (`claude-strategy-v3`, enforced combat rules). Five JEV1 runs followed the same Act 1 route (the later four replayed the first run's non-combat choices) and each entered Soul Fysh at 78-82/82 HP with 0 potions and 396 gold; a shop at 4,13 was reachable from floor 11 and not taken. Results: Soul Fysh lost at 98%, 58% and 81% removed, then killed in `1790627417` (readiness bridge), which lost to Knowledge Demon on floor 33 at 53% removed. Opening boss hands differed between runs despite the same seed and deck, because earlier combat play changes the shuffle state, so one attempt per change does not separate a rule's effect from draw order.
+
+Verified live: bridge readiness (`ready`/`busy`) cut the median move gap from 2.4 s to about 0.58 s; the Fake Merchant fix and event text installed as bridge `0ae2d825`. Offline: 101 integration and 198 vendor tests pass at the time of writing. Event text in a live brief is not yet observed.

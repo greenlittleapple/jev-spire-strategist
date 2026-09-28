@@ -7,7 +7,7 @@ const fight=({type='monster',hp=60,enemies=[enemy('a','Leader',50)]}={})=>({stat
  player:{hp,max_hp:80},battle:{round:2,enemies}});
 const cand=(id,command,forecast={},plan)=>({id,label:id,command,forecast:{quality:'partial',survives:true,defeatedEnemies:[],...forecast},...(plan?{plan}:{})});
 const ids=r=>r.candidates.map(c=>c.id);
-const plan=combat=>({run_id:'run',combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100,...combat}});
+const plan=combat=>({run_id:'run',combat:{risk_tolerance:'low',potion_policy:'',focus:'',hallway_potion_below_hp_percent:100,potion_reserve:0,...combat}});
 
 test('plays forecast to be fatal are removed only when another play survives',()=>{
  const cands=[cand('defend',{action:'play_card',card_index:0},{survives:false}),cand('beckon',{action:'play_card',card_index:1}),cand('end',{action:'end_turn'},{survives:false})];
@@ -140,4 +140,15 @@ test('block is removed on a turn with no incoming damage even while a Beckon cos
   cand('end',{action:'end_turn'},{hpLoss:6,endTurnCardHpLoss:6})];
  const r=combatConstraints(s,cands,null);
  assert.deepEqual(ids(r),['beckon']);assert.deepEqual(r.rules.map(x=>x.kind),['play_hp_loss_cards','block_not_needed']);
+});
+
+test('the boss potion reserve holds potions outside boss fights unless every other option dies',()=>{
+ const withPotions=(s,n)=>({...s,player:{...s.player,potions:Array.from({length:n},(_,i)=>({name:'P'+i}))}});
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'}),cand('potion',{action:'use_potion',slot:0}),cand('end',{action:'end_turn'})];
+ const r=combatConstraints(withPotions(fight({type:'elite'}),1),cands,plan({potion_reserve:1}));
+ assert.deepEqual(ids(r),['strike','end']);assert.deepEqual(r.rules,[{kind:'potion_reserve',removed:1,held:1,reserve:1}]);
+ assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite'}),2),cands,plan({potion_reserve:1}))),['strike','potion','end'],'a spare potion can be used');
+ assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'boss'}),1),cands,plan({potion_reserve:1}))),['strike','potion','end'],'the boss uses it');
+ const dying=cands.map(c=>c.id==='potion'?c:{...c,forecast:{...c.forecast,survives:false}});
+ assert.equal(combatConstraints(withPotions(fight({type:'elite'}),1),dying,plan({potion_reserve:1})).rules.some(x=>x.kind==='potion_reserve'),false,'kept when everything else dies');
 });
