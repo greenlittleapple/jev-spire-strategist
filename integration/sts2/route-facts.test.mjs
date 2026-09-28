@@ -149,3 +149,20 @@ test('v2 facts are unchanged; v3 is used only when requested and labels its poli
   ask:async q=>{request=q;return {model:'t',answers:{move:{type:'choice',choice:'a1',confidence:.9,probabilities:{a1:.9}}},usage:{input_tokens:1,output_tokens:1}};}});
  assert.equal(request.state.policy,'jev-compact-v3.1');assert.ok(request.state.computed_facts.route_options.a0.example_routes);
 });
+
+test('a consult off the map does not count as having seen the act routes',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'jev-route-'));
+ try{
+  const channel=fileChannel(dir),status=newStrategyStatus({enabled:true,waitMs:5000});
+  // The act's opening event: the map is loaded but the player is not on it yet.
+  const {current_position,...offMap}=map;
+  const event={...mapState(),state_type:'event',map:offMap};
+  const answer=(async()=>{for(;;){const r=await channel.current();if(r){await channel.answer(r.id,plan());return r;}await new Promise(x=>setTimeout(x,50));}})();
+  await hierarchicalDeliberate({state:event,candidates:[{id:'a0',command:{action:'choose_event_option',index:0},label:'A'},{id:'a1',command:{action:'choose_event_option',index:1},label:'B'}],
+   strategist:{channel,status},ask:async()=>({answers:{move:{type:'choice',choice:'a0',confidence:0.9}},usage:{input_tokens:1}})});
+  const seen=await answer;
+  assert.equal(seen.brief.routes,undefined);assert.deepEqual(seen.stamp.route_nodes,[]);
+  assert.equal(status.plan.route_act,null);
+  assert.equal(replanReason(mapState(),status.plan,candidates),'route_plan','the first map screen still asks for a route');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

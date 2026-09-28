@@ -64,10 +64,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   const key=`${reason}:${screenKey(state)}`,current=await channel.current();
   if(current?.key!==key){
    const fight=playbook&&encounter?await playbook.get(encounter):null;
-   const brief=strategistBrief(state,candidates,reason,status.plan,{routes:distinctRoutes(map,position),facts});
+   // Route nodes go into the stamp only when the brief lists routes: a consult off the map
+   // (the act's opening event) must not count as having seen this act's routes.
+   const routes=distinctRoutes(map,position);
+   const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;}
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
-    stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter}});
+    stamp:{...requestStamp(state,candidates,reason,routes?mapNodeKeys(map):[]),encounter_key:encounter}});
    status.requests++;
    events.push({kind:'strategy_request',reason,request_id:request.id});
   }

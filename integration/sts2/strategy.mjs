@@ -134,8 +134,8 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true,screenCho
    if(next.some(c=>c.details.type==='Elite')&&hp!=null&&hp<(plan.elite_min_hp_percent??0))return 'route_risk';
   }
  }
- // Relic/rune pickups change strategy; batch them rather than replanning per pickup.
- if(run.floor-plan.floor>=3&&relicIds(state).some(id=>!plan.relic_ids?.includes(id)))return 'new_relic';
+ // Relic/rune pickups can change the plan: consult at the first screen outside combat after one.
+ if(!combatScreens.has(state.state_type)&&relicIds(state).some(id=>!plan.relic_ids?.includes(id)))return 'new_relic';
  return null;
 }
 

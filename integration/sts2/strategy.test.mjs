@@ -48,7 +48,8 @@ test('deterministic triggers fire on run, act, boss, HP, shop and relic events o
  assert.equal(replanReason({...other,player:{...other.player,gold:100}},p,[],{ownScreens:false}),null);
  const newRelic={...shop(100),state_type:'rewards',run:run(8)};newRelic.player.relics=[relic,{id:'VAJRA',name:'Vajra',description:'+1 Strength.'}];
  assert.equal(replanReason(newRelic,p),'new_relic');
- assert.equal(replanReason({...newRelic,run:run(7)},p),null,'relic triggers wait three floors after the last plan');
+ assert.equal(replanReason({...newRelic,run:run(7)},p),'new_relic','any new relic triggers, even soon after the last plan');
+ assert.equal(replanReason({...newRelic,state_type:'monster'},p),null,'but not in combat');
 });
 
 test('escalation needs an important screen, low confidence and no plan for this screen',()=>{
