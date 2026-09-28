@@ -31,8 +31,9 @@ function session(channel,makePlan,seen=[]){
  const halt=()=>{stop=true;};sessions.push(halt);return halt;
 }
 
-test('encounter keys ignore order, duplicates and form suffixes, and stay fixed for the fight',()=>{
- assert.equal(encounterKey([{name:'Kin Follower'},{name:'Kin Priest'},{name:'Kin Follower'}]),'Kin Follower + Kin Priest');
+test('encounter keys ignore order and form suffixes, count duplicates, and stay fixed for the fight',()=>{
+ assert.equal(encounterKey([{name:'Kin Follower'},{name:'Kin Priest'},{name:'Kin Follower'}]),'Kin Follower x2 + Kin Priest','duplicates are counted');
+ assert.equal(encounterKey([{name:'Bowlbug (Rock)'},{name:'Bowlbug (Nectar)'},{name:'Bowlbug (Silk)'}]),'Bowlbug x3');
  assert.equal(encounterKey([{name:'Bowlbug (Rock)'}]),'Bowlbug');
  const fights={},s=fightState();
  assert.equal(currentEncounter(s,fights),'Leader + Minion');
@@ -131,3 +132,15 @@ test('owned screens: a confirmation is taken without asking, and a revisited sho
  const back=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
  assert.equal(back.answers.move.choice,leave.id);assert.equal(status.requests,0,'the remembered list is reused');
 }));
+
+test('a plan saved under the old uncounted key is offered as similar, not as the exact plan',async()=>{
+ const {filePlaybook}=await import('./playbook.mjs');
+ const {mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));
+ try{
+  const book=filePlaybook(dir);await book.set('Bowlbug',{plan:'old plan',target_priority:[]});
+  assert.equal(await book.get('Bowlbug x3'),null);
+  assert.equal((await book.similar('Bowlbug x3')).plan,'old plan');
+  assert.equal(await book.similar('Bowlbug'),null,'no similar plan for an uncounted key');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

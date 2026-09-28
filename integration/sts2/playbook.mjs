@@ -6,7 +6,14 @@ import {join} from 'node:path';
 
 const combatScreens=new Set(['monster','elite','boss']);
 const baseName=name=>String(name??'').replace(/\s*\(.*\)\s*$/,'').trim();
-export const encounterKey=enemies=>[...new Set((enemies??[]).map(e=>baseName(e.name)).filter(Boolean))].sort().join(' + ');
+// Base names with counts, so a two-bug and a three-bug fight are different encounters: "Bowlbug x3".
+export const encounterKey=enemies=>{
+ const counts=new Map();
+ for(const name of (enemies??[]).map(e=>baseName(e.name)).filter(Boolean))counts.set(name,(counts.get(name)??0)+1);
+ return [...counts].sort(([a],[b])=>a.localeCompare(b)).map(([n,c])=>c>1?`${n} x${c}`:n).join(' + ');
+};
+// The key used before counts were added; its plans stay available as a similar encounter.
+export const legacyKey=key=>String(key??'').replace(/ x\d+/g,'');
 export const fightId=s=>`${s.run?.live_id}:${s.run?.act}:${s.run?.floor}`;
 
 // The encounter key of the current fight, fixed at the first combat observation.
@@ -33,6 +40,11 @@ export function filePlaybook(dir) {
  return {
   path,
   async get(key){return key?(await load()).entries[key]??null:null;},
+  // A plan for the same enemies without counts (older entries), when this exact encounter has none.
+  async similar(key){
+   if(!key)return null;const book=await load(),legacy=legacyKey(key);
+   return legacy!==key?book.entries[legacy]??null:null;
+  },
   async set(key,fight,meta={}){
    if(!key||!fight?.plan)return;
    const book=await load();

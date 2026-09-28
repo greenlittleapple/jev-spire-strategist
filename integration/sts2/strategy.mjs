@@ -11,7 +11,10 @@ const combatScreens = new Set(['monster','elite','boss']);
 export const IMPORTANT_SCREENS = new Set(['card_reward','shop','hextech_rune','rest_site']);
 // Screens the strategist decides outright: Claude is consulted on every one of them.
 export const OWNED_SCREENS = new Set(['card_reward','shop','fake_merchant','event','rest_site','treasure','hextech_rune','card_select','bundle_select','relic_select','crystal_sphere']);
-export const isOwnedScreen = s => OWNED_SCREENS.has(s.state_type) && !(s.state_type==='card_select' && s.battle);
+// Rewards are owned only when a potion is offered and every slot is full: taking it means a swap.
+const potionSwap = s => s.state_type==='rewards' && (s.player?.potions?.length??0) >= (s.player?.max_potion_slots??3)
+ && (s.rewards?.items??[]).some(i=>i.type==='potion');
+export const isOwnedScreen = s => (OWNED_SCREENS.has(s.state_type) && !(s.state_type==='card_select' && s.battle)) || potionSwap(s);
 
 const text = {type:'string'};
 const list = {type:'array',items:text};

@@ -68,13 +68,17 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    // (the act's opening event) must not count as having seen this act's routes.
    const routes=distinctRoutes(map,position);
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
-   if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;}
+   if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;
+    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}}
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
     stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
      // Seen routes carry forward within an act; only a brief that lists them marks them seen.
-     route_act:routes?state.run.act:status.plan?.act===state.run.act?status.plan.route_act??null:null}});
+     route_act:routes?state.run.act:status.plan?.act===state.run.act?status.plan.route_act??null:null,
+     // A choice screen inside a fight (a potion's card pick) keeps that fight as the plan's encounter,
+     // so the fight-start trigger does not fire again for the same fight.
+     ...(!['monster','elite','boss'].includes(state.state_type)&&status.plan?.encounter&&status.plan.floor===state.run.floor&&status.plan.run_id===state.run.live_id?{encounter:status.plan.encounter}:{})}});
    status.requests++;
    events.push({kind:'strategy_request',reason,request_id:request.id});
   }

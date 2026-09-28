@@ -192,3 +192,11 @@ test('every run-shaping screen type is owned, independent of Jev confidence',asy
  for(const t of ['card_reward','shop','fake_merchant','event','rest_site','treasure','hextech_rune','card_select','bundle_select','relic_select','crystal_sphere'])assert.ok(OWNED_SCREENS.has(t),t);
  assert.equal(isOwnedScreen({state_type:'card_select',battle:{}}),false,'in-combat card choices stay with Jev');
 });
+
+test('reward screens are owned only for a potion swap',async()=>{
+ const {isOwnedScreen}=await import('./strategy.mjs');
+ const rewards=(potions,items)=>({state_type:'rewards',player:{potions:Array(potions).fill({name:'P'}),max_potion_slots:3},rewards:{items}});
+ assert.equal(isOwnedScreen(rewards(3,[{type:'potion',description:'Fire Potion'}])),true);
+ assert.equal(isOwnedScreen(rewards(2,[{type:'potion',description:'Fire Potion'}])),false,'a free slot needs no decision');
+ assert.equal(isOwnedScreen(rewards(3,[{type:'gold',description:'17 Gold'}])),false);
+});
