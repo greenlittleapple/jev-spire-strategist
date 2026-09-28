@@ -91,3 +91,10 @@ test('rune rerolls and card-selection purpose remain available without routine s
  s.state_type='card_select';s.selection_origin={name:'Headbutt',description:'Put a card on top.'};s.card_select={prompt:'Choose a card to put on top of your draw pile.',cards:[{...card,index:0},{...card,index:1}],can_confirm:false};
  const q=efficientQuestion(s,actionsFor(s));assert.equal(q.state.state.selection_origin.name,'Headbutt');assert.match(q.questions.move.instructions,/selection_origin/);
 });
+
+test('a single offered option is taken without a Jev call and is not labelled forced',async()=>{
+ const state={state_type:'rewards',run:{live_id:'r',act:1,floor:3},rewards:{items:[{index:0,type:'gold',description:'15 Gold'},{index:1,type:'card',description:'Add a card to your deck.'}],can_proceed:true}};
+ const candidates=[{id:'a0',label:'15 Gold',command:{action:'claim_reward',index:0}}];
+ const result=await efficientDeliberate({state,candidates,ask:()=>assert.fail('A single option must not call Jev')});
+ assert.equal(result.decisionSource,'single_option');assert.equal(result.answers.move.choice,'a0');assert.equal(result.usage.input_tokens,0);
+});

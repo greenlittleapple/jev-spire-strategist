@@ -74,6 +74,7 @@ function decisionSource(e){
  if(e.decisionSource==='claude')return '<span class="src claude">Strategist</span>'+(limited?esc(limited)+' · ':'')+'no Jev call';
  if(e.decisionSource==='replay')return '<span class="src replay">Replay</span>reference run choice';
  if(e.decisionSource==='forced')return '<span class="src forced">Forced</span>No API call · sole legal action';
+ if(e.decisionSource==='single_option')return '<span class="src forced">Single option</span>No API call'+(limited?' · '+esc(limited):'');
  const conf=typeof e.answer?.confidence==='number'?Math.round(e.answer.confidence*100)+'% confidence':'';
  return '<span class="src jev">Jev</span>'+conf+(limited?' · '+esc(limited):'')+(e.escalatedFrom?' · after review':'');
 }

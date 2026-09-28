@@ -142,6 +142,12 @@ export async function efficientDeliberate({state,candidates,ask,recent={},strate
   decisionSource:'forced',model:null,usage:{input_tokens:0,output_tokens:0},deliberation:null,
   answers:{move:{type:'choice',choice:candidates[0].id,confidence:null,probabilities:{}}}
  };
+ // One offered option (a reward, a confirmation, or the one option a rule left): Jev could only
+ // answer with it, so no call is made. Not "forced": the game may allow other actions.
+ if(candidates.length===1)return {
+  decisionSource:'single_option',model:null,usage:{input_tokens:0,output_tokens:0},deliberation:null,
+  answers:{move:{type:'choice',choice:candidates[0].id,confidence:null,probabilities:{}}}
+ };
  const payload=efficientQuestion(state,candidates,recent,strategy,facts,factsPolicy),calls=[];
  const evaluate=async (request,stage)=>{
   onStage(stage);

@@ -150,7 +150,7 @@ function sidecarView(source = view) {
       decisionSource:e.decisionSource??'jev', memory:e.memory??null, encounter:encounterBrief(e.state), deliberation:e.deliberation ?? null, time: e.time, label: e.chosen.plan?.[0]?.label ?? e.chosen.label, plan: e.chosen.plan ?? null, forecast: e.chosen.forecast ?? null, policy: e.policy ?? "jev-actions-v1", description: e.chosen.details?.description ?? e.chosen.details?.card_description ?? '',
       action: e.chosen.command.action, confidence: e.answer.confidence, latencyMs: e.latencyMs,
       outcome: e.outcome, floor: e.state.run?.floor, facts: factsFor(e.state),
-      options: (e.decisionSource==='forced'?candidates.map(c=>[c.id,null]):Object.entries(e.answer.probabilities ?? {})).map(([id, probability]) => ({
+      options: (['forced','single_option'].includes(e.decisionSource)?candidates.map(c=>[c.id,null]):Object.entries(e.answer.probabilities ?? {})).map(([id, probability]) => ({
         id, probability, label: candidates.find(a => a.id === id)?.label ?? id, plan: candidates.find(a => a.id === id)?.plan ?? null, forecast: candidates.find(a => a.id === id)?.forecast ?? null, chosen: id === e.answer.choice,
       })).sort((a,b) => b.probability - a.probability),
     };
