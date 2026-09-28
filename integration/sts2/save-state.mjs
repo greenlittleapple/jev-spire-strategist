@@ -51,12 +51,20 @@ export function attachCheckpoint(state, saved) {
   // The previous act's history is safe only for this modal and the exact same run.
   const priorActAtRuneSelection = state.state_type === 'hextech_rune'
     && state.run.act === checkpoint.current_act_index + 2;
+  // A new act's map opens before its first room is entered, which is when the game
+  // saves; without this the runner and the save wait on each other.
+  const priorActAtActStartMap = state.state_type === 'map'
+    && (state.map?.visited?.length ?? 0) === 0 && !state.map?.current_position
+    && state.run.act === checkpoint.current_act_index + 2;
+  const priorAct = priorActAtRuneSelection || priorActAtActStartMap;
   if (!state.run.live_id || state.run.live_id !== checkpoint.run_id
       || state.run.ascension !== checkpoint.ascension
-      || (state.run.act !== checkpoint.current_act_index + 1 && !priorActAtRuneSelection))
+      || (state.run.act !== checkpoint.current_act_index + 1 && !priorAct))
     throw Error('Saved checkpoint does not match the live run; waiting for a fresh save');
   return { ...state, saved_run: { ...checkpoint,
-    freshness: priorActAtRuneSelection ? 'Previous act checkpoint during Hextech rune selection; use live act and options' : 'Current act checkpoint' } };
+    freshness: priorActAtRuneSelection ? 'Previous act checkpoint during Hextech rune selection; use live act and options'
+      : priorActAtActStartMap ? 'Previous act checkpoint at the new act\'s first map screen; use live act and map'
+      : 'Current act checkpoint' } };
 }
 
 export const defaultSaveRoot = () => resolve(process.env.APPDATA ?? '', 'SlayTheSpire2');

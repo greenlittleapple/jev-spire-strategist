@@ -44,6 +44,21 @@ test('Hextech act-start modal accepts only the same run one act behind', () => {
     assert.throws(()=>attachCheckpoint({...live,run:{...live.run,...patch}},saved),/does not match/);
   assert.throws(()=>attachCheckpoint({...live,state_type:'monster'},saved),/does not match/);
 });
+test('the first map screen of a new act accepts only the same run one act behind', () => {
+  const saved = {available:true,checkpoint:checkpointSummary(save,context)};
+  const live = {state_type:'map',run:{ascension:0,act:2,live_id:'modded:profile1:123'},
+    map:{visited:[],next_options:[{col:3,row:0,type:'Ancient'}]},player:{hp:38}};
+  const joined = attachCheckpoint(live,saved);
+  assert.equal(joined.run.act,2);
+  assert.match(joined.saved_run.freshness,/new act's first map/);
+  assert.strictEqual(joined.map,live.map);
+  for (const patch of [{act:3},{ascension:10},{live_id:'modded:profile1:999'}])
+    assert.throws(()=>attachCheckpoint({...live,run:{...live.run,...patch}},saved),/does not match/);
+  // Once a room of the new act is visited, the game has saved; stale history is refused.
+  assert.throws(()=>attachCheckpoint({...live,map:{...live.map,visited:[{col:3,row:0}],current_position:{col:3,row:0}}},saved),/does not match/);
+  assert.throws(()=>attachCheckpoint({...live,state_type:'event'},saved),/does not match/);
+});
+
 test('reads the entire active save and rejects paths outside the game saves', async () => {
   const root = await mkdtemp(join(tmpdir(),'jev-save-'));
   try {
