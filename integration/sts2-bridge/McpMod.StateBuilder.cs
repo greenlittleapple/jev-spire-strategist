@@ -195,6 +195,9 @@ public static partial class McpMod
                     }
                 }
 
+                if (result.ContainsKey("menu_screen") == false && FindVisibleCustomRun(tree.Root) is { } customRun)
+                    AddCustomRunMenuState(result, customRun);
+
                 // Check for character select screen
                 if (result.ContainsKey("menu_screen") == false)
                 {
@@ -392,6 +395,11 @@ public static partial class McpMod
         {
             if (tree?.Root != null)
             {
+                if (FindVisibleCustomRun(tree.Root) is { } activeCustomRun)
+                {
+                    AddCustomRunMenuState(result, activeCustomRun);
+                    return result;
+                }
                 var activeCharSelect = FindFirst<NCharacterSelectScreen>(tree.Root);
                 if (activeCharSelect != null && IsNodeVisible(activeCharSelect))
                 {

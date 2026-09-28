@@ -1285,6 +1285,9 @@ public static partial class McpMod
             return ExecuteLoadLobbyMenuOption(loadLobby, option);
         }
 
+        if (FindVisibleCustomRun(tree.Root) is { } customRun)
+            return ExecuteCustomRunMenuOption(customRun, option, seed);
+
         // Character select can outlive or be mounted separately from NMainMenu,
         // so handle it before main-menu-specific routing.
         var charSelect = FindFirst<NCharacterSelectScreen>(tree.Root);

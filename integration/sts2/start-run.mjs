@@ -1,7 +1,8 @@
 // Start a new single-player run from the main or game-over menu and hand it to the
 // paused runner in a chosen decision mode. Records the run in .private/sts2/series.jsonl.
-//   node integration/sts2/start-run.mjs --mode jev_facts_v3 [--seed ABC123] [--character IRONCLAD] [--label name]
-// A seed uses the game's custom mode (no modifiers are selected); without one it is a standard run.
+//   node integration/sts2/start-run.mjs --mode jev_facts_v3 --seed ABC123 [--character IRONCLAD] [--label name]
+// Seeds are required so decision modes can be compared on identical games. Runs use the
+// game's custom mode and are refused unless it shows ascension 0 and no modifiers.
 // It never abandons a run in progress.
 import {appendFile,mkdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -14,6 +15,7 @@ const MODES = ['jev','jev_facts','jev_facts_v3','claude'];
 const arg = name => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : undefined; };
 const mode = arg('mode'), seed = arg('seed'), character = arg('character') ?? 'IRONCLAD', label = arg('label') ?? null;
 if (!MODES.includes(mode)) throw Error(`--mode must be one of ${MODES.join(', ')}`);
+if (!seed || !/^[A-Za-z0-9]{1,20}$/.test(seed)) throw Error('--seed is required (letters and digits, up to 20).');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function game(command) {
@@ -38,18 +40,21 @@ if (s.state_type === 'game_over') { await select('main_menu', {}, 4000); s = awa
 if (s.state_type !== 'menu' || s.menu_screen !== 'main') throw Error(`Start from the main menu (now: ${s.state_type}/${s.menu_screen ?? ''}).`);
 if (optionNames(s).includes('abandon_run') || optionNames(s).includes('continue')) throw Error('A saved run exists. Finish or abandon it deliberately first.');
 await select('singleplayer');
-await select(seed ? 'custom' : 'standard', {}, 3000);
+await select('custom', {}, 3000);
 s = await game();
-if (s.menu_screen !== 'character_select') throw Error(`Expected character select, got ${s.menu_screen}: ${JSON.stringify(optionNames(s))}`);
+if (s.menu_screen !== 'custom_run') throw Error(`Expected the custom run screen, got ${s.menu_screen}. Is the custom-run bridge installed?`);
+if (s.custom_run.modifiers.length) throw Error(`Custom run has modifiers selected: ${s.custom_run.modifiers.join(', ')}. Clear them in the game.`);
+if (s.custom_run.ascension !== 0) throw Error(`Custom run ascension is ${s.custom_run.ascension}; set it to 0 in the game.`);
 await select(character);
-await select('embark', seed ? {seed} : {}, 8000);
+const embark = await select('embark', {seed}, 8000);
+if (embark.seed?.toUpperCase() !== seed.toUpperCase()) throw Error(`Bridge did not confirm the seed: ${JSON.stringify(embark)}`);
 s = await game();
 if (!s.run?.live_id || s.run.floor > 1) throw Error(`Run did not start cleanly: ${JSON.stringify(s.run)}`);
 await dash(`/api/mode/${mode}`, true);
 // The first Autoplay acknowledges the new run identity; the second starts play.
 for (let i = 0; i < 3 && (await dash('/api/status')).mode !== 'running'; i++) { await dash('/api/run', true); await sleep(6000); }
 const after = await dash('/api/status');
-const record = {time:new Date().toISOString(), run:s.run.live_id, mode, seed:seed ?? null, custom:Boolean(seed), character, ascension:s.run.ascension, label};
+const record = {time:new Date().toISOString(), run:s.run.live_id, mode, seed:embark.seed, custom:true, character, ascension:s.run.ascension, label};
 await mkdir(resolve(root, '.private/sts2'), {recursive:true});
 await appendFile(resolve(root, '.private/sts2/series.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify({...record, runner:after.mode, message:after.message}));
