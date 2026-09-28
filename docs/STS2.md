@@ -1,0 +1,103 @@
+# Jev for Slay the Spire 2
+
+The user's requested destination is automatic Ascension 10 play. Start with an observable A0 baseline; no A10 capability or win rate is claimed. Keep existing mods enabled, as explicitly requested. No save edits, ascension unlock edits or game-rule changes are part of this setup.
+
+## Start and control
+
+Launch the game through Steam (direct EXE launch does not initialize Steam correctly). Double-click `Jev STS2.cmd` in this project, then open http://127.0.0.1:4317/. Start or continue a single-player run and press Autoplay. The compact panel is at http://127.0.0.1:4317/sidecar.
+
+Preview asks Jev without acting. One move makes one decision. Autoplay continues until a stop condition. Pause prevents subsequent dispatches but cannot undo a move already sent; wait for pending work and animations before taking over. If an action times out, inspect the game and use the dashboard's explicit acknowledgment button before resuming. Never blindly repeat a timed-out move.
+
+The runner restores paused. A changed run identity clears prior-run decision memory and pauses. Session totals persist across restarts. The default limits are 2,000 successful provider calls and 30 million input tokens; one request may exceed the token threshold. They are stop thresholds, not hard billing caps. TypeSafe currently lists $0.042 per million input tokens, output free, so the default token threshold represents about $1.26 plus any overshoot or unaccounted failed calls. Verify with provider billing. Set `MAX_DECISIONS` and `MAX_INPUT_TOKENS` before launch to change limits. Restarting alone does not reset usage.
+
+Only one runner should control the game. The operator lock is `.private/sts2/runs/operator.lock`. If an unclean shutdown leaves it behind, verify its recorded process is no longer running before removing that lock. Do not launch a second agent or manually play while Autoplay is active.
+
+## State sources
+
+The bridge exposes current player, full permanent deck, combat piles, hand, energy, block, enemies, powers, intents, relic descriptions, potion slots, map, rewards, events and shop state. Jev chooses among code-generated actions and short combat plans; only the first action is executed, followed by a new observation.
+
+The save reader resolves `current_run.save` from the active profile reported by the bridge, validates its location beneath the game's save directory, parses the complete file and retains a hash. Jev receives a projection of visited map nodes, prior rooms, seen events and modifiers. Live state overrides checkpoint-era combat information. Hidden RNG and future draw order are not sent to Jev. The full raw save and API key remain local.
+
+The live run ID uses the game's live start time and current save scope/profile. It must match the disk checkpoint. Save lag at transitions gets a bounded wait. Hextech's act-start rune screen opens before the new act is saved, so that screen alone may use the same run's previous-act history, explicitly labeled as such. Current choices always come from the live screen. The reader never writes the game save.
+
+## Existing mods
+
+All existing mods remain enabled. This is a modded-game baseline, not a vanilla benchmark. The installed Hextech Runes variant is 0.111.0. Its loaded registry contains 371 player runes, 54 forges and 140 enemy hexes; a read-only audit verified nonempty descriptions and decision-request routing for all 565 entries. Run `npm run sts2:check-runes` with the game open to repeat the audit after a mod update.
+
+Every Jev request includes current equipped rune rules, visible counters, Hextech powers and the run modifier's active enemy hexes, including carried effects. Enemy tiers are 1/2/3. Combat, reward, upgrade, shop and rune-selection decisions retain these rules after request compaction. The dashboard lists the rules included in the last request. Hidden future rolls and private proc-tracking data are not sent; unexposed remaining proc counters are marked unknown.
+
+Flying Kick's strict execution threshold/heal and Grounded's block doubling have focused numeric support, with guards for changed rules, duplicate instances, death effects and uncertain modifiers. Other active rune effects use all currently legal single actions and rule-based Jev judgment; speculative numeric outcomes and card-order projections are suppressed, and the game applies the actual mechanics before the next observation. This supports full-catalog rule interpretation, not exact simulation or individual in-game verification of every combination.
+
+The adapter handles visible rune choice, confirmation, player-rune rerolls and enemy-hex rerolls. Jev compares rerolls with selecting now, including per-slot remaining uses, pending enemy previews, and an active shared golden upgrade. The installed normal flow charges no gold or HP for rerolls. Only current enabled buttons are exposed; revisions bind each action to its screen, slot, current identity and counters. Each screen permits at most 12 successful automated rerolls within the game's own limits. Unchanged acknowledged rerolls are not automatically retried. Enemy-hex removal/undo and self-pick catalogs are not automated. Unknown custom mod screens pause for inspection.
+
+## Installation and recovery
+
+- Game: `E:/Games (E)/Steam/steamapps/common/Slay the Spire 2`, v0.111.0.
+- Bridge source: `integration/sts2-bridge`; installed as `mods/STS2_MCP.dll` and `mods/STS2_MCP.json`.
+- Build: `dotnet build integration/sts2-bridge/STS2_MCP.csproj -c Release "-p:STS2GameDir=E:\Games (E)\Steam\steamapps\common\Slay the Spire 2"`.
+- Quit the game before replacing the bridge DLL; confirm installed/build hashes match.
+- Original settings and profile1 saves: `.private/backups/before-sts2-setup/`. Restore only deliberately with the game closed; restoring progression can discard newer progress.
+- Disable only STS2 MCP in the game's mod list to stop exposing its local API. Other mods were not disabled or replaced.
+- Private run logs and session: `.private/sts2/runs/`.
+
+## Sources and provenance
+
+- [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), MIT, commit `8bab787b7e2a135d86d674007a4a8fa80b4a9c3c`, imported under `vendor/jev-the-spire`. Runtime, tests and license retained; published progress-site assets and illustrations omitted. Upstream reports its first A0 victory in archived run 182 across multiple policies, not an A10 result or a current win-rate estimate.
+- [STS2MCP](https://github.com/Gennadiyev/STS2MCP), commit `55e064850a68f3b4cde7e5fd525bf9b2dec4e885`, source/license retained under `integration/sts2-bridge`. Local changes adapt v0.111.0 lobby fields, expose full deck and live run identity, support Hextech selection, reject browser-origin requests and restrict control to single-player.
+- [TypeSafe API](https://docs.typesafe.ai/api), [Choice](https://docs.typesafe.ai/primitives/choice), [models and pricing](https://docs.typesafe.ai/models), checked 2026-09-27. `jev-latest` currently resolves to `jev-1.13.0`; each decision logs the returned model.
+- Referenced conversation: Jev learnings, `6ab842f5-90b8-83e8-9692-f617dcd2fe3c`.
+
+Jev does not learn new model weights from these runs. Improvements require evaluating observations, candidate coverage, forecasts and question design. Multiple seeds and higher-ascension results are needed to establish playing strength.
+
+The default `jev-compact-v1` policy sends one screen-specific Choice question. It makes no API call for conservatively verified forced transitions; a single candidate after policy filtering is not sufficient. A second request is limited to combat choices that end the turn while alternatives remain, or have a forecast of death. Existing freshness, pause, uncertainty and budget guards still apply.
+
+Full saves and action logs remain local. Requests summarize older rooms into per-act totals and the last three rooms, and bound recent decision memory. Current combat, deck, piles, known top cards, legal candidates and active Hextech rules remain available. Repeated card rules are shared. Provider size errors pause before any game command and report their error code. Historical experimental policies remain available in the imported research code; these savings describe the default launcher.
+
+An inference-only replay of 30 recorded positions used 252,803 input tokens across 32 requests, compared with 1,171,853 recorded tokens for those positions under the previous policy: 78.4% fewer. This measures request cost, not playing strength or the cost of a complete new run. See the verification record for limits.
+
+## Pile and draw-order awareness
+
+Jev receives draw, discard and exhaust inventories with card multiplicity, current energy/star costs, upgrades and attached rules. Questions cover drawing now versus later, hand capacity, reshuffling, exhaust exclusions and selecting cards for top-deck/return/discard effects. Selection context includes the preceding executed card when it belongs to the same run and room.
+
+The draw inventory is unordered. `known_draw_top` is a separately tracked next-drawn-first prefix from observed deterministic top insertions through the game's card-pile command. Those cards already exist in the inventory; they are not extra copies. Drawing consumes that prefix. Shuffles, random insertions, direct unrecognized mod reorders, validation mismatches and reloads clear knowledge. This does not inspect RNG or expose the unknown remaining order. Direct custom reorder methods conservatively produce unknown order.
+
+The tracker harness runs with .NET9: build `integration/sts2-draw-tests/DrawTests.csproj` with `STS2GameDir` set to the installed game, then run its output with a .NET9 runtime. The game-supplied Harmony build does not support .NET10; the private portable runtime in `research/tools/dotnet9` was used here. Live hook loading is verified; a top-placement combat action has not been exercised since installation because the user requested a pause before the next run.
+
+## Claude strategy layer
+
+**Decision mode** is chosen on the dashboard and persists across restarts (switching is refused while a decision is in flight):
+
+- **Jev baseline** (default): `jev-compact-v1`, unchanged.
+- **Jev + route facts**: `jev-compact-v2`. Adds `computed_facts` to every request (`integration/sts2/route-facts.mjs`): for each map option, the number of paths to the act boss and the min-max elites, rests, shops, unknowns, monsters and treasures along them. Off the map screen it gives what remains ahead from the current node, the rest site's real heal amount (from the game's own option text) with missing HP and wasted healing, potions held against floors to the boss, and gold against shops still reachable this act. Facts remove no options. The runner remembers the act map from the last map screen, because other screens don't include it. Replaying 1,150 logged decisions: no errors, about 250 extra tokens per request.
+- **Jev + facts + Claude strategy**: `claude-strategy-v2`. As below, plus routing: the first map screen of each act triggers `route_plan`, and the brief lists the distinct room sequences from the current node (e.g. `M?ER$EB`), each with node IDs. The plan's `route_path` (node IDs) and `elite_min_hp_percent` are enforced in constrained mode: map options are limited to the next node on the path, so a single one moves without a Jev call. `route_off` (no option on the path) and `route_risk` (next node is an elite and HP is under the threshold) trigger a new plan. The CLI rejects route nodes that aren't on the act map.
+
+`CLAUDE_STRATEGIST=off` hides the Claude mode.
+
+With strategy on, Jev still makes every move. Claude, running in the operator's Claude Code session on the subscription plan (no Anthropic API key or SDK), writes a persistent run strategy on specific triggers. This is event-triggered hierarchical control: a slow planner, a fast decider, and deterministic code between them. Policy label: `claude-strategy-v1` (Jev-only decisions keep `jev-compact-v1`, so logs separate the two for comparison).
+
+**Triggers** (`integration/sts2/strategy.mjs`), evaluated before Jev on every non-forced decision:
+
+- `run_start`, `new_act`, `boss_start`, `elite_start` (round 1 of that fight)
+- `low_hp`: HP falls below the plan's `replan_below_hp_percent` (Claude sets 10-60; default 25)
+- `rich_shop`: entering a shop with 150+ gold
+- `new_relic`: a relic or rune gained at least three floors after the last plan
+- `jev_uncertain`: after Jev answers, confidence below `CLAUDE_ESCALATE_BELOW` (default 0.35) on a card reward, shop, Hextech rune or rest site, once per screen. Jev is asked again with the new plan.
+
+Forced transitions never trigger a request. Replaying the recorded 640-move A0 run through these triggers gives 30 requests (9-12 per act). That count uses the old run's confidences, so it estimates frequency only; it says nothing about playing strength.
+
+**Plan.** A fixed JSON schema: archetype, summary, up to five priorities, combat risk/potion/focus, card-reward wants/avoids/skip rule, shop gold reserve and priorities, route, rest policy, replan HP threshold, and optional `allowed_option_ids` for the current non-combat screen. Jev receives the stable fields as `run_strategy` plus an instruction that live rules and legal actions take precedence.
+
+**Constrained vs advisory** (`CLAUDE_PLAN_MODE`, default `constrained`). Constrained mode removes options outside Claude's `allowed_option_ids` on that exact screen (matched by command and label, so a reroll or purchase can't redirect an index), and removes purchases that would take gold below `shop.gold_reserve`. If only one option remains, it executes without a Jev call (`decisionSource: claude`). Advisory mode passes the same choices to Jev as `recommended_options` and removes nothing. Every execution still goes through the runner's freshness check, pause and dispatch logging.
+
+**Session channel.** The runner writes `.private/sts2/strategy/request.json` and waits up to `CLAUDE_WAIT_SECONDS` (default 300) for `answer.json` with the same request ID. On timeout it plays on with the previous plan (or Jev alone) and stops blocking until an answer arrives or Autoplay is pressed again. The request remains posted, and a late answer is used from the next decision, constraining only the screen it was written for. Pause cancels a wait. `CLAUDE_STRATEGIST=off` restores Jev-only play. The dashboard shows the current plan and the request, answer and timeout counts.
+
+**Operating as strategist (Claude Code session):**
+
+1. Start a background watcher: `npm run sts2:strategy -- wait`. It exits when an unanswered request exists, which wakes the session.
+2. `npm run sts2:strategy -- show` prints the instructions, schema and brief (compact deck, relics, runes, HP, gold, history summary, enemies or current options, previous plan).
+3. Write the plan JSON to a scratch file and deliver it with `npm run sts2:strategy -- answer <id> <file>`. The CLI rejects schema errors, invalid option IDs, and a request that has since been replaced.
+4. Restart the watcher.
+
+Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `strategy_timeout` events.
+
+Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, timeout and cancellation. A live game cycle is **not yet verified**: this setup has not been exercised in a new run.

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "sts2-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "sts2"],
+      "port": 4317
+    }
+  ]
+}

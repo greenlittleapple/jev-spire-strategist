@@ -1,0 +1,29 @@
+{
+  "name": "jev-game-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "doctor": "node dist/cli.js doctor",
+    "demo": "node dist/cli.js run --config config/demo.json",
+    "jev:demo": "node dist/cli.js run --config config/jev-demo.json",
+    "start": "node dist/cli.js run",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "check": "npm test && npm run doctor",
+    "sts2": "node integration/sts2/launch.mjs",
+    "sts2:strategy": "node integration/sts2/strategy-cli.mjs",
+    "sts2:check-runes": "node integration/sts2/check-rune-catalog.mjs",
+    "sts2:test": "node --test integration/sts2/*.test.mjs && npm --prefix vendor/jev-the-spire test"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "0.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.0"
+  }
+}

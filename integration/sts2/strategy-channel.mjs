@@ -1,0 +1,46 @@
+// File channel between the runner and the operator's Claude Code session.
+// One outstanding request; an answer names the request ID it was written for.
+import {readFile,writeFile,rename,unlink,mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
+
+async function readJson(file) {
+ try { return JSON.parse(await readFile(file,'utf8')); }
+ catch(error){ if(error.code==='ENOENT')return null; throw error; }
+}
+async function writeJson(file,value) {
+ await writeFile(file+'.tmp',JSON.stringify(value,null,1),{mode:0o600});
+ await rename(file+'.tmp',file);
+}
+
+export function fileChannel(dir) {
+ const requestFile=resolve(dir,'request.json'),answerFile=resolve(dir,'answer.json');
+ return {
+  dir,requestFile,answerFile,
+  current:()=>readJson(requestFile),
+  pendingAnswer:()=>readJson(answerFile),
+  async post(fields) {
+   await mkdir(dir,{recursive:true,mode:0o700});
+   const request={id:randomUUID(),createdAt:new Date().toISOString(),...fields};
+   await writeJson(requestFile,request);
+   return request;
+  },
+  // Runner side: consume an answer for this request, if one exists.
+  async take(id) {
+   const answer=await readJson(answerFile);
+   if(!answer)return null;
+   await unlink(answerFile).catch(()=>{});
+   if(answer.id!==id)return null;
+   await unlink(requestFile).catch(()=>{});
+   return answer;
+  },
+  // Session side: answer only the request that was read.
+  async answer(id,plan) {
+   const request=await readJson(requestFile);
+   if(!request)throw Error('No strategy request is pending.');
+   if(request.id!==id)throw Error(`Request ${id} was replaced by ${request.id}; read it with "show" and answer that one.`);
+   await writeJson(answerFile,{id,plan,answeredAt:new Date().toISOString()});
+   return request;
+  },
+ };
+}

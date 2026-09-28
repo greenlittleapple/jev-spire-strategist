@@ -1,0 +1,30 @@
+using HarmonyLib;
+using STS2_MCP;
+using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models;
+
+new Harmony("com.sts2mcp").PatchAll();
+DrawKnowledge.CheckPatches();
+void Require(bool value,string message){if(!value)throw new Exception(message);}
+Require(DrawKnowledge.Ready,"All observers must patch successfully");
+var p=new Player();var pile=p.PlayerCombatState.DrawPile;var a=new CardModel();var b=new CardModel();
+IReadOnlyList<CardModel> Known()=>DrawKnowledge.For(pile).Validate(pile.Cards);
+pile.AddInternal(new());Require(Known().Count==0,"Direct insertion cannot disclose order");
+await CardPileCmd.Add(new[]{a,b},pile,CardPilePosition.Top);
+Require(Known().SequenceEqual(new[]{b,a}),"Async deterministic top insertions retain actual insertion order");
+Require(DrawKnowledge.Current.Value==null,"Placement context cannot leak to caller");
+await CardPileCmd.Add(new[]{new CardModel()},pile);Require(Known().Count==2,"Bottom insertion preserves top");
+pile.RemoveInternal(b);Require(Known().SequenceEqual(new[]{a}),"Drawing consumes exactly the known first card");
+await CardPileCmd.Add(new[]{new CardModel()},pile,CardPilePosition.Random);Require(Known().Count==0,"Random insertion at index zero is not known");
+await CardPileCmd.Add(new[]{new CardModel()},pile,CardPilePosition.Top);
+await CardPileCmd.Shuffle(p);Require(Known().Count==0,"Shuffle clears and suppresses nested top operations");
+Require(!DrawKnowledge.Shuffling.Value,"Shuffle context cannot leak to caller");
+await CardPileCmd.Add(new[]{new CardModel()},pile,CardPilePosition.Top);pile.RandomizeOrderInternal();Require(Known().Count==0,"Initial randomization clears knowledge");
+await CardPileCmd.Add(new[]{new CardModel()},pile,CardPilePosition.Top);pile.MoveToTopInternal(a);Require(Known().Count==0,"Unrecognized direct reorder clears knowledge");
+var other=new CardPile(PileType.Draw);var c=new CardModel();
+await Task.WhenAll(CardPileCmd.Add(new[]{c},other,CardPilePosition.Top),CardPileCmd.Add(new[]{new CardModel()},pile,CardPilePosition.Random));
+Require(DrawKnowledge.For(other).Validate(other.Cards).SequenceEqual(new[]{c})&&Known().Count==0,"Concurrent async contexts stay isolated");
+var tracker=new KnownDrawTop<CardModel>();tracker.PutOnTop(a);Require(tracker.Validate(new[]{b,a}).Count==0,"Validation must discard a mismatched prefix, never search hidden order");
+Console.WriteLine("PASS: production observers, asynchronous context isolation, top/bottom/random insertion, draw consumption, shuffle, direct reorder and prefix invalidation.");

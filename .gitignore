@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+config/*.local.json
+runs/
+.operator.lock
+research/*-readme.md
+research/sdk-*.ts
+research/upstream/
+research/tools/
+research/*.cs
+.private/
+integration/**/bin/
+integration/**/obj/
+vendor/**/.private/

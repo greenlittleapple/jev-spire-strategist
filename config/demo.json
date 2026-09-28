@@ -1,0 +1,7 @@
+{
+  "provider": "mock", "model": "jev-1.13.0", "adapter": "demo",
+  "objective": "Collect the brass key in the workshop, then unlock the exit.",
+  "maxSteps": 20, "maxCalls": 10, "maxSeconds": 60,
+  "minIntervalMs": 300, "minConfidence": 0.5, "maxRepeatedStates": 3,
+  "maxRequestBytes": 16000, "maxInputTokens": 100000
+}
