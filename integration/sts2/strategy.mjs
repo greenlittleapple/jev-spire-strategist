@@ -282,6 +282,14 @@ export function resolveTarget(wanted,enemies,candidates=[]) {
  return name?enemies.find(e=>e.name?.toLowerCase().includes(name))??null:null;
 }
 
+// The HP a potion line must save over the best known line without a potion to stay allowed
+// under the hallway floor; null when no line without a potion has a known HP loss.
+export function hallwayPotionSaving(state,withoutPotion){
+ const known=withoutPotion.filter(c=>c.forecast?.quality!=='unknown'&&Number.isFinite(c.forecast?.hpLoss));
+ if(!known.length)return null;
+ return {best:Math.min(...known.map(c=>c.forecast.hpLoss)),need:Math.max(10,Math.ceil(0.12*(state.player?.max_hp??0)))};
+}
+const saves=(c,{best,need})=>c.forecast?.quality!=='unknown'&&c.forecast?.survives===true&&Number.isFinite(c.forecast?.hpLoss)&&best-c.forecast.hpLoss>=need;
 // fight = the saved plan for the current encounter ({plan, target_priority}) or null.
 export function combatConstraints(state,candidates,plan,fight=null) {
  if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
@@ -291,9 +299,15 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  const floor=plan?.combat?.hallway_potion_below_hp_percent;
  const hp=pct(state.player);
  if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp>=floor){
-  const next=kept.filter(c=>!usesPotion(c));
+  const withoutPotion=kept.filter(c=>!usesPotion(c));
   // Keep potions when every remaining option without one is forecast to die.
-  if(next.some(c=>c.forecast?.survives!==false))apply('hallway_potion',next,{hp_percent:hp,floor});
+  if(withoutPotion.some(c=>c.forecast?.survives!==false)){
+   // Also keep a potion line that is forecast to save a lot of HP this turn: known, surviving,
+   // and at least max(10, 12% of max HP) less HP lost than the best line without a potion.
+   const saving=hallwayPotionSaving(state,withoutPotion);
+   const savers=saving?kept.filter(c=>usesPotion(c)&&saves(c,saving)):[];
+   apply('hallway_potion',kept.filter(c=>!usesPotion(c)||savers.includes(c)),{hp_percent:hp,floor,...(savers.length?{potion_lines_kept:savers.length}:{})});
+  }
  }
  // Potions kept for the boss: outside boss fights, plays that would leave fewer than the
  // reserve are removed, unless every option that keeps the reserve is forecast to die.

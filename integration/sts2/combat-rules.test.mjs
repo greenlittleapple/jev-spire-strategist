@@ -159,3 +159,12 @@ test('a target name covers every living enemy with that name',()=>{
  const r=combatConstraints(st,cands,plan({}),{plan:'x',target_priority:['Bowlbug (Nectar)']});
  assert.deepEqual(ids(r),['hit_a','hit_b']);
 });
+
+test('under the hallway floor, a potion line that saves at least max(10, 12% of max HP) stays',()=>{
+ const cands=[cand('defend',{action:'play_card',card_index:0},{hpLoss:20}),cand('end',{action:'end_turn'},{hpLoss:25}),
+  cand('block',{action:'use_potion',slot:0},{hpLoss:8}),cand('fire',{action:'use_potion',slot:1},{hpLoss:15})];
+ const r=combatConstraints(fight({hp:70}),cands,plan({hallway_potion_below_hp_percent:40}));
+ assert.deepEqual(ids(r),['defend','end','block']);assert.equal(r.rules[0].potion_lines_kept,1);
+ const unknown=cands.map(c=>c.id==='block'?{...c,forecast:{...c.forecast,quality:'unknown'}}:c);
+ assert.deepEqual(ids(combatConstraints(fight({hp:70}),unknown,plan({hallway_potion_below_hp_percent:40}))),['defend','end'],'an unknown forecast does not qualify');
+});
