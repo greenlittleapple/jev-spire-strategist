@@ -8,6 +8,7 @@ import {efficientDeliberate,EFFICIENT_POLICY} from '../../../integration/sts2/ef
 import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts2/hierarchical.mjs';
 import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
 import {replayer} from '../../../integration/sts2/replay.mjs';
+import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
 import {STRATEGY_POLICY} from '../../../integration/sts2/strategy.mjs';
 import {FACTS_POLICY,FACTS_V3_POLICY} from '../../../integration/sts2/route-facts.mjs';
@@ -71,6 +72,9 @@ const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:fi
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;
 view.strategy=strategist?.status??null;
+// Claude's recent strategy answers for the dashboard, rebuilt from the run log at startup.
+view.strategyHistory=Array.isArray(view.strategyHistory)?view.strategyHistory:[];
+loadHistory(logFile).then(h=>{if(h.length)view.strategyHistory=h;});
 const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
@@ -233,7 +237,7 @@ async function step(token, preview = false) {
         return result;
       }});
     view.latencyMs = Math.round(performance.now() - start);
-    for (const strategyEvent of result.strategyEvents ?? []) await log(strategyEvent);
+    for (const strategyEvent of result.strategyEvents ?? []) { await log(strategyEvent); addToHistory(view.strategyHistory, strategyEvent); }
     view.model = result.model ?? 'Rules · sole legal action';
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
