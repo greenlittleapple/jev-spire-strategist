@@ -14,7 +14,7 @@ const direct=(decisionSource,model,choice,extra={})=>({decisionSource,model,usag
 
 export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.35,waitMs=300000,ownScreens=true}={}) {
  if(!['constrained','advisory'].includes(mode))throw Error('CLAUDE_PLAN_MODE must be constrained or advisory');
- if(!(threshold>0&&threshold<1)||!(waitMs>=0))throw Error('Invalid Claude strategy settings');
+ if(!(threshold>0&&threshold<1)||!(waitMs>=0))throw Error('Invalid strategist settings');
  return {enabled,mode,threshold,waitMs,ownScreens,plan:null,available:true,requests:0,answers:0,timeouts:0};
 }
 
@@ -73,7 +73,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   }
   // Claude strategy mode never falls back to Jev: play waits for the answer until
   // it arrives or the operator pauses (which cancels the decision).
-  onStage('Waiting for Claude to update the run strategy');
+  onStage('Waiting for the strategist to update the run strategy');
   for(;;){
    if(cancelled())throw Error('Decision cancelled.');
    await sleep(1000);
@@ -86,7 +86,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   const fight=playbook&&encounter?await playbook.get(encounter):null;
   const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // A single allowed option is Claude's choice; no Jev call is needed.
-  if(constraint&&options.length===1)return direct('claude','Claude strategy',options[0],{constraint});
+  if(constraint&&options.length===1)return direct('claude','Strategist',options[0],{constraint});
   return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state,fight)}),constraint};
  };
 

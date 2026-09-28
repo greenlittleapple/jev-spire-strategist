@@ -319,14 +319,14 @@ const server = http.createServer(async (req, res) => {
       if (req.url.startsWith('/api/mode/')) {
         const mode = req.url.slice('/api/mode/'.length);
         if (!DECISION_MODES.includes(mode)) return json(404, {error:'Unknown decision mode'});
-        if (mode === 'claude' && !strategist) return json(400, {error:'Claude strategy is unavailable in this launch configuration'});
+        if (mode === 'claude' && !strategist) return json(400, {error:'The strategist is unavailable in this launch configuration'});
         if (busy) return json(409, {error:'Wait for the current decision to finish'});
         view.decisionMode = mode;
         if (strategist) { strategist.status.enabled = mode === 'claude'; strategist.status.available = true; }
         view.message = {jev:'Decision mode: Jev baseline (jev-compact-v1). No computed facts, no LLM strategy.',
           jev_facts:'Decision mode: Jev + route/resource facts (jev-compact-v2). No LLM strategy.',
           jev_facts_v3:'Decision mode: Jev + order-aware route facts (jev-compact-v3). No LLM strategy.',
-          claude:'Decision mode: Jev + facts + Claude strategy. Keep the Claude Code session watching for requests.'}[mode];
+          claude:'Decision mode: Jev + facts + strategist. Keep the strategist session watching for requests.'}[mode];
         await log({kind:'decision_mode',mode}); return json(200,{ok:true});
       }
       if (req.url === '/api/reconcile') {

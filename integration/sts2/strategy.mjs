@@ -332,7 +332,7 @@ export function constrainCandidates(state,candidates,plan,mode='constrained',{fi
 // What Jev sees: stable fields, not the strategist's reasoning.
 export function strategyContext(plan,state,fight=null) {
  if(!plan||plan.run_id!==state.run?.live_id)return null;
- const context={source:'Claude run strategy, written at act '+plan.act+' floor '+plan.floor+' ('+plan.reason+')',...planFields(plan)};
+ const context={source:'Strategist run plan, written at act '+plan.act+' floor '+plan.floor+' ('+plan.reason+')',...planFields(plan)};
  // Fight plans are scoped to their encounter, so they never carry into another fight.
  if(fight?.plan)context.fight_plan={plan:fight.plan,target_priority:fight.target_priority??[]};
  if(plan.screen===screenKey(state)){
