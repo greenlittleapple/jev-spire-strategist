@@ -162,7 +162,13 @@ function sidecarView(source = view) {
     room: source.state?.state_type, decisions: compactDecisions.slice(0, 8), spotlight: compactDecisions.find(e => e.options.length > 1) ?? compactDecisions[0] ?? null };
 }
 async function observe() {
-  const live = await gameRequest();
+  // State reads are read-only; a failed read (a transition-time exception or timeout) is retried
+  // twice before the step fails and pauses.
+  let live;
+  for (let attempt = 0; ; attempt++) {
+    try { live = await gameRequest(); break; }
+    catch (error) { if (attempt >= 2) throw error; await new Promise(r => setTimeout(r, 1500)); }
+  }
   const id = live.run?.live_id;
   if (id && view.runId && id !== view.runId) {
     stop('A different run was loaded. Check the game and press Autoplay to begin.');
