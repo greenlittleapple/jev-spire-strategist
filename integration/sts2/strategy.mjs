@@ -40,7 +40,7 @@ Write a compact, persistent run strategy grounded in the actual deck, relics, ru
 
 Fields:
 - combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
-  Code also removes plays forecast to be fatal when another play is forecast to survive, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
+  Code also takes a play forecast to win the fight when one exists, removes plays forecast to be fatal when another play is forecast to survive, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
 - fight: when the trigger is a fight start (new_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names or the selectors lowest_hp, biggest_attack, can_kill, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. On other triggers use {"plan":"","target_priority":[]}; the saved fight plans are unaffected.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
@@ -261,6 +261,13 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  let kept=candidates;const rules=[];
  const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
  if(kept.some(survives))apply('avoid_fatal',kept.filter(c=>!fatal(c)));
+ // A fully forecast win ends the fight: take it, using as few potions as possible.
+ const wins=kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown');
+ if(wins.length){
+  const potions=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
+  const fewest=Math.min(...wins.map(potions));
+  apply('take_lethal',wins.filter(c=>potions(c)===fewest));
+ }
  const floor=plan?.combat?.hallway_potion_below_hp_percent;
  const hp=pct(state.player);
  if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp>=floor){

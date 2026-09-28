@@ -90,3 +90,15 @@ test('resting that wastes half its heal is removed when Smith is offered',async(
  assert.equal(restConstraint(at(60),cands),null,'20 of 24 heal used');
  assert.equal(restConstraint(at(72),cands.slice(0,1)),null,'no Smith offered');
 });
+
+test('a forecast win is taken, with the fewest potions',()=>{
+ const win=(id,command,plan)=>cand(id,command,{boundary:'combat_won',survives:true},plan);
+ const cands=[cand('thrash',{action:'play_card',card_index:0,target:'a'}),
+  win('strikeFirst',{action:'play_card',card_index:1,target:'a'}),
+  win('potionWin',{action:'use_potion',slot:0,target:'a'},[{command:{action:'use_potion',slot:0}}]),
+  cand('end',{action:'end_turn'})];
+ const r=combatConstraints(fight({type:'boss'}),cands,null);
+ assert.deepEqual(ids(r),['strikeFirst']);assert.equal(r.rules[0].kind,'take_lethal');
+ const unknown=[cands[0],cand('maybe',{action:'play_card',card_index:1},{boundary:'combat_won',survives:null,quality:'unknown'})];
+ assert.equal(combatConstraints(fight(),unknown,null).candidates.length,2,'an unknown forecast is not a win');
+});

@@ -48,3 +48,34 @@ test('an attack chosen before setup that forecasts more damage is reviewed once 
  const noGain=fight([cruelty,big(1)],{enemyStatus:[],round:6}),c2=decisionCandidates(noGain);
  assert.equal(orderReviewReason(noGain,c2,c2.find(c=>c.command.card_index===1)),null,'no review without a damage gain');
 });
+
+test('Thrash, Fiend Fire, Cinder, Evil Eye and Body Slam are forecast',()=>{
+ const beckon=i=>card(i,'Beckon','1','Status','At the end of your turn, if this is in your Hand,  lose 6 HP.','None');
+ const thrash=card(1,'Thrash','1','Attack','Deal 4 damage twice. Exhaust a random Attack in your Hand and add its damage to this card.');
+ const breakthrough=card(2,'Breakthrough','1','Attack','Lose 1 HP. Deal 9 damage to ALL enemies.','AllEnemies');
+ // Soul Fysh round 12: playing Thrash first burns the Strike; Strike first is lethal.
+ const s=fight([beckon(0),thrash,breakthrough,beckon(3),strike(4)]);s.battle.enemies[0].hp=30;
+ const cands=decisionCandidates(s);
+ const lethal=byLabel(cands,'Strike → E → Breakthrough → Thrash → E');
+ assert.equal(lethal.forecast.boundary,'combat_won');assert.equal(lethal.forecast.survives,true);
+ assert.equal(byLabel(cands,'Thrash → E').forecast.damage,12);
+ const ff=card(1,'Fiend Fire','2','Attack','Exhaust your Hand. Deal 7 damage for each card Exhausted. Exhaust.');
+ const f2=byLabel(decisionCandidates(fight([beckon(0),ff,strike(2),strike(3)],{enemyStatus:[]})),'Fiend Fire → E').forecast;
+ assert.equal(f2.damage,21);assert.equal(f2.endTurnCardHpLoss,0,'the Beckon was exhausted');
+ const eye=card(2,'Evil Eye','1','Skill','Gain 8 Block. Gain another 8 Block if you have Exhausted a card this turn.','Self');
+ const cinder=card(1,'Cinder','2','Attack','Deal 18 damage. Exhaust 1 card at random.');
+ const c3=decisionCandidates(fight([beckon(0),cinder,eye],{enemyStatus:[]}));
+ assert.equal(byLabel(c3,'Evil Eye').forecast.block,8);
+ assert.equal(byLabel(c3,'Cinder → E').forecast.boundary,'random','two different cards could be exhausted');
+ const slam=card(1,'Body Slam','1','Attack','Deal damage equal to your Block. (Deals 3 damage)');
+ const s4=fight([card(0,'Defend','1','Skill','Gain 5 Block.','Self'),slam],{enemyStatus:[]});s4.player.block=3;
+ assert.equal(byLabel(decisionCandidates(s4),'Defend → Body Slam → E').forecast.damage,8);
+});
+
+test('Shackling Potion lowers each forecast enemy hit',()=>{
+ const s=fight([strike(0)],{enemyStatus:[]});
+ s.battle.enemies[0].intents=[{type:'Attack',label:'9x2',description:'Attack for 9 damage 2 times.'}];
+ s.player.potions=[{slot:0,name:'Shackling Potion',description:'ALL enemies lose 7 Strength this turn.',target_type:'AllEnemies',can_use_in_combat:true}];
+ const c=decisionCandidates(s).find(x=>x.command.action==='use_potion');
+ assert.ok(c,'potion is offered');assert.equal(c.forecast.incoming,4);
+});

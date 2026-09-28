@@ -12,8 +12,8 @@ export const POLICY_VERSION = 'jev-visible-v24-hextech';
 const amount = (powers, name) => (powers ?? []).filter(p => p.name?.toLowerCase() === name.toLowerCase()).reduce((n,p) => n + Number(p.amount ?? 0), 0);
 const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? fallback);
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
-const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed"]);
-const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion']);
+const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond"]);
+const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion']);
 const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK']);
@@ -56,6 +56,7 @@ function initial(s) {
     drawCount:s.player.draw_pile_count ?? 0, deck:s.player.deck ?? [],
     fork:(s.player.relics ?? []).find(r=>r.id==='TUNING_FORK')?.counter ?? null, stunned:[],
     cardDamage: 0, removedCharges: 0, extraStrength: 0,
+    startBlock: s.player.block ?? 0, exhaustedThisTurn: false,
   };
 }
 
@@ -127,6 +128,23 @@ function applyPower(enemy, name, n) {
   return true;
 }
 
+// One card leaves the hand to the exhaust pile. Unknown on-exhaust triggers stop the plan.
+function exhaustCard(m, card) {
+  m.exhaustCount++; m.block += m.feelNoPain; m.exhaustedThisTurn = true;
+  if (/when(?: this is)? exhausted|whenever you exhaust/i.test(card.description ?? '')) {
+    m.unsupported = true; m.boundary = 'unsupported';
+    m.warnings.push(`${card.name} has an on-exhaust effect that is not modeled; re-observe.`);
+  }
+}
+// "At random" exhausts are exact only when every eligible card is the same card.
+function exhaustRandom(m, eligible, what) {
+  const pool = m.hand.filter(eligible);
+  if (!pool.length) return;
+  const same = pool.every(c => c.name === pool[0].name && c.description === pool[0].description);
+  if (!same) { m.boundary = 'random'; m.warnings.push(`${what} exhausts a random card; the remaining hand is re-observed.`); return; }
+  m.hand.splice(m.hand.indexOf(pool[0]), 1); exhaustCard(m, pool[0]);
+}
+
 function apply(m0, a) {
   const m = structuredClone(m0);
   m.steps.push(a);
@@ -171,7 +189,12 @@ function apply(m0, a) {
   for(let replay=0;replay<=replayCount;replay++){
   if(replay && (m.hp<=0 || targets.every(e=>e.hp<=0)))break;
   let retaliationHits=0;
-  const damageMatch = name==='flame barrier' ? null : name==='mind blast' ? [null,String(m.drawCount)] : text.match(/Deal (\d+) damage/i);
+  let fiendFireCount = 0;
+  if (name==='fiend fire' && replay===0) { const burned=m.hand.splice(0); fiendFireCount=burned.length; for (const c of burned) exhaustCard(m,c); if(m.unsupported)return m; }
+  const bodySlam = name==='body slam' ? text.match(/\(Deals (\d+) damage\)/i) : null;
+  if (name==='body slam' && !bodySlam) m.warnings.push('Body Slam current value not shown; Strength is not included.');
+  const damageMatch = name==='flame barrier' ? null : name==='mind blast' ? [null,String(m.drawCount)]
+    : name==='body slam' ? [null,String(Math.max(0,(bodySlam ? Number(bodySlam[1])-m.startBlock : 0)+m.block))] : text.match(/Deal (\d+) damage/i);
   if (damageMatch) {
     let dmg = Number(damageMatch[1]);
     if (isAttack) {
@@ -183,7 +206,7 @@ function apply(m0, a) {
       }
     }
     for (const e of targets) {
-      const hits = name === 'whirlwind' ? spent : name==='twin strike' ? 2 : name==='spite' ? (m.hp < m.startHp ? 2 : 1) : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
+      const hits = name === 'whirlwind' ? spent : name==='fiend fire' ? fiendFireCount : name==='twin strike' || /Deal \d+ damage twice/i.test(text) ? 2 : name==='spite' ? (m.hp < m.startHp ? 2 : 1) : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
       retaliationHits=hits;
       const bonus=name==='bully' ? number(text,/Deals (\d+) additional damage/i)*(amount(e.status,'Vulnerable')-(m.originalVulnerable[e.entity_id]??0)) : 0;
       for (let i=0; i<hits && e.hp>0; i++) hit(m,e,dmg+bonus,isAttack);
@@ -199,6 +222,9 @@ function apply(m0, a) {
     if (m.fan && m.fanProgress !== null && (m.fanProgress + m.attacks) % 3 === 0) m.block += 4;
   }
   }
+  if (name==='thrash') exhaustRandom(m, c=>c.type==='Attack', 'Thrash');
+  if (name==='cinder') exhaustRandom(m, ()=>true, 'Cinder');
+  if (m.unsupported) return m;
   if(!potion && item.type==='Skill' && m.fork!==null) { m.fork++; if(m.fork%10===0)m.block+=7; }
   if(name==='flame barrier')m.warnings.push('Immediate block included; retaliation damage and any kills during enemy attacks are omitted. Incoming may be overestimated.');
   if(name==='fortifier')m.block*=3;
@@ -215,12 +241,18 @@ function apply(m0, a) {
   else {
     const baseBlock=number(text,/Gain (\d+) Block/i);
     if(baseBlock) m.block += baseBlock + (!potion ? Math.floor(m.dexterityDelta*m.frailFactor) : 0);
+    if(name==='evil eye') {
+      if(m.exhaustedThisTurn) m.block += number(text,/Gain another (\d+) Block/i) + Math.floor(m.dexterityDelta*m.frailFactor);
+      else m.warnings.push('Evil Eye bonus counts only exhausts in this plan; an exhaust earlier this turn may add more block.');
+    }
   }
   if(potion && ['dexterity potion','speed potion','fysh oil'].includes(name)) {
     m.dexterityDelta += number(text,/(?:Gain|and) (\d+) Dexterity/i);
     m.warnings.push('Dexterity affects subsequent block cards, not existing block. Temporary Dexterity only benefits cards played before it expires.');
     if(m.frailFactor!==1)m.warnings.push('Frail rounding on simulated Dexterity may differ by 1 block.');
   }
+  // Strength loss this turn lowers each displayed enemy hit (after Weak when the enemy is Weak).
+  if(name==='shackling potion'){const n=number(text,/lose (\d+) Strength/i);for(const e of m.enemies.filter(e=>e.hp>0))e.strengthLoss=(e.strengthLoss??0)+n;}
   if(name==='flex potion')m.warnings.push('Temporary Strength applies only to attacks before this turn ends; no future-turn benefit is forecast.');
   const gainStrength = name==='dominate'?0:number(text,/Gain (\d+) Strength/i);
   m.strengthDelta += gainStrength; m.extraStrength += gainStrength;
@@ -236,7 +268,7 @@ function apply(m0, a) {
     m.warnings.push('Bloodletting energy and HP cost are included, but added Tainted consequences require a fresh observation.');
   }
   if (name === 'offering' && !m.noEnergyGain) m.energy += number(text,/Gain (\d+) Energy/i,(text.match(/\[[^\]]*energy_icon[^\]]*\]/g)??[]).length);
-  if (!potion && /(?:^|[.!]\s*)Exhaust\.?$/i.test(text.trim())) {m.block+=m.feelNoPain;m.exhaustCount++;}
+  if (!potion && /(?:^|[.!]\s*)Exhaust\.?$/i.test(text.trim())) {m.block+=m.feelNoPain;m.exhaustCount++;m.exhaustedThisTurn=true;}
   if(name==='armaments'){m.boundary='upgrade';m.warnings.push('Armaments block is included; re-observe card upgrades before continuing.');}
   for (const e of targets) {
     const weak = number(text,/Apply (\d+) Weak/i), vuln = number(text,/Apply (\d+) Vulnerable/i);
@@ -251,13 +283,13 @@ function apply(m0, a) {
     if(applied && m.vicious>0 && !m.noDraw){m.boundary='draw';m.warnings.push('Vicious draws unknown cards: re-observe before continuing.');}
 
   }
-  if(name==='cruelty')m.cruelty+=number(text,/additional (d+)% damage/i,25);
+  if(name==='cruelty')m.cruelty+=number(text,/additional (\d+)% damage/i,25);
   if(name==='vicious')m.vicious+=number(text,/draw (\d+) card/i,1);
   if(name==='spite' && m.hp >= m.startHp)m.warnings.push('Spite: HP lost earlier this turn is not observed; it may hit twice.');
   if(name==='blood potion' && m.maxHp)m.hp=Math.min(m.maxHp,m.hp+Math.floor(m.maxHp*number(text,/Heal for (\d+)%/i,20)/100));
   if(name==='pillage' && !m.noDraw){m.boundary='draw';m.warnings.push('Pillage draws unknown cards: re-observe before continuing.');}
   if(name==='headbutt'){m.boundary='selection';m.warnings.push('Headbutt damage is included; re-observe the discard-to-top choice before continuing.');}
-  if(name==='true grit'){m.block+=m.feelNoPain;m.exhaustCount++;m.boundary='selection';m.warnings.push('True Grit block and one exhaust are included; the exhausted card is re-observed.');}
+  if(name==='true grit'){m.block+=m.feelNoPain;m.exhaustCount++;m.exhaustedThisTurn=true;m.boundary='selection';m.warnings.push('True Grit block and one exhaust are included; the exhausted card is re-observed.');}
   if (name!=='vicious' && name!=='relax' && !m.noDraw && /Draw \d+ cards?/i.test(text)) { m.boundary = 'draw'; m.warnings.push('Stops before unknown drawn cards; re-observe before continuing.'); }
   if(name==='battle trance')m.noDraw=true;
   if(!potion && m.unmovable && /Gain \d+ Block/i.test(text) && name!=='rage' && name!=='feel no pain'){m.boundary='block_modifier_consumed';m.warnings.push('Re-read live block values after Unmovable: first-card doubling must not be reused.');}
@@ -296,6 +328,11 @@ function forecast(m, s) {
       const match = String(intent.label).trim().match(/^(\d+)(?:\s*[x×]\s*(\d+))?$/i);
       if (!match) { parsed = false; continue; }
       let perHit = Number(match[1]);
+      if (e.strengthLoss) {
+        const weak = amount(before?.status,'Weak') > 0;
+        perHit = Math.max(0, perHit - (weak ? Math.floor(e.strengthLoss*.75) : e.strengthLoss));
+        if (weak) m.warnings.push('Strength loss on a Weak enemy may differ by 1 damage per hit.');
+      }
       if (amount(before?.status,'Weak') === 0 && amount(e.status,'Weak') > 0) perHit = Math.floor(perHit*.75);
       if(m.colossus && amount(e.status,'Vulnerable')>0)perHit=Math.floor(perHit*.5);
       incoming += perHit * Number(match[2] ?? 1);
@@ -356,7 +393,7 @@ function forecast(m, s) {
 function preference(m,s,kind) {
   const f=forecast(m,s);
   if(f.quality==='unknown')return -10000;
-  const safety=f.survives?0:-10000;
+  const safety=(f.survives?0:-10000)+(m.boundary==='combat_won'?20000:0);
   const potionsUsed=m.steps.filter(a=>a.command.action==='use_potion').length;
   if(kind==='setup')return safety+m.energy*8+f.strengthGained*8+m.rage*3+f.slipperyRemoved*4-f.hpLoss*2-potionsUsed*2;
   if(kind==='conserve')return safety+f.damage*2-f.hpLoss*8+f.slipperyRemoved*5-potionsUsed*18;
