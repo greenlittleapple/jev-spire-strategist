@@ -3,6 +3,7 @@ import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
 import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext} from './strategy.mjs';
+import {patternFor} from './movesets.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
 import {replayChoice} from './replay.mjs';
 
@@ -39,7 +40,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(replayed)return {...direct('replay','Reference run',replayed),strategyEvents:events};
   return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
  }
- const {channel,status,playbook=null,glossary=null}=strategist;
+ const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -70,6 +71,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;
     else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}}
+   // Intents each enemy showed round by round in recent fights (this one included).
+   if(movesets&&brief.enemies)for(const e of brief.enemies){const seen=patternFor(movesets,e.name);if(seen.length)e.seen_pattern=seen;}
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,

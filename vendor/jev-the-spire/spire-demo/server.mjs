@@ -8,6 +8,7 @@ import {efficientDeliberate,EFFICIENT_POLICY} from '../../../integration/sts2/ef
 import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts2/hierarchical.mjs';
 import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
 import {makeGlossary,bridgeLookup} from '../../../integration/sts2/glossary.mjs';
+import {loadMovesets,recordIntents} from '../../../integration/sts2/movesets.mjs';
 import {replayer} from '../../../integration/sts2/replay.mjs';
 import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
@@ -68,7 +69,7 @@ const strategyAvailable=process.env.CLAUDE_STRATEGIST!=='off'&&!lunaEnabled&&!pl
 const strategyDir=process.env.STRATEGY_DIR??resolve(logDir,'../strategy');
 // Replay mode: .private/sts2/replay.json {source_run, target_run} (written by start-run --replay-from).
 const replaySource=replayer({configPath:resolve(logDir,'../replay.json'),runsDir:logDir});
-const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),glossary:makeGlossary(bridgeLookup(bridge)),
+const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),glossary:makeGlossary(bridgeLookup(bridge)),movesets:{},
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;
@@ -76,6 +77,8 @@ view.strategy=strategist?.status??null;
 // Claude's recent strategy answers for the dashboard, rebuilt from the run log at startup.
 view.strategyHistory=Array.isArray(view.strategyHistory)?view.strategyHistory:[];
 loadHistory(logFile).then(h=>{if(h.length)view.strategyHistory=h;});
+// Enemy move sequences seen in logged fights, shown to the strategist as patterns.
+if(strategist)loadMovesets(logFile).then(m=>{for(const [k,v] of Object.entries(m))strategist.movesets[k]??=v;});
 const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
@@ -190,6 +193,7 @@ async function step(token, preview = false) {
     if (['menu', 'overlay'].includes(s.state_type)) {
       stop(`Waiting at ${s.state_type}. Resolve this screen in the game, then resume.`); return;
     }
+    if(strategist)recordIntents(strategist.movesets,s);
     const planningState=facingState(s,view.events);
     const actions = decisionCandidates(rewardState(planningState,view.events));
     if (!actions.length) {
