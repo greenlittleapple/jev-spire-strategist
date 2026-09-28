@@ -9,7 +9,8 @@ const combat = new Set(['monster','elite','boss']);
 // Some death effects replace the boss with a placeholder HP value.
 const PLACEHOLDER_HP = 1e8;
 
-export function scoreRuns(events) {
+export function scoreRuns(events, series=[]) {
+ const started = new Map(series.map(r => [r.run, r]));
  const runs = new Map();
  for (const e of events) {
   const id = e.state?.run?.live_id;
@@ -20,7 +21,7 @@ export function scoreRuns(events) {
   if (e.kind === 'run_end') r.end = e;
   runs.set(id, r);
  }
- return [...runs.values()].map(score);
+ return [...runs.values()].map(r => ({...score(r), seed: started.get(r.id)?.seed ?? null, series_mode: started.get(r.id)?.mode ?? null, label: started.get(r.id)?.label ?? null}));
 }
 
 function score(r) {
@@ -72,7 +73,7 @@ function score(r) {
 function table(rows) {
  const line = s => {
   const boss = s.bosses.map(b => `${b.name} ${b.killed ? 'killed' : b.hp_removed_pct + '%'} (entry ${b.entry_hp}, ${b.potions_at_entry} pot, ${b.rounds}r)`).join('; ') || '-';
-  return [s.run.split(':').pop(), s.modifiers, s.policy, s.result, `A${s.ascension} act ${s.act} f${s.floor}`, boss,
+  return [s.run.split(':').pop(), s.modifiers + (s.seed ? ` seed ${s.seed}` : ''), s.policy, s.result, `A${s.ascension} act ${s.act} f${s.floor}`, boss,
    `elites ${s.elites_fought} (chose ${s.elite_choices_taken}/${s.elite_choices_offered})`, `relics ${s.relics_end}`, `gold ${s.gold_end}`,
    `potions ${s.potions_used.length} (${s.potions_used_outside_elites_bosses} hallway)`, `${s.moves} moves`, `${(s.input_tokens/1e6).toFixed(2)}M tok`].join(' | ');
  };
@@ -86,6 +87,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
  const events = [];
  for (const f of (await readdir(dir)).filter(f => f.endsWith('.jsonl')).sort())
   for (const line of (await readFile(resolve(dir, f), 'utf8')).split('\n')) if (line.trim()) events.push(JSON.parse(line));
- const rows = scoreRuns(events).filter(s => (!since || s.started >= since) && (s.moves >= 5 || process.argv.includes('--all')));
+ const seriesFile = resolve(dir, '../series.jsonl');
+ const series = (await readFile(seriesFile, 'utf8').catch(() => '')).split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l));
+ const rows = scoreRuns(events, series).filter(s => (!since || s.started >= since) && (s.moves >= 5 || process.argv.includes('--all')));
  console.log(process.argv.includes('--json') ? JSON.stringify(rows, null, 1) : table(rows));
 }
