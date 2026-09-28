@@ -111,3 +111,13 @@ test('a win that needs a potion is not forced in a hallway fight above the potio
  assert.deepEqual(ids(r),['strike','end']);assert.deepEqual(r.rules.map(x=>x.kind),['hallway_potion']);
  assert.deepEqual(ids(combatConstraints(fight({type:'elite',hp:64}),cands,plan({hallway_potion_below_hp_percent:40}))),['ampouleWin'],'elites still take it');
 });
+
+test('ending the turn is removed while an affordable Beckon is still in hand',()=>{
+ const beckon={name:'Beckon',cost:'1',can_play:true,description:'At the end of your turn, if this is in your Hand,  lose 6 HP.'};
+ const s=fight({type:'boss'});s.player.hand=[beckon];s.player.energy=1;
+ const cands=[cand('beckon',{action:'play_card',card_index:0}),cand('end',{action:'end_turn'})];
+ const r=combatConstraints(s,cands,null);
+ assert.deepEqual(ids(r),['beckon']);assert.equal(r.rules[0].kind,'play_hp_loss_cards');
+ s.player.energy=0;
+ assert.equal(combatConstraints(s,cands,null).candidates.length,2,'no energy to play it');
+});
