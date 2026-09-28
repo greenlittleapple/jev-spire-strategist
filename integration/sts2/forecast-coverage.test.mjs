@@ -101,3 +101,18 @@ test('Juggernaut hits on each block gain; Crimson Mantle adds no block this turn
  const mantle=card(0,'Crimson Mantle','0','Power','At the start of your turn, lose 1 HP and gain 7 Block.','Self');
  assert.equal(byLabel(decisionCandidates(fight([mantle],{enemyStatus:[]})),'Crimson Mantle').forecast.block,0);
 });
+
+test('random or choice plays keep known effects and stop; simple potions and cards are forecast',()=>{
+ const pot=(slot,name,description,target_type)=>({slot,name,description,target_type,can_use_in_combat:true});
+ const s=fight([strike(0),card(1,'Distraction','1','Skill','Add a random Skill into your Hand. It\'s free to play this turn. Exhaust.','Self')],{enemyStatus:[]});
+ const d=byLabel(decisionCandidates(s),'Strike → E → Distraction').forecast;
+ assert.equal(d.damage,6,'damage before the random card is still known');assert.equal(d.boundary,'random');
+ const v=fight([strike(0)],{enemyStatus:[]});v.player.potions=[pot(0,'Vulnerable Potion','Apply 3 Vulnerable.','AnyEnemy')];
+ assert.equal(byLabel(decisionCandidates(v),'Vulnerable Potion → E → Strike → E').forecast.damage,9);
+ const b=fight([],{enemyStatus:[]});b.player.potions=[pot(0,'Beetle Juice','Enemy\'s attacks deal 30% less damage for the next 4 turns.','AnyEnemy')];
+ assert.equal(byLabel(decisionCandidates(b),'Beetle Juice → E').forecast.incoming,7);
+ const a=fight([card(0,'Ashen Strike','1','Attack','Deal 6 damage. Deals 3 additional damage for each card in your Exhaust Pile.')],{enemyStatus:[]});a.player.exhaust_pile_count=2;
+ assert.equal(byLabel(decisionCandidates(a),'Ashen Strike → E').forecast.damage,12);
+ const r=fight([card(0,'Rupture','1','Power','Whenever you lose HP on your turn, gain 1 Strength.','Self'),strike(1)],{enemyStatus:[]});
+ assert.equal(byLabel(decisionCandidates(r),'Rupture → Strike → E').forecast.damage,6,'Rupture gives no Strength by itself');
+});

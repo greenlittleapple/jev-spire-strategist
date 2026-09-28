@@ -12,9 +12,9 @@ export const POLICY_VERSION = 'jev-visible-v24-hextech';
 const amount = (powers, name) => (powers ?? []).filter(p => p.name?.toLowerCase() === name.toLowerCase()).reduce((n,p) => n + Number(p.amount ?? 0), 0);
 const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? fallback);
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
-const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle"]);
-const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle']);
+const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression"]);
+const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK']);
 
@@ -136,6 +136,11 @@ function applyPower(enemy, name, n) {
   return true;
 }
 
+const STOP_AFTER = {distraction:'random', stoke:'random', 'burning pact':'selection', ashwater:'selection',
+  'power potion':'selection', 'attack potion':'selection', 'skill potion':'selection', 'colorless potion':'selection'};
+// Powers whose effects start on later turns (or later in the turn in ways not simulated).
+const LATER_ONLY = new Set(['rupture','unmovable','juggling','stampede','aggression','powdered demise','metamorphosis']);
+
 // Every block gain goes through here. Juggernaut deals its damage (not an Attack) to a random
 // enemy per gain: exact with one living enemy, otherwise the plan stops at a random boundary.
 function gainBlock(m, n) {
@@ -208,6 +213,7 @@ function apply(m0, a) {
   for(let replay=0;replay<=replayCount;replay++){
   if(replay && (m.hp<=0 || targets.every(e=>e.hp<=0)))break;
   let retaliationHits=0;
+  if (name==='stoke' && replay===0) { for (const c of m.hand.splice(0)) exhaustCard(m,c); if(m.unsupported)return m; }
   let fiendFireCount = 0;
   if (name==='fiend fire' && replay===0) { const burned=m.hand.splice(0); fiendFireCount=burned.length; for (const c of burned) exhaustCard(m,c); if(m.unsupported)return m; }
   const bodySlam = name==='body slam' ? text.match(/\(Deals (\d+) damage\)/i) : null;
@@ -227,7 +233,8 @@ function apply(m0, a) {
     for (const e of targets) {
       const hits = name === 'whirlwind' ? spent : name==='fiend fire' ? fiendFireCount : name==='twin strike' || /Deal \d+ damage twice/i.test(text) ? 2 : name==='spite' ? (m.hp < m.startHp ? 2 : 1) : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
       retaliationHits=hits;
-      const bonus=name==='bully' ? number(text,/Deals (\d+) additional damage/i)*(amount(e.status,'Vulnerable')-(m.originalVulnerable[e.entity_id]??0)) : 0;
+      const bonus=name==='bully' ? number(text,/Deals (\d+) additional damage/i)*(amount(e.status,'Vulnerable')-(m.originalVulnerable[e.entity_id]??0))
+        : name==='ashen strike' ? number(text,/Deals (\d+) additional damage for each card in your Exhaust Pile/i)*m.exhaustCount : 0;
       for (let i=0; i<hits && e.hp>0; i++) hit(m,e,dmg+bonus,isAttack);
     }
   }
@@ -273,9 +280,13 @@ function apply(m0, a) {
     if(m.frailFactor!==1)m.warnings.push('Frail rounding on simulated Dexterity may differ by 1 block.');
   }
   // Strength loss this turn lowers each displayed enemy hit (after Weak when the enemy is Weak).
+  if(name==='beetle juice')for(const e of targets)e.damageFactor=(e.damageFactor??1)*(1-number(text,/deal (\d+)% less damage/i,30)/100);
+  if(name==='regen potion'&&m.maxHp){m.hp=Math.min(m.maxHp,m.hp+number(text,/Gain (\d+) Regen/i));m.warnings.push('Regen heals at the end of this turn and then decays; later turns are not forecast.');}
+  if(LATER_ONLY.has(name))m.warnings.push(`${item.name}: its effect starts later and is not in this turn's numbers.`);
+  if(STOP_AFTER[name]){m.boundary=STOP_AFTER[name];m.warnings.push(`${item.name} adds or chooses unknown cards; re-observe before continuing.`);}
   if(name==='shackling potion'){const n=number(text,/lose (\d+) Strength/i);for(const e of m.enemies.filter(e=>e.hp>0))e.strengthLoss=(e.strengthLoss??0)+n;}
   if(name==='flex potion')m.warnings.push('Temporary Strength applies only to attacks before this turn ends; no future-turn benefit is forecast.');
-  const gainStrength = name==='dominate'?0:number(text,/Gain (\d+) Strength/i);
+  const gainStrength = name==='dominate'||name==='rupture'?0:number(text,/Gain (\d+) Strength/i);
   m.strengthDelta += gainStrength; m.extraStrength += gainStrength;
   if (name === 'energy potion' || name === 'bloodletting') {
     const icons = (text.match(/\[[^\]]*energy_icon[^\]]*\]/g) ?? []).length;
@@ -349,6 +360,7 @@ function forecast(m, s) {
       const match = String(intent.label).trim().match(/^(\d+)(?:\s*[x×]\s*(\d+))?$/i);
       if (!match) { parsed = false; continue; }
       let perHit = Number(match[1]);
+      if (e.damageFactor) perHit = Math.floor(perHit * e.damageFactor);
       if (e.strengthLoss) {
         const weak = amount(before?.status,'Weak') > 0;
         perHit = Math.max(0, perHit - (weak ? Math.floor(e.strengthLoss*.75) : e.strengthLoss));
