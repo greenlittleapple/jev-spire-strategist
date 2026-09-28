@@ -2,7 +2,7 @@
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
 import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
- strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext} from './strategy.mjs';
+ strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
@@ -127,6 +127,14 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    if(status.encountersAsked.length>100)status.encountersAsked.shift();
    trigger=next;
   }
+ }
+ // An enemy that shows a death countdown ("In N turns, you will be eaten and die") asks once
+ // per fight: the fight-start plan was written before the countdown existed.
+ status.countdownsAsked??=[];
+ if(!trigger&&deathCountdown(state)&&!status.countdownsAsked.includes(fightId(state))){
+  status.countdownsAsked.push(fightId(state));
+  if(status.countdownsAsked.length>50)status.countdownsAsked.shift();
+  trigger='death_countdown';
  }
  if(trigger)await consult(trigger);
  let result=await decide();

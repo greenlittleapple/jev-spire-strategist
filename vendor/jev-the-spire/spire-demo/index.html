@@ -21,7 +21,7 @@
 <script>
 const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TRIGGERS={run_start:'Run start',new_act:'New act',route_plan:'Route plan',route_off:'Route change',route_risk:'Elite HP check',owned_screen:'Decision',
- new_encounter:'New encounter',review_encounter:'Plan review',elite_start:'Elite fight',boss_start:'Boss fight',low_hp:'Low HP',new_relic:'New relic',rich_shop:'Shop',jev_uncertain:'Jev unsure'};
+ new_encounter:'New encounter',review_encounter:'Plan review',death_countdown:'Death countdown',elite_start:'Elite fight',boss_start:'Boss fight',low_hp:'Low HP',new_relic:'New relic',rich_shop:'Shop',jev_uncertain:'Jev unsure'};
 function currentPlan(st){
  const p=st.plan;
  if(!p)return {head:'<div class="plan-head"><b>Current plan</b></div><div class="plan-sum">None yet.</div>',body:'<div class="plan-sum">No plan yet.</div>'};
