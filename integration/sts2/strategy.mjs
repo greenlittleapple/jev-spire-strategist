@@ -95,6 +95,8 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   status:(status??[]).map(({name,amount,description})=>({name,amount,description})),intents:(intents??[]).map(({title,label,description})=>({title,label,description}))}));
  if(routes)brief.routes=routes;
  if(facts)brief.facts=facts;
+ // The event's own text often explains what its options really do.
+ if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
  if(!combatScreens.has(state.state_type)){
   brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
   // Keyword definitions attached to offered cards and relics (Exhaust, Ethereal, Dazed...).

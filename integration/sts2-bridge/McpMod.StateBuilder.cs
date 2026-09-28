@@ -1428,7 +1428,10 @@ public static partial class McpMod
         state["in_dialogue"] = inDialogue;
 
         // Event body text
-        state["body"] = SafeGetText(() => eventModel.Description);
+        // The page text lives on the per-player mutable event; the canonical template never advances
+        // pages, so its Description stays null. Fall back to the opening page text.
+        var liveEvent = eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent;
+        state["body"] = SafeGetText(() => liveEvent.Description) ?? SafeGetText(() => liveEvent.InitialDescription);
 
         // Options from UI
         var options = new List<Dictionary<string, object?>>();

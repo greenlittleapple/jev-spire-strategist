@@ -51,3 +51,10 @@ test('briefs keep relic, potion and event relic descriptions, keywords and the c
  const c=strategistBrief(fight,[],'elite_start',null);
  assert.equal(c.combat_state.energy,3);assert.equal(c.combat_state.hand[0].name,'Strike');assert.equal(c.combat_state.status[0].name,'Strength');
 });
+
+test('event briefs carry the event name and page text',()=>{
+ const state={state_type:'event',run:{live_id:'r',act:2,floor:21},player:{hp:50,max_hp:80,deck:[],relics:[],potions:[]},
+  event:{event_name:'Room Full of Cheese',body:'Cheese everywhere.',options:[]}};
+ const b=strategistBrief(state,[{id:'a0',label:'Gorge',details:{description:'Choose 2 of 8 random Common cards.'}}],'owned_screen',null);
+ assert.deepEqual(b.event,{name:'Room Full of Cheese',text:'Cheese everywhere.'});
+});
