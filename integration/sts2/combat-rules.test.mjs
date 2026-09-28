@@ -131,3 +131,13 @@ test('while every enemy is Intangible only the least-HP-loss plays remain',()=>{
  const normal=fight({type:'boss',enemies:[enemy('f','Soul Fysh',123)]});
  assert.equal(combatConstraints(normal,cands,null).candidates.length,4,'no rule without Intangible');
 });
+
+test('block is removed on a turn with no incoming damage even while a Beckon costs HP',()=>{
+ const beckon={name:'Beckon',cost:'1',can_play:true,description:'At the end of your turn, if this is in your Hand,  lose 6 HP.'};
+ const s=fight({type:'boss'});s.player.hand=[beckon,{name:'Defend',cost:'1',can_play:true,type:'Skill',description:'Gain 5 Block.'}];s.player.energy=2;
+ const cands=[cand('beckon',{action:'play_card',card_index:0},{hpLoss:0}),
+  {...cand('defend',{action:'play_card',card_index:1},{hpLoss:6,endTurnCardHpLoss:6}),details:{type:'Skill',description:'Gain 5 Block.'}},
+  cand('end',{action:'end_turn'},{hpLoss:6,endTurnCardHpLoss:6})];
+ const r=combatConstraints(s,cands,null);
+ assert.deepEqual(ids(r),['beckon']);assert.deepEqual(r.rules.map(x=>x.kind),['play_hp_loss_cards','block_not_needed']);
+});

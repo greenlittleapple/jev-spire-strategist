@@ -83,6 +83,11 @@ if(strategist)strategist.status.enabled=view.decisionMode==='claude';
 let mapMemory=null;
 view.planBenefitEnabled=planBenefitEnabled;
 view.adviser=lunaEnabled?'gpt-5.6-luna:max':null;
+// Fixed waits for bridges without a readiness report; a reported "ready" replaces them.
+const SETTLE_MS = Number(process.env.SPIRE_SETTLE_MS ?? 700), COOLDOWN_MS = Number(process.env.SPIRE_COOLDOWN_MS ?? 1200);
+const READY_SETTLE_MS = Number(process.env.SPIRE_READY_SETTLE_MS ?? 60), READY_SCREEN_SETTLE_MS = Number(process.env.SPIRE_READY_SCREEN_SETTLE_MS ?? 250);
+const TICK_MS = Number(process.env.SPIRE_TICK_MS ?? 150);
+const combatTypes = new Set(['monster','elite','boss']);
 let generation = 0, busy = false, lastExecuted = '', latestState = null, waitingSince = 0, nextDecisionAt = 0;
 let checkpoint = null, checkpointCheckedAt = 0;
 async function log(event) {
@@ -199,12 +204,17 @@ async function step(token, preview = false) {
       else view.message = 'Waiting for the game to finish the last action…';
       return;
     }
+    // The bridge reports when queued game actions are still resolving.
+    if (s.ready === false) { view.message = 'Waiting for the game to finish resolving…'; return; }
     waitingSince = 0;
     // Card effects update energy, piles and hand at different animation frames.
-    // Require a quiet observation interval before paying for a new decision.
-    await new Promise(resolve => setTimeout(resolve, 700));
+    // Require a quiet observation interval before paying for a new decision; with a readiness
+    // report, combat needs only a brief recheck and other screens a short UI transition.
+    const settle = s.ready === true ? (combatTypes.has(s.state_type) ? READY_SETTLE_MS : READY_SCREEN_SETTLE_MS) : SETTLE_MS;
+    await new Promise(resolve => setTimeout(resolve, settle));
     if (token !== generation) return;
-    if (fingerprint(await observe()) !== hash) { view.message = 'Waiting for animations to settle…'; return; }
+    const settled = await observe();
+    if (fingerprint(settled) !== hash || settled.ready === false) { view.message = 'Waiting for animations to settle…'; return; }
     if (view.decisions >= MAX_DECISIONS || view.inputTokens >= MAX_INPUT_TOKENS) {
       stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.'); return;
     }
@@ -271,7 +281,7 @@ async function step(token, preview = false) {
       mapMemory.position = {col:chosen.details.col, row:chosen.details.row, type:chosen.details.type};
     if(result.decisionSource==='forced')view.forcedActions++;
     view.message = token === generation ? chosen.label : 'Paused. The last dispatched move was accepted; wait for its animation before taking over.';
-    nextDecisionAt = Date.now() + 1200;
+    nextDecisionAt = Date.now() + (s.ready === true ? 0 : COOLDOWN_MS);
     await log({ ...event, outcome: 'executed', result: outcome });
   } catch (error) {
     stop(error.message === 'fetch failed' ? 'Game bridge unavailable. Launch Slay the Spire 2 with STS2_MCP enabled.' : error.message);
@@ -284,11 +294,12 @@ async function step(token, preview = false) {
 }
 
 // Sequential runner: at most one model request and one action in flight.
+let lastIdleObserve = 0;
 setInterval(async () => {
   if (busy) return;
   if (view.mode === 'running') await step(generation);
-  else try { await observe(); } catch { view.connected = false; }
-}, 600).unref();
+  else if (Date.now() - lastIdleObserve >= 600) { lastIdleObserve = Date.now(); try { await observe(); } catch { view.connected = false; } }
+}, TICK_MS).unref();
 
 const server = http.createServer(async (req, res) => {
   const json = (code, data) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };

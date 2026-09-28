@@ -286,9 +286,12 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  // Ending the turn with energy to play a card that costs HP if held (Beckon) wastes that HP.
  const hpIfHeld=(state.player?.hand??[]).filter(c=>c.can_play!==false&&/if this is in your Hand,\s+lose \d+ HP/i.test(c.description??'')&&Number(c.cost)<=(state.player?.energy??0));
  if(hpIfHeld.length)apply('play_hp_loss_cards',kept.filter(c=>c.command.action!=='end_turn'),{card:hpIfHeld[0].name});
- // Pure block does nothing when ending the turn now loses no HP and nothing uses block.
- const end=kept.find(c=>c.command.action==='end_turn');
- if(end?.forecast?.hpLoss===0&&end.forecast.quality!=='unknown'&&!usesBlock(state))
+ // Pure block does nothing when ending the turn now takes no damage and nothing uses block.
+ // HP lost from held cards (Beckon) ignores block, so only damage counts; End turn is read from
+ // the original options because the Beckon rule may already have removed it.
+ const end=candidates.find(c=>c.command.action==='end_turn');
+ const damageTaken=end?.forecast&&Number.isFinite(end.forecast.hpLoss)?end.forecast.hpLoss-(end.forecast.endTurnCardHpLoss??0):null;
+ if(damageTaken===0&&end.forecast.quality!=='unknown'&&!usesBlock(state))
   apply('block_not_needed',kept.filter(c=>!(c.command.action==='play_card'&&pureBlock(c.details))));
  // Target priority: the first entry that matches a living enemy picks the focus.
  const enemies=alive(state);

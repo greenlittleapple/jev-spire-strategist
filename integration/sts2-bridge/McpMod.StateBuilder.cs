@@ -62,6 +62,7 @@ public static partial class McpMod
     {
         var result = new Dictionary<string, object?>();
         result["draw_knowledge_tracking"] = DrawKnowledge.Ready;
+        AddReadiness(result);
         var tree = (Godot.Engine.GetMainLoop()) as SceneTree;
 
         if (tree?.Root != null)

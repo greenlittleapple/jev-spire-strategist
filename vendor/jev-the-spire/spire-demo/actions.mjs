@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 
 export function fingerprint(state) {
-  return createHash('sha256').update(JSON.stringify(state)).digest('hex');
+  const { ready, busy, ...content } = state ?? {};
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
 // Every selectable answer is constructed from the current game state. Jev
