@@ -86,3 +86,18 @@ test('a per-turn HP-loss cap limits forecast damage',()=>{
  const c=byLabel(decisionCandidates(s),'Strike → E → Strike → E');
  assert.equal(c.forecast.damage,20);assert.notEqual(c.forecast.boundary,'combat_won');
 });
+
+test('Juggernaut hits on each block gain; Crimson Mantle adds no block this turn',()=>{
+ const defend=i=>card(i,'Defend','1','Skill','Gain 5 Block.','Self');
+ const jug=card(0,'Juggernaut','2','Power','Whenever you gain Block, deal 6 damage to a random enemy.','Self');
+ const s=fight([jug,defend(1)],{enemyStatus:[]});
+ const played=byLabel(decisionCandidates(s),'Juggernaut → Defend').forecast;
+ assert.equal(played.damage,6,'Juggernaut itself deals nothing; the Defend after it hits for 6');
+ const active=fight([defend(0),defend(1)],{status:[{name:'Juggernaut',amount:6,description:'x'}],enemyStatus:[]});
+ assert.equal(byLabel(decisionCandidates(active),'Defend → Defend').forecast.damage,12);
+ const two=fight([defend(0)],{status:[{name:'Juggernaut',amount:6,description:'x'}],enemyStatus:[]});
+ two.battle.enemies.push({...two.battle.enemies[0],entity_id:'f',name:'F'});
+ assert.equal(byLabel(decisionCandidates(two),'Defend').forecast.boundary,'random','two enemies: random target');
+ const mantle=card(0,'Crimson Mantle','0','Power','At the start of your turn, lose 1 HP and gain 7 Block.','Self');
+ assert.equal(byLabel(decisionCandidates(fight([mantle],{enemyStatus:[]})),'Crimson Mantle').forecast.block,0);
+});

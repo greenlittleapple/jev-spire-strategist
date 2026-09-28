@@ -12,9 +12,9 @@ export const POLICY_VERSION = 'jev-visible-v24-hextech';
 const amount = (powers, name) => (powers ?? []).filter(p => p.name?.toLowerCase() === name.toLowerCase()).reduce((n,p) => n + Number(p.amount ?? 0), 0);
 const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? fallback);
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
-const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond"]);
+const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle"]);
 const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty']);
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK']);
 
@@ -45,6 +45,7 @@ function initial(s) {
     dexterityDelta: 0, frailFactor: amount(s.player.status,'Frail') > 0 ? .75 : 1,
     strengthDelta: 0, weakFactor: amount(s.player.status,'Weak') > 0 ? .75 : 1,
     feelNoPain:amount(s.player.status,'Feel No Pain'),
+    juggernaut:amount(s.player.status,'Juggernaut'),
     vicious:amount(s.player.status,'Vicious'),
     // Cruelty: extra percent damage against Vulnerable enemies (status amount is the percent).
     cruelty:amount(s.player.status,'Cruelty'),
@@ -135,9 +136,20 @@ function applyPower(enemy, name, n) {
   return true;
 }
 
+// Every block gain goes through here. Juggernaut deals its damage (not an Attack) to a random
+// enemy per gain: exact with one living enemy, otherwise the plan stops at a random boundary.
+function gainBlock(m, n) {
+  if (!(n > 0)) return;
+  m.block += n;
+  if (!m.juggernaut) return;
+  const living = m.enemies.filter(e => e.hp > 0);
+  if (living.length === 1) hit(m, living[0], m.juggernaut, false);
+  else if (living.length > 1) { m.boundary = 'random'; m.warnings.push('Juggernaut hits a random enemy; re-observe enemy HP.'); }
+}
+
 // One card leaves the hand to the exhaust pile. Unknown on-exhaust triggers stop the plan.
 function exhaustCard(m, card) {
-  m.exhaustCount++; m.block += m.feelNoPain; m.exhaustedThisTurn = true;
+  m.exhaustCount++; gainBlock(m, m.feelNoPain); m.exhaustedThisTurn = true;
   if (/when(?: this is)? exhausted|whenever you exhaust/i.test(card.description ?? '')) {
     m.unsupported = true; m.boundary = 'unsupported';
     m.warnings.push(`${card.name} has an on-exhaust effect that is not modeled; re-observe.`);
@@ -200,7 +212,7 @@ function apply(m0, a) {
   if (name==='fiend fire' && replay===0) { const burned=m.hand.splice(0); fiendFireCount=burned.length; for (const c of burned) exhaustCard(m,c); if(m.unsupported)return m; }
   const bodySlam = name==='body slam' ? text.match(/\(Deals (\d+) damage\)/i) : null;
   if (name==='body slam' && !bodySlam) m.warnings.push('Body Slam current value not shown; Strength is not included.');
-  const damageMatch = name==='flame barrier' ? null : name==='mind blast' ? [null,String(m.drawCount)]
+  const damageMatch = name==='flame barrier' || name==='juggernaut' ? null : name==='mind blast' ? [null,String(m.drawCount)]
     : name==='body slam' ? [null,String(Math.max(0,(bodySlam ? Number(bodySlam[1])-m.startBlock : 0)+m.block))] : text.match(/Deal (\d+) damage/i);
   if (damageMatch) {
     let dmg = Number(damageMatch[1]);
@@ -224,15 +236,15 @@ function apply(m0, a) {
     if(m.unsupported||m.hp<=0)return m;
   }
   if (isAttack) {
-    m.attacks++; m.block += m.rage;
+    m.attacks++; gainBlock(m, m.rage);
     if(m.freeAttack) { m.freeAttack=false; m.boundary='free_attack_consumed'; m.warnings.push('Re-read card costs after consuming Free Attack.'); }
-    if (m.fan && m.fanProgress !== null && (m.fanProgress + m.attacks) % 3 === 0) m.block += 4;
+    if (m.fan && m.fanProgress !== null && (m.fanProgress + m.attacks) % 3 === 0) gainBlock(m, 4);
   }
   }
   if (name==='thrash') exhaustRandom(m, c=>c.type==='Attack', 'Thrash');
   if (name==='cinder') exhaustRandom(m, ()=>true, 'Cinder');
   if (m.unsupported) return m;
-  if(!potion && item.type==='Skill' && m.fork!==null) { m.fork++; if(m.fork%10===0)m.block+=7; }
+  if(!potion && item.type==='Skill' && m.fork!==null) { m.fork++; if(m.fork%10===0)gainBlock(m,7); }
   if(name==='flame barrier')m.warnings.push('Immediate block included; retaliation damage and any kills during enemy attacks are omitted. Incoming may be overestimated.');
   if(name==='fortifier')m.block*=3;
   if(name==='colossus')m.colossus=true;
@@ -243,13 +255,15 @@ function apply(m0, a) {
   if(name==='relax')m.warnings.push('Relax draw and energy arrive next turn, not now. They cannot rescue lethal incoming damage this turn.');
   if(name==='toric toughness')m.warnings.push('Only immediate Toric Toughness block is included; later-turn block does not prevent damage this turn.');
   if(name==='stone armor')m.plating+=number(text,/Gain (\d+) Plating/i);
-  if (name === 'feel no pain') m.feelNoPain+=number(text,/gain (\d+) Block/i);
+  if (name === 'juggernaut') m.juggernaut += number(text,/deal (\d+) damage/i);
+  else if (name === 'crimson mantle') m.warnings.push('Crimson Mantle block arrives at the start of later turns, not this turn.');
+  else if (name === 'feel no pain') m.feelNoPain+=number(text,/gain (\d+) Block/i);
   else if (name === 'rage') m.rage += number(text,/gain (\d+) Block/i);
   else {
     const baseBlock=number(text,/Gain (\d+) Block/i);
-    if(baseBlock) m.block += baseBlock + (!potion ? Math.floor(m.dexterityDelta*m.frailFactor) : 0);
+    if(baseBlock) gainBlock(m, baseBlock + (!potion ? Math.floor(m.dexterityDelta*m.frailFactor) : 0));
     if(name==='evil eye') {
-      if(m.exhaustedThisTurn) m.block += number(text,/Gain another (\d+) Block/i) + Math.floor(m.dexterityDelta*m.frailFactor);
+      if(m.exhaustedThisTurn) gainBlock(m, number(text,/Gain another (\d+) Block/i) + Math.floor(m.dexterityDelta*m.frailFactor));
       else m.warnings.push('Evil Eye bonus counts only exhausts in this plan; an exhaust earlier this turn may add more block.');
     }
   }
@@ -275,7 +289,7 @@ function apply(m0, a) {
     m.warnings.push('Bloodletting energy and HP cost are included, but added Tainted consequences require a fresh observation.');
   }
   if (name === 'offering' && !m.noEnergyGain) m.energy += number(text,/Gain (\d+) Energy/i,(text.match(/\[[^\]]*energy_icon[^\]]*\]/g)??[]).length);
-  if (!potion && /(?:^|[.!]\s*)Exhaust\.?$/i.test(text.trim())) {m.block+=m.feelNoPain;m.exhaustCount++;m.exhaustedThisTurn=true;}
+  if (!potion && /(?:^|[.!]\s*)Exhaust\.?$/i.test(text.trim())) {gainBlock(m,m.feelNoPain);m.exhaustCount++;m.exhaustedThisTurn=true;}
   if(name==='armaments'){m.boundary='upgrade';m.warnings.push('Armaments block is included; re-observe card upgrades before continuing.');}
   for (const e of targets) {
     const weak = number(text,/Apply (\d+) Weak/i), vuln = number(text,/Apply (\d+) Vulnerable/i);
@@ -296,7 +310,7 @@ function apply(m0, a) {
   if(name==='blood potion' && m.maxHp)m.hp=Math.min(m.maxHp,m.hp+Math.floor(m.maxHp*number(text,/Heal for (\d+)%/i,20)/100));
   if(name==='pillage' && !m.noDraw){m.boundary='draw';m.warnings.push('Pillage draws unknown cards: re-observe before continuing.');}
   if(name==='headbutt'){m.boundary='selection';m.warnings.push('Headbutt damage is included; re-observe the discard-to-top choice before continuing.');}
-  if(name==='true grit'){m.block+=m.feelNoPain;m.exhaustCount++;m.exhaustedThisTurn=true;m.boundary='selection';m.warnings.push('True Grit block and one exhaust are included; the exhausted card is re-observed.');}
+  if(name==='true grit'){gainBlock(m,m.feelNoPain);m.exhaustCount++;m.exhaustedThisTurn=true;m.boundary='selection';m.warnings.push('True Grit block and one exhaust are included; the exhausted card is re-observed.');}
   if (name!=='vicious' && name!=='relax' && !m.noDraw && /Draw \d+ cards?/i.test(text)) { m.boundary = 'draw'; m.warnings.push('Stops before unknown drawn cards; re-observe before continuing.'); }
   if(name==='battle trance')m.noDraw=true;
   if(!potion && m.unmovable && /Gain \d+ Block/i.test(text) && name!=='rage' && name!=='feel no pain'){m.boundary='block_modifier_consumed';m.warnings.push('Re-read live block values after Unmovable: first-card doubling must not be reused.');}
