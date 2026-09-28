@@ -101,6 +101,26 @@ export function currentMap(state, mapMemory) {
  return {map: null, position: null};
 }
 
+// Damage an enemy deals when killed (e.g. Steam Eruption), set against current HP.
+// Forecasts list these rules as notes; this gives Jev the number every turn.
+export function killCosts(state) {
+ if (!combatScreens.has(state.state_type) || !state.battle) return null;
+ const effects = [];
+ for (const enemy of state.battle.enemies ?? []) {
+  if (!(enemy.hp > 0) || enemy.hp >= 1e8) continue;
+  for (const s of enemy.status ?? []) {
+   if (!/when (?:it is |this enemy is )?killed|when this (?:enemy )?dies|on death/i.test(s.description ?? '')) continue;
+   const damage = Number(s.description.match(/deals? (\d+) damage/i)?.[1]);
+   effects.push({enemy: enemy.name, rule: s.description, ...(Number.isFinite(damage) ? {damage} : {})});
+  }
+ }
+ if (!effects.length) return null;
+ const hp = state.player?.hp ?? null, total = effects.reduce((n, e) => n + (e.damage ?? 0), 0);
+ return {effects, player_hp: hp, known_damage_total: total,
+  exceeds_current_hp: hp != null && total >= hp,
+  note: 'Killing these enemies triggers this damage; plan HP and block for when it resolves. Values change as the power grows.'};
+}
+
 export function computedFacts(state, candidates, mapMemory) {
  const facts = {}, p = state.player ?? {};
  const {map, position} = currentMap(state, mapMemory);
@@ -124,6 +144,8 @@ export function computedFacts(state, candidates, mapMemory) {
    floors_to_boss: ahead?.floors_to_boss ?? null};
  }
  if (typeof p.gold === 'number' && ahead) facts.gold = {gold: p.gold, shops_ahead_this_act: ahead.shops};
+ const deathEffects = killCosts(state);
+ if (deathEffects) facts.death_effects = deathEffects;
  if (!Object.keys(facts).length) return null;
  facts.note = 'Exact counts from the visible act map and live state. Ranges are minimum-maximum over all paths to this act\'s boss. Unknown rooms are unrevealed; potion and gold values carry no judgment.';
  return facts;
