@@ -24,6 +24,7 @@ const lunaEnabled=process.env.SPIRE_ADVISER==='luna';
 if(lunaEnabled&&planBenefitEnabled)throw Error('Choose one experiment at a time: Luna or plan-benefit.');
 import { readFile, mkdir, appendFile, writeFile, rename, open, unlink } from 'node:fs/promises';
 import { readActiveCheckpoint, attachCheckpoint, defaultSaveRoot } from '../../../integration/sts2/save-state.mjs';
+import { characterName } from '../../../integration/sts2/character.mjs';
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -101,7 +102,7 @@ const READY_SETTLE_MS = Number(process.env.SPIRE_READY_SETTLE_MS ?? 60), READY_S
 const TICK_MS = Number(process.env.SPIRE_TICK_MS ?? 150);
 const combatTypes = new Set(['monster','elite','boss']);
 let generation = 0, busy = false, lastExecuted = '', latestState = null, waitingSince = 0, nextDecisionAt = 0;
-let checkpoint = null, checkpointCheckedAt = 0;
+let checkpoint = null, checkpointCheckedAt = 0, runCharacter = null;
 async function log(event) {
   const entry = { time: new Date().toISOString(), ...event };
   view.events.unshift(entry); view.events.length = Math.min(view.events.length, 60);
@@ -189,6 +190,14 @@ async function observe(retries = 2) {
       view.save = { available: false, reason: error.message };
     }
   } else if (!live.run) { checkpoint = null; checkpointCheckedAt = 0; view.save = { available: false, reason: 'No active run' }; }
+  // The bridge sends the displayed character title, which a skin mod can replace. Name the
+  // character from the save's ID instead, kept for the run so the name (part of the state
+  // fingerprint) doesn't change when the save is briefly unreadable.
+  if (live.player && id) {
+    const players = checkpoint?.available && checkpoint.checkpoint?.run_id === id ? checkpoint.data?.players : null;
+    if (players?.length === 1 && characterName(players[0].character_id)) runCharacter = { run: id, name: characterName(players[0].character_id) };
+    if (runCharacter?.run === id) live.player.character = runCharacter.name;
+  }
   let joined = live;
   try { joined = attachCheckpoint(live, checkpoint); }
   catch(error) {
