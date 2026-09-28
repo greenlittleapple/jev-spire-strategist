@@ -41,7 +41,7 @@ Write a compact, persistent run strategy grounded in the actual deck, relics, ru
 Fields:
 - combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
   Code also removes plays forecast to be fatal when another play is forecast to survive, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
-- fight: when the trigger is a fight start (new_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. On other triggers use {"plan":"","target_priority":[]}; the saved fight plans are unaffected.
+- fight: when the trigger is a fight start (new_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names or the selectors lowest_hp, biggest_attack, can_kill, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. On other triggers use {"plan":"","target_priority":[]}; the saved fight plans are unaffected.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed).
@@ -103,14 +103,15 @@ export function planFields(plan) {
 const routeOptions=(candidates,plan)=>candidates.filter(c=>c.command?.action==='choose_map_node'&&c.details?.col!=null&&plan.route_path.includes(nodeKey(c.details)));
 
 // The first option in the plan's order that is still offered.
-const orderedAllowed=(candidates,plan)=>{
- for(const key of plan.allowed_options??[]){const c=candidates.find(x=>optionKey(x)===key);if(c)return c;}
+const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
+ for(const key of list??[]){const c=candidates.find(x=>optionKey(x)===key);if(c)return c;}
  return null;
 };
 
 // ownScreens: the strategist decides owned screens outright (default); off, it is only
 // consulted there when Jev is unsure (escalationReason).
-export function replanReason(state,plan,candidates=[],{ownScreens=true}={}) {
+// screenChoices: {screenKey: ordered option keys} from earlier answers in this run.
+export function replanReason(state,plan,candidates=[],{ownScreens=true,screenChoices={}}={}) {
  const run=state.run;
  if(!run?.live_id)return null;
  if(!plan||plan.run_id!==run.live_id)return 'run_start';
@@ -121,8 +122,9 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true}={}) {
  if(hp!=null&&hp<threshold&&(plan.hp_percent??100)>=threshold)return 'low_hp';
  // Owned screens: ask on arrival, and again when none of the chosen options is offered
  // (a new event page, or a shop list that is used up).
- if(ownScreens&&isOwnedScreen(state)&&(plan.screen!==screenKey(state)||(plan.allowed_options?.length&&!orderedAllowed(candidates,plan))))return 'owned_screen';
- if(state.state_type==='shop'&&(state.player?.gold??0)>=150&&plan.screen!==screenKey(state))return 'rich_shop';
+ // A screen with one option (such as a confirmation) needs no decision.
+ if(ownScreens&&isOwnedScreen(state)&&candidates.length>1&&!orderedAllowed(candidates,plan,screenChoices[screenKey(state)]))return 'owned_screen';
+ if(!ownScreens&&state.state_type==='shop'&&(state.player?.gold??0)>=150&&plan.screen!==screenKey(state))return 'rich_shop';
  if(state.state_type==='map'&&state.map?.nodes?.length&&plan.screen!==screenKey(state)){
   // The first map screen of an act is where the whole route is visible.
   if(plan.route_act!==run.act)return 'route_plan';
@@ -233,6 +235,26 @@ export function restConstraint(state,candidates) {
 }
 
 // Combat rules, applied in order; each keeps at least one option and records what it removed.
+// Target selectors: a name matches enemies by name; lowest_hp, biggest_attack and can_kill
+// pick one living enemy from live HP, block, intents and the forecast.
+const intentDamage=e=>(e.intents??[]).reduce((n,i)=>{
+ const m=String(i.label??'').trim().match(/^(\d+)(?:\s*[x×]\s*(\d+))?/i);
+ return n+(m&&/attack|aggressive/i.test(`${i.title??''} ${i.type??''} ${i.description??''}`)?Number(m[1])*Number(m[2]??1):0);
+},0);
+const effectiveHp=e=>(e.hp??0)+(e.block??0);
+export const TARGET_SELECTORS=['lowest_hp','biggest_attack','can_kill'];
+export function resolveTarget(wanted,enemies,candidates=[]) {
+ const pick=(list,score)=>list.length?list.reduce((a,b)=>score(b)>score(a)?b:a):null;
+ if(wanted==='lowest_hp')return pick(enemies,e=>-effectiveHp(e));
+ if(wanted==='biggest_attack'){const attackers=enemies.filter(e=>intentDamage(e)>0);return pick(attackers,e=>intentDamage(e)*1000-effectiveHp(e));}
+ if(wanted==='can_kill'){
+  const killable=new Set(candidates.flatMap(c=>(c.forecast?.defeatedEnemies??[]).map(d=>d.id)));
+  return pick(enemies.filter(e=>killable.has(e.entity_id)),e=>intentDamage(e)*1000-effectiveHp(e));
+ }
+ const name=wanted.toLowerCase();
+ return name?enemies.find(e=>e.name?.toLowerCase().includes(name))??null:null;
+}
+
 // fight = the saved plan for the current encounter ({plan, target_priority}) or null.
 export function combatConstraints(state,candidates,plan,fight=null) {
  if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
@@ -250,12 +272,11 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  const end=kept.find(c=>c.command.action==='end_turn');
  if(end?.forecast?.hpLoss===0&&end.forecast.quality!=='unknown'&&!usesBlock(state))
   apply('block_not_needed',kept.filter(c=>!(c.command.action==='play_card'&&pureBlock(c.details))));
- // Target priority: the highest-priority enemy still alive is the focus.
+ // Target priority: the first entry that matches a living enemy picks the focus.
  const enemies=alive(state);
  let focus=null;
  for(const wanted of fight?.target_priority??[]){
-  const name=String(wanted).trim().toLowerCase();
-  focus=name&&enemies.find(e=>e.name?.toLowerCase().includes(name));
+  focus=resolveTarget(String(wanted).trim(),enemies,kept);
   if(focus)break;
  }
  if(focus&&enemies.length>1){
@@ -269,14 +290,14 @@ export function combatConstraints(state,candidates,plan,fight=null) {
 }
 
 // Constrained mode: code enforces the parts of the plan that are checkable.
-export function constrainCandidates(state,candidates,plan,mode='constrained',{fight=null,ownScreens=true}={}) {
+export function constrainCandidates(state,candidates,plan,mode='constrained',{fight=null,ownScreens=true,screenChoices={}}={}) {
  if(!plan||mode!=='constrained'||plan.run_id!==state.run?.live_id)return {candidates,constraint:null};
  if(combatScreens.has(state.state_type)){
   const {candidates:kept,rules}=combatConstraints(state,candidates,plan,fight);
   return {candidates:kept,constraint:rules.length?{kind:'combat',rules,removed:candidates.length-kept.length}:null};
  }
- if(ownScreens&&plan.screen===screenKey(state)&&plan.allowed_options?.length&&isOwnedScreen(state)){
-  const first=orderedAllowed(candidates,plan);
+ if(ownScreens&&isOwnedScreen(state)){
+  const first=orderedAllowed(candidates,plan,screenChoices[screenKey(state)]);
   if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1}};
  }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){

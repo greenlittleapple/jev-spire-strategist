@@ -41,7 +41,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  }
  const {channel,status,playbook=null}=strategist;
  const {map,position}=currentMap(state,mapMemory);
- status.fights??={};status.encountersAsked??=[];
+ status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
  const adopt=async()=>{
   const request=await channel.current();
@@ -49,6 +49,12 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(!answer)return false;
   status.plan=stampPlan(answer.plan,request.stamp,{request_id:request.id,answeredAt:answer.answeredAt});
   status.answers++;status.available=true;
+  // Remember each screen's ordered list so returning to that screen reuses it.
+  if(status.plan.allowed_options?.length){
+   if(Object.keys(status.screenChoices).some(k=>!k.startsWith(String(status.plan.run_id))))status.screenChoices={};
+   status.screenChoices[status.plan.screen]=status.plan.allowed_options;
+   const keys=Object.keys(status.screenChoices);if(keys.length>60)delete status.screenChoices[keys[0]];
+  }
   if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
    await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
   events.push({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,plan:status.plan});
@@ -80,15 +86,16 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  };
  const decide=async()=>{
   if(replayed)return direct('replay','Reference run',replayed);
+  if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('forced',null,candidates[0]);
   const fight=playbook&&encounter?await playbook.get(encounter):null;
-  const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false});
+  const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // A single allowed option is Claude's choice; no Jev call is needed.
   if(constraint&&options.length===1)return direct('claude','Claude strategy',options[0],{constraint});
   return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state,fight)}),constraint};
  };
 
  await adopt();
- let trigger=replanReason(state,status.plan,candidates,{ownScreens:status.ownScreens!==false});
+ let trigger=replanReason(state,status.plan,candidates,{ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
  // A replayed screen needs no strategist decision.
  if(trigger==='owned_screen'&&replayed)trigger=null;
  // A normal fight's first sight of an encounter with no saved plan asks for one, once per fight.

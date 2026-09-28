@@ -42,7 +42,8 @@ test('deterministic triggers fire on run, act, boss, HP, shop and relic events o
  assert.equal(replanReason(low,p),'low_hp');
  assert.equal(replanReason(low,adopted(low,[],'low_hp')),null);
  const other={...shop(),run:run(6)};
- assert.equal(replanReason(other,p),'owned_screen','the strategist decides every shop');
+ assert.equal(replanReason(other,p,c),'owned_screen','the strategist decides every shop');
+ assert.equal(replanReason(other,p,c.slice(0,1)),null,'a single option needs no decision');
  assert.equal(replanReason(other,p,[],{ownScreens:false}),'rich_shop');
  assert.equal(replanReason({...other,player:{...other.player,gold:100}},p,[],{ownScreens:false}),null);
  const newRelic={...shop(100),state_type:'rewards',run:run(8)};newRelic.player.relics=[relic,{id:'VAJRA',name:'Vajra',description:'+1 Strength.'}];
@@ -146,7 +147,7 @@ test('uncertain Jev on a run-shaping screen escalates once and re-asks with the 
 }));
 
 test('without an answer, play continues on the old plan and stops waiting until one arrives',()=>withChannel(async channel=>{
- const s=shop(100),c=decisionCandidates(s),status=newStrategyStatus({waitMs:1500});
+ const s=shop(100),c=decisionCandidates(s),status=newStrategyStatus({waitMs:1500,ownScreens:false});
  let result=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:async()=>jev('a3')});
  assert.equal(result.answers.move.choice,'a3');
  assert.equal(status.available,false);assert.equal(status.timeouts,1);assert.equal(status.plan,null);

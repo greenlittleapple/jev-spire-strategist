@@ -103,3 +103,30 @@ test('a replayed owned screen skips the strategist; a changed one is logged as d
  const d=await hierarchicalDeliberate({state:other,candidates:decisionCandidates(other),strategist:{channel,status},replay,ask:async q=>jev(Object.keys(q.questions.move.criteria)[0])});
  assert.ok(d.strategyEvents.some(e=>e.kind==='replay_diverged'));
 }));
+
+test('target selectors pick live enemies by HP, attack or a forecast kill',async()=>{
+ const {resolveTarget,combatConstraints}=await import('./strategy.mjs');
+ const rat=(id,hp,label,title='Aggressive')=>({entity_id:id,name:'Two-Tailed Rat',hp,max_hp:20,block:0,status:[],intents:[{title,label}]});
+ const rats=[rat('a',20,'8'),rat('b',10,'3x2 (6)'),rat('c',5,'','Strategic')];
+ assert.equal(resolveTarget('biggest_attack',rats).entity_id,'a');
+ assert.equal(resolveTarget('lowest_hp',rats).entity_id,'c');
+ assert.equal(resolveTarget('can_kill',rats,[{forecast:{defeatedEnemies:[{id:'b'}]}}]).entity_id,'b');
+ assert.equal(resolveTarget('can_kill',rats,[]),null,'no kill available falls through');
+ const hit=id=>({id:'hit'+id,label:'Strike',command:{action:'play_card',card_index:0,target:id},forecast:{survives:true,defeatedEnemies:[]}});
+ const state={state_type:'monster',run:{live_id:'r'},player:{hp:50,max_hp:80},battle:{enemies:rats}};
+ const r=combatConstraints(state,[hit('a'),hit('b'),hit('c')],{combat:{}},{plan:'x',target_priority:['can_kill','biggest_attack']});
+ assert.deepEqual(r.candidates.map(c=>c.id),['hita'],'no kill available, so the biggest attacker is the focus');
+});
+
+test('owned screens: a confirmation is taken without asking, and a revisited shop reuses its list',()=>withDir(async dir=>{
+ const channel=fileChannel(dir),status=newStrategyStatus({waitMs:300});
+ status.plan=stampPlan(plan(),requestStamp({...shop(),state_type:'event',run:run(1)},[],'run_start'));
+ const confirm={state_type:'card_select',run:run(6),player:{hp:60,max_hp:80,gold:100,deck:[],relics:[],potions:[],status:[]}};
+ const one=[{id:'a0',label:'Confirm selected cards',command:{action:'confirm_selection'}}];
+ const r=await hierarchicalDeliberate({state:confirm,candidates:one,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ assert.equal(r.answers.move.choice,'a0');assert.equal(status.requests,0);
+ const s=shop(),c=decisionCandidates(s),leave=c.find(x=>x.command.action==='proceed');
+ status.screenChoices={[`run-1:1:6:shop`]:[JSON.stringify({command:leave.command,label:leave.label})]};
+ const back=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ assert.equal(back.answers.move.choice,leave.id);assert.equal(status.requests,0,'the remembered list is reused');
+}));
