@@ -39,7 +39,8 @@ export function cardSummary(stats, name) {
   if (r.picks[n] == null) continue;
   floors.push(r.floor);
   const after = [...r.fights].filter(f => Number(f.split(':')[1]) >= r.picks[n]).length;
-  fights += after; plays += r.plays[n]?.size ?? 0;
+  fights += after;
+  plays += [...(r.plays[n] ?? [])].filter(p => Number(p.split(':')[1]) >= r.picks[n]).length;
  }
  return {offered: c.offered, picked: c.picked,
   ...(fights ? {plays_per_fight_after_pick: Math.round(plays / fights * 10) / 10} : {}),

@@ -4,6 +4,7 @@ import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
+import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
 import {replayChoice} from './replay.mjs';
 
@@ -41,6 +42,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
  }
  const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
+ const cardStats=()=>strategist.cardStats??null;
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -73,6 +75,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
     else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}}
    // Intents each enemy showed round by round in recent fights (this one included).
    if(movesets&&brief.enemies)for(const e of brief.enemies){const seen=patternFor(movesets,e.name);if(seen.length)e.seen_pattern=seen;}
+   // Earlier runs: how often an offered card was taken, played per fight afterwards, and run depth.
+   if(cardStats()&&['card_reward','shop','card_select'].includes(state.state_type))for(const o of brief.current_options??[]){const past=cardSummary(cardStats(),o.label);if(past)o.past_runs=past;}
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,

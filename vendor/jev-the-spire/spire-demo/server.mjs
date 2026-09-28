@@ -9,6 +9,7 @@ import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts
 import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
 import {makeGlossary,bridgeLookup} from '../../../integration/sts2/glossary.mjs';
 import {loadMovesets,recordIntents} from '../../../integration/sts2/movesets.mjs';
+import {loadCardStats} from '../../../integration/sts2/card-stats.mjs';
 import {replayer} from '../../../integration/sts2/replay.mjs';
 import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
@@ -79,6 +80,8 @@ view.strategyHistory=Array.isArray(view.strategyHistory)?view.strategyHistory:[]
 loadHistory(logFile).then(h=>{if(h.length)view.strategyHistory=h;});
 // Enemy move sequences seen in logged fights, shown to the strategist as patterns.
 if(strategist)loadMovesets(logFile).then(m=>{for(const [k,v] of Object.entries(m))strategist.movesets[k]??=v;});
+// How earlier card picks worked out, shown on card reward and shop options.
+if(strategist)loadCardStats(logFile).then(c=>{strategist.cardStats=c;});
 const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
