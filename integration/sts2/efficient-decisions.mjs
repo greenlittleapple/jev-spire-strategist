@@ -74,8 +74,8 @@ export function isForcedChoice(state,candidates) {
  if(state.state_type==='map')return command==='choose_map_node'&&state.map?.next_options?.length===1;
  if(state.state_type==='event')return (command==='advance_dialogue'&&state.event?.in_dialogue===true)
   ||(command==='choose_event_option'&&(state.event?.options??[]).filter(o=>!o.is_locked).length===1);
- if(state.state_type==='rewards')return command==='proceed'&&state.rewards?.items?.length===0;
- if(state.state_type==='treasure')return command==='proceed'&&state.treasure?.relics?.length===0;
+ if(state.state_type==='rewards')return command==='proceed'&&(state.rewards?.items?.length??0)===0;
+ if(state.state_type==='treasure')return command==='proceed'&&(state.treasure?.relics?.length??0)===0; // relics is absent once taken
  if(state.state_type==='rest_site')return command==='proceed'&&!(state.rest_site?.options??[]).some(o=>o.is_enabled);
  return false;
 }
