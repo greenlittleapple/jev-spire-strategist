@@ -98,3 +98,15 @@ test('a single offered option is taken without a Jev call and is not labelled fo
  const result=await efficientDeliberate({state,candidates,ask:()=>assert.fail('A single option must not call Jev')});
  assert.equal(result.decisionSource,'single_option');assert.equal(result.answers.move.choice,'a0');assert.equal(result.usage.input_tokens,0);
 });
+
+test('a dangerous turn where the chosen line loses far more than the best surviving line is reviewed once',async()=>{
+ const {dangerReviewReason}=await import('./efficient-decisions.mjs');
+ const state={state_type:'monster',run:{live_id:'danger',act:1,floor:9},battle:{round:2},player:{hp:40,max_hp:80}};
+ const c=(id,action,hpLoss)=>({id,label:id,command:{action},forecast:{quality:'partial',survives:true,hpLoss}});
+ const cands=[c('attack','play_card',22),c('block','play_card',4),c('end','end_turn',24)];
+ const reason=dangerReviewReason(state,cands,cands[0],{fightPlan:'Block fully.'});
+ assert.match(reason,/loses 24 HP.*forecast to lose 22; block loses 4.*Fight plan: Block fully/);
+ assert.equal(dangerReviewReason(state,cands,cands[0]),null,'once per turn');
+ const calm={...state,battle:{round:3}};
+ assert.equal(dangerReviewReason(calm,[c('attack','play_card',8),c('block','play_card',0),c('end','end_turn',8)],c('attack','play_card',8)),null,'not a dangerous turn');
+});

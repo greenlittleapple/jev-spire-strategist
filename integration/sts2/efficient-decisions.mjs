@@ -107,6 +107,29 @@ export function resourceReviewReason(state,candidates,chosen) {
 
 // Turn key -> reviewed. One order review per turn keeps the cost bounded.
 const orderReviews=new Set();
+const dangerReviews=new Set();
+// A dangerous turn (ending now loses at least 25% of max HP, or drops below the plan's replan
+// threshold) where the chosen line loses at least max(10, 12% of max HP) more than the best
+// known surviving line. One review per turn.
+export function dangerReviewReason(state,candidates,chosen,{fightPlan=null,replanPercent=30}={}) {
+ if(!combatScreens.has(state.state_type))return null;
+ const maxHp=state.player?.max_hp,hp=state.player?.hp;
+ if(!maxHp||!Number.isFinite(hp))return null;
+ const end=candidates.find(c=>c.command.action==='end_turn'),endLoss=end?.forecast?.hpLoss;
+ if(end?.forecast?.quality==='unknown'||!Number.isFinite(endLoss))return null;
+ if(endLoss<0.25*maxHp&&100*(hp-endLoss)/maxHp>=replanPercent)return null;
+ const known=candidates.filter(c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives===true&&Number.isFinite(c.forecast?.hpLoss));
+ const mine=chosen.forecast?.hpLoss;
+ if(!known.length||!Number.isFinite(mine))return null;
+ const best=known.reduce((a,c)=>c.forecast.hpLoss<a.forecast.hpLoss?c:a);
+ if(mine-best.forecast.hpLoss<Math.max(10,Math.ceil(0.12*maxHp)))return null;
+ const turn=`${state.run?.live_id}:${state.run?.floor}:${state.battle?.round}`;
+ if(dangerReviews.has(turn))return null;
+ dangerReviews.add(turn);if(dangerReviews.size>200)dangerReviews.delete(dangerReviews.keys().next().value);
+ return `Dangerous turn: ending now loses ${endLoss} HP (${hp}/${maxHp}). This line is forecast to lose ${mine}; ${best.label} loses ${best.forecast.hpLoss}.`
+  +(fightPlan?` Fight plan: ${fightPlan}`:'')
+  +' Keep this line only if it kills an attacker or its damage clearly saves more HP over the fight than the defensive line saves now.';
+}
 // An attack chosen first while a non-attack setup card leads to more forecast damage this turn.
 export function orderReviewReason(state,candidates,chosen,{minGain=3}={}) {
  if(!combatScreens.has(state.state_type)||chosen.command.action!=='play_card')return null;
@@ -125,8 +148,11 @@ export function orderReviewReason(state,candidates,chosen,{minGain=3}={}) {
  return `Card order: this attacks first, but playing ${top.map(c=>`${cardOf(c).name} first (up to ${best.get(key(c))} forecast damage this turn)`).join(' or ')} beats the best attack-first line (${mine}). Setup such as Strength, Vulnerable or Cruelty should come before the attacks it boosts. Keep attacking first only if it kills, avoids a harmful trigger, or block and energy make the setup line worse.`;
 }
 
-export function reviewReason(state,candidates,chosen,{resourceReviews=false}={}) {
- if(resourceReviews){const reason=resourceReviewReason(state,candidates,chosen)??orderReviewReason(state,candidates,chosen);if(reason)return reason;}
+export function reviewReason(state,candidates,chosen,{resourceReviews=false,strategy=null}={}) {
+ if(resourceReviews){
+  const danger=dangerReviewReason(state,candidates,chosen,{fightPlan:strategy?.fight_plan?.plan??null,replanPercent:strategy?.replan_below_hp_percent??30});
+  const reason=danger??resourceReviewReason(state,candidates,chosen)??orderReviewReason(state,candidates,chosen);if(reason)return reason;
+ }
  if(!combatScreens.has(state.state_type))return null;
  if(chosen.command.action==='end_turn'&&candidates.some(c=>['play_card','use_potion'].includes(c.command.action)))
   return 'Ending while a card or potion can still be used: compare a concrete beneficial alternative, retaliation, self-damage and potion timing. Keeping end turn is valid if those alternatives are harmful or wasteful.';
@@ -158,7 +184,7 @@ export async function efficientDeliberate({state,candidates,ask,recent={},strate
  };
  const first=await evaluate(payload,'Jev is choosing');
  const selected=candidates.find(c=>c.id===first.answers.move.choice);
- const reason=reviewReason(state,candidates,selected,{resourceReviews});
+ const reason=reviewReason(state,candidates,selected,{resourceReviews,strategy});
  let final=first;
  if(reason){
   const review=structuredClone(payload);
