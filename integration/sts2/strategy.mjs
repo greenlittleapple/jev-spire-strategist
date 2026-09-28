@@ -261,19 +261,20 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  let kept=candidates;const rules=[];
  const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
  if(kept.some(survives))apply('avoid_fatal',kept.filter(c=>!fatal(c)));
- // A fully forecast win ends the fight: take it, using as few potions as possible.
- const wins=kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown');
- if(wins.length){
-  const potions=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
-  const fewest=Math.min(...wins.map(potions));
-  apply('take_lethal',wins.filter(c=>potions(c)===fewest));
- }
  const floor=plan?.combat?.hallway_potion_below_hp_percent;
  const hp=pct(state.player);
  if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp>=floor){
   const next=kept.filter(c=>!usesPotion(c));
   // Keep potions when every remaining option without one is forecast to die.
   if(next.some(c=>c.forecast?.survives!==false))apply('hallway_potion',next,{hp_percent:hp,floor});
+ }
+ // A fully forecast win ends the fight: take it, using as few potions as possible.
+ // Runs after the hallway potion rule, so a win that needs a held-back potion is not forced.
+ const wins=kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown');
+ if(wins.length){
+  const potions=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
+  const fewest=Math.min(...wins.map(potions));
+  apply('take_lethal',wins.filter(c=>potions(c)===fewest));
  }
  // Pure block does nothing when ending the turn now loses no HP and nothing uses block.
  const end=kept.find(c=>c.command.action==='end_turn');

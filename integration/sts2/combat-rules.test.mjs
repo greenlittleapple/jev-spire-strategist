@@ -102,3 +102,12 @@ test('a forecast win is taken, with the fewest potions',()=>{
  const unknown=[cands[0],cand('maybe',{action:'play_card',card_index:1},{boundary:'combat_won',survives:null,quality:'unknown'})];
  assert.equal(combatConstraints(fight(),unknown,null).candidates.length,2,'an unknown forecast is not a win');
 });
+
+test('a win that needs a potion is not forced in a hallway fight above the potion floor',()=>{
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'}),
+  cand('ampouleWin',{action:'use_potion',slot:0},{boundary:'combat_won',survives:true},[{command:{action:'use_potion',slot:0}}]),
+  cand('end',{action:'end_turn'})];
+ const r=combatConstraints(fight({hp:64}),cands,plan({hallway_potion_below_hp_percent:40}));
+ assert.deepEqual(ids(r),['strike','end']);assert.deepEqual(r.rules.map(x=>x.kind),['hallway_potion']);
+ assert.deepEqual(ids(combatConstraints(fight({type:'elite',hp:64}),cands,plan({hallway_potion_below_hp_percent:40}))),['ampouleWin'],'elites still take it');
+});
