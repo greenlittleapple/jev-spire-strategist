@@ -145,3 +145,16 @@ test('a plan saved under the old uncounted key is offered as similar, not as the
   assert.equal(await book.similar('Bowlbug'),null,'no similar plan for an uncounted key');
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('a saved fight plan keeps play_first, which the combat rules read from the playbook',async()=>{
+ const {filePlaybook}=await import('./playbook.mjs');
+ const {mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));
+ try{
+  const book=filePlaybook(dir);
+  await book.set('Sandpit x1',{plan:'escape',target_priority:[],play_first:['Struggle']});
+  assert.deepEqual((await book.get('Sandpit x1')).play_first,['Struggle']);
+  await book.set('Bowlbug x1',{plan:'hit',target_priority:[]});
+  assert.equal('play_first' in await book.get('Bowlbug x1'),false);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

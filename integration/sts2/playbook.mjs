@@ -51,7 +51,7 @@ export function filePlaybook(dir) {
   async set(key,fight,meta={}){
    if(!key||!fight?.plan)return;
    const book=await load();
-   book.entries[key]={plan:fight.plan,target_priority:fight.target_priority??[],updatedAt:new Date().toISOString(),...meta};
+   book.entries[key]={plan:fight.plan,target_priority:fight.target_priority??[],...(fight.play_first?.length?{play_first:fight.play_first}:{}),updatedAt:new Date().toISOString(),...meta};
    await mkdir(dir,{recursive:true});
    await writeFile(path+'.tmp',JSON.stringify(book,null,1));
    await rename(path+'.tmp',path);
