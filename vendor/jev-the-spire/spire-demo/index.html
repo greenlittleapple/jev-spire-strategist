@@ -67,7 +67,10 @@ function strategyHistory(s){
 function decisionBar(e){return e.decisionSource==='jev'&&typeof e.answer?.confidence==='number'?Math.max(0,Math.min(100,e.answer.confidence*100)):100;}
 function decisionSource(e){
  const kinds={allowed_options:'options from strategist plan',route:'strategist route',gold_reserve:'strategist gold reserve',combat:'combat rules',strategist_choice:'strategist choice',exhaust_choice:'exhaust rule',rest_waste:'rest rule'};
- const c=e.strategyConstraint,limited=c?(c.kind==='combat'?(c.rules??[]).map(r=>kinds.combat+': '+r.kind.replace(/_/g,' ')).join(', '):kinds[c.kind]??c.kind):'';
+ const c=e.strategyConstraint,limited=c&&c.kind!=='combat'?kinds[c.kind]??c.kind:'';
+ // Combat rules stay off the line; hovering the entry lists the ones that narrowed Jev's options.
+ const rules=c?.kind==='combat'?(c.rules??[]).map(r=>r.kind.replace(/_/g,' ')):[];
+ if(rules.length)return '<span title="'+esc('Combat rules applied: '+rules.join(', '))+'">'+decisionSource({...e,strategyConstraint:null})+'</span>';
  if(e.decisionSource==='claude')return '<span class="src claude">Strategist</span>'+(limited?esc(limited)+' · ':'')+'no Jev call';
  if(e.decisionSource==='replay')return '<span class="src replay">Replay</span>reference run choice';
  if(e.decisionSource==='forced')return '<span class="src forced">Forced</span>No API call · sole legal action';
