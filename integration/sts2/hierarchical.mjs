@@ -7,6 +7,7 @@ import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
 import {encounterResults,planNeedsReview} from './fight-results.mjs';
+import {unmodeledNames,mechanicText,presentNames} from './mechanics.mjs';
 import {replayChoice} from './replay.mjs';
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -45,6 +46,10 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
  const cardStats=()=>strategist.cardStats??null;
  const fightResults=()=>strategist.fightResults??null;
+ const mechanics=strategist.mechanics??null;
+ const known=mechanics?await mechanics.all():{};
+ // Unmodeled powers, relics and cards in this fight that have no saved explanation yet.
+ const unknownHere=['monster','elite','boss'].includes(state.state_type)?[...unmodeledNames(candidates)].filter(([n])=>!known[n]):[];
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -60,6 +65,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    status.screenChoices[status.plan.screen]=status.plan.allowed_options;
    const keys=Object.keys(status.screenChoices);if(keys.length>60)delete status.screenChoices[keys[0]];
   }
+  if(mechanics)for(const m of answer.plan.mechanics??[])await mechanics.set(m.name,m.note,{run:request.stamp.run_id,floor:request.stamp.floor});
   if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
    await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
   events.push({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,plan:status.plan});
@@ -81,6 +87,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    if(movesets&&brief.enemies)for(const e of brief.enemies){const seen=patternFor(movesets,e.name);if(seen.length)e.seen_pattern=seen;}
    // Earlier runs: how often an offered card was taken, played per fight afterwards, and run depth.
    if(cardStats()&&['card_reward','shop','card_select'].includes(state.state_type))for(const o of brief.current_options??[]){const past=cardSummary(cardStats(),o.label);if(past)o.past_runs=past;}
+   if(reason==='unknown_mechanic')brief.unknown_mechanics=unknownHere.map(([name,kind])=>({name,kind,text:mechanicText(state,name)}));
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
@@ -109,7 +116,11 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // A single allowed option is Claude's choice; no Jev call is needed.
   if(constraint&&options.length===1)return direct('claude','Strategist',options[0],{constraint});
-  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state,fight)}),constraint};
+  const strategy=strategyContext(status.plan,state,fight);
+  // Saved explanations of mechanics present now reach Jev directly, not only through plan text.
+  const here=presentNames(state),notes=Object.entries(known).filter(([n])=>here.has(n)).map(([name,{note}])=>({name,note}));
+  if(strategy&&notes.length)strategy.mechanics=notes;
+  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy}),constraint};
  };
 
  await adopt();
@@ -135,6 +146,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   status.countdownsAsked.push(fightId(state));
   if(status.countdownsAsked.length>50)status.countdownsAsked.shift();
   trigger='death_countdown';
+ }
+ // Unmodeled mechanics without a saved explanation ask once per fight.
+ status.mechanicsAsked??=[];
+ if(!trigger&&unknownHere.length&&!status.mechanicsAsked.includes(fightId(state))){
+  status.mechanicsAsked.push(fightId(state));
+  if(status.mechanicsAsked.length>50)status.mechanicsAsked.shift();
+  trigger='unknown_mechanic';
  }
  if(trigger)await consult(trigger);
  let result=await decide();

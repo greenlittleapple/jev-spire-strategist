@@ -179,3 +179,11 @@ test('a death countdown at 4 or less forces an affordable card that extends it',
  assert.deepEqual(ids(r),['escape']);assert.equal(r.rules.at(-1).kind,'countdown_escape');
  boss.status[0].amount=6;assert.equal(combatConstraints(st,cands,plan({})).rules.some(x=>x.kind==='countdown_escape'),false,'not yet urgent');
 });
+
+test('fight.play_first keeps only the listed card while it is affordable (potions stay)',()=>{
+ const st={...fight(),player:{hp:60,max_hp:80,energy:2,hand:[{index:0,name:'Frantic Escape',cost:'1',can_play:true,description:'x'},{index:1,name:'Strike',cost:'1',can_play:true,description:'Deal 6 damage.'}]}};
+ const cands=[cand('escape',{action:'play_card',card_index:0}),cand('strike',{action:'play_card',card_index:1,target:'a'}),cand('potion',{action:'use_potion',slot:0}),cand('end',{action:'end_turn'})];
+ const r=combatConstraints(st,cands,plan({}),{plan:'x',target_priority:[],play_first:['Frantic Escape']});
+ assert.deepEqual(ids(r),['escape','potion']);
+ st.player.energy=0;assert.equal(combatConstraints(st,cands,plan({}),{plan:'x',target_priority:[],play_first:['Frantic Escape']}).rules.some(x=>x.kind==='play_first'),false,'unaffordable: no constraint');
+});
