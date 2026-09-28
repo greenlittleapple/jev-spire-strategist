@@ -209,6 +209,7 @@ async function observe(retries = 2) {
   latestState = s; view.state = s; view.connected = true;
   return s;
 }
+let lastEventId = null;
 async function step(token, preview = false) {
   if (busy || Date.now() < nextDecisionAt) return;
   busy = true;
@@ -217,11 +218,13 @@ async function step(token, preview = false) {
     const observedAt = Date.now();
     const s = await observe();
     view.observeMs = Date.now() - observedAt;
+    if (s.state_type !== 'game_over') lastEventId = s.state_type === 'event' ? s.event?.event_id ?? null : null;
     if (token !== generation) return;
     if (view.uncertainAction) throw Error('A previous action has an uncertain result. Inspect the game and acknowledge it before resuming.');
     if (s.state_type === 'game_over') {
       if(strategist?.fightResults)recordFight(strategist.fightResults,s);
-      stop(s.player?.hp <= 0 ? 'Run ended in defeat.' : 'Run ended. Verify the result in the game.');
+      // The Architect event follows the final boss; the run then ends at 0 HP although it was won.
+      stop(lastEventId === 'THE_ARCHITECT' ? 'Run ended in victory.' : s.player?.hp <= 0 ? 'Run ended in defeat.' : 'Run ended. Verify the result in the game.');
       await log({ kind: 'run_end', state: s }); return;
     }
     if (s.hextech?.available === false) throw Error('Hextech active rules could not be read: '+s.hextech.error);
