@@ -1,6 +1,6 @@
 // Jev decides every move; Claude refreshes a persistent strategy on triggers.
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
-import {computedFacts,currentMap,distinctRoutes,mapNodeKeys} from './route-facts.mjs';
+import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext} from './strategy.mjs';
 
@@ -14,12 +14,13 @@ export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.
 }
 
 // strategist = {channel, status}; status is the persisted dashboard record.
-// withFacts adds exact route/resource facts (jev-compact-v2); strategy always uses them.
+// factsVersion 2 or 3 adds exact route/resource facts (jev-compact-v2/v3); strategy uses v3.
 // mapMemory = {runId, act, map, position} from the runner's last map screen.
-export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},strategist,withFacts=false,mapMemory=null,cancelled=()=>false}) {
+export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,cancelled=()=>false}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
- const facts=withFacts||strategist?computedFacts(state,candidates,mapMemory):null;
- if(!strategist)return efficientDeliberate({state,candidates,ask,recent,onStage,facts});
+ const version=strategist?3:factsVersion,factsPolicy=version>=3?FACTS_V3_POLICY:FACTS_POLICY;
+ const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
+ if(!strategist)return efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy});
  const {channel,status}=strategist,events=[];
  const {map,position}=currentMap(state,mapMemory);
  const adopt=async()=>{
@@ -57,7 +58,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   // A single allowed option is Claude's choice; no Jev call is needed.
   if(constraint&&options.length===1)return {decisionSource:'claude',model:'Claude strategy',usage:{input_tokens:0,output_tokens:0},deliberation:null,constraint,
    answers:{move:{type:'choice',choice:options[0].id,confidence:null,probabilities:{}}}};
-  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,strategy:strategyContext(status.plan,state)}),constraint};
+  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,strategy:strategyContext(status.plan,state)}),constraint};
  };
 
  await adopt();

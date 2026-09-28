@@ -8,7 +8,7 @@ import {efficientDeliberate,EFFICIENT_POLICY} from '../../../integration/sts2/ef
 import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts2/hierarchical.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
 import {STRATEGY_POLICY} from '../../../integration/sts2/strategy.mjs';
-import {FACTS_POLICY} from '../../../integration/sts2/route-facts.mjs';
+import {FACTS_POLICY,FACTS_V3_POLICY} from '../../../integration/sts2/route-facts.mjs';
 import {planBenefitDeliberate,persistentPlan} from './plan-benefit.mjs';
 const planBenefitEnabled=process.env.SPIRE_PLAN_BENEFIT==='1';
 import {assistedDeliberate} from './experiment/assisted.mjs';
@@ -56,14 +56,15 @@ if (saved) Object.assign(view, saved, { mode: 'paused', pending: null, connected
 view.forcedActions ??= 0;
 // Claude (the operator's Claude Code session) answers strategy requests through files.
 // Decision modes: jev (jev-compact-v1 baseline, default), jev_facts (jev-compact-v2:
-// exact route/resource facts) and claude (facts + Claude strategy).
+// exact route/resource facts), jev_facts_v3 (jev-compact-v3: order-aware route facts)
+// and claude (v3 facts + Claude strategy).
 const strategyAvailable=process.env.CLAUDE_STRATEGIST!=='off'&&!lunaEnabled&&!planBenefitEnabled;
 const strategist=strategyAvailable?{channel:fileChannel(process.env.STRATEGY_DIR??resolve(logDir,'../strategy')),
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;
 view.strategy=strategist?.status??null;
-const DECISION_MODES=['jev','jev_facts','claude'];
+const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
 if(strategist)strategist.status.enabled=view.decisionMode==='claude';
@@ -203,7 +204,7 @@ async function step(token, preview = false) {
     const memory=encounterMemory(s,view.events);
     if(planBenefitEnabled)memory.persistentPlan=persistentPlan(s,view.events);
     const result = await (lunaEnabled?assistedDeliberate:planBenefitEnabled?planBenefitDeliberate:hierarchicalDeliberate)({state:planningState,candidates:actions,
-      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,withFacts:view.decisionMode!=='jev',mapMemory,cancelled:()=>token!==generation,
+      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,cancelled:()=>token!==generation,
       onStage:stage=>{view.message=stage;view.pending.stage=stage;},
       ask:async payload=>{
         if(token!==generation)throw Error('Decision cancelled.');
@@ -230,7 +231,7 @@ async function step(token, preview = false) {
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:EFFICIENT_POLICY, decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, preview };
+    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY, decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();
@@ -313,6 +314,7 @@ const server = http.createServer(async (req, res) => {
         if (strategist) { strategist.status.enabled = mode === 'claude'; strategist.status.available = true; }
         view.message = {jev:'Decision mode: Jev baseline (jev-compact-v1). No computed facts, no LLM strategy.',
           jev_facts:'Decision mode: Jev + route/resource facts (jev-compact-v2). No LLM strategy.',
+          jev_facts_v3:'Decision mode: Jev + order-aware route facts (jev-compact-v3). No LLM strategy.',
           claude:'Decision mode: Jev + facts + Claude strategy. Keep the Claude Code session watching for requests.'}[mode];
         await log({kind:'decision_mode',mode}); return json(200,{ok:true});
       }

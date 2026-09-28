@@ -38,7 +38,7 @@ export function summarizeHistory(saved) {
   scope:'Summary of saved room outcomes; past reward offers and detailed per-card history are omitted from inference. The complete save remains local. Current deck, piles and resources come from the live game.'}};
 }
 
-export function efficientQuestion(state,candidates,recent={},strategy=null,facts=null) {
+export function efficientQuestion(state,candidates,recent={},strategy=null,facts=null,factsPolicy=FACTS_POLICY) {
  if(!candidates.length||candidates.length>255)throw Error('Unsupported action count');
  const projected={...state};
  if(state.saved_run)projected.saved_run=summarizeHistory(state.saved_run);
@@ -53,7 +53,7 @@ export function efficientQuestion(state,candidates,recent={},strategy=null,facts
   unfinishedPlan:recent.unfinishedPlan??null,sameFight:stripAssessments(recent.sameFight)
  }:{recentDeckDecisions:stripAssessments(recent.recentDeckDecisions)};
  const focus=combatScreens.has(state.state_type)?'combat':state.state_type==='hand_select'?'card_select':state.state_type==='fake_merchant'?'shop':state.state_type;
- payload.state.policy=facts?FACTS_POLICY:EFFICIENT_POLICY;
+ payload.state.policy=facts?factsPolicy:EFFICIENT_POLICY;
  if(facts)payload.state.computed_facts=facts;
  if(strategy)payload.state.run_strategy=strategy;
  payload.questions={move:{...payload.questions.move,instructions:
@@ -89,13 +89,13 @@ export function reviewReason(state,candidates,chosen) {
  return null;
 }
 
-export async function efficientDeliberate({state,candidates,ask,recent={},strategy=null,facts=null,onStage=()=>{}}) {
+export async function efficientDeliberate({state,candidates,ask,recent={},strategy=null,facts=null,factsPolicy=FACTS_POLICY,onStage=()=>{}}) {
  if(!candidates.length)throw Error('No legal candidates');
  if(isForcedChoice(state,candidates))return {
   decisionSource:'forced',model:null,usage:{input_tokens:0,output_tokens:0},deliberation:null,
   answers:{move:{type:'choice',choice:candidates[0].id,confidence:null,probabilities:{}}}
  };
- const payload=efficientQuestion(state,candidates,recent,strategy,facts),calls=[];
+ const payload=efficientQuestion(state,candidates,recent,strategy,facts,factsPolicy),calls=[];
  const evaluate=async (request,stage)=>{
   onStage(stage);
   const result=await ask(request),answer=result.answers?.move;
@@ -114,6 +114,6 @@ export async function efficientDeliberate({state,candidates,ask,recent={},strate
   final=await evaluate(review,'Jev is checking a risky choice');
  }
  return {...final,decisionSource:'jev',usage: calls.reduce((sum,c)=>({input_tokens:sum.input_tokens+c.input_tokens,output_tokens:sum.output_tokens+c.output_tokens}),{input_tokens:0,output_tokens:0}),
-  deliberation:{version:facts?FACTS_POLICY:EFFICIENT_POLICY,focus:'selective',calls:calls.length,request_usage:calls,reviewReason:reason,
+  deliberation:{version:facts?factsPolicy:EFFICIENT_POLICY,focus:'selective',calls:calls.length,request_usage:calls,reviewReason:reason,
    initial:first.answers.move,assessments:{move:first.answers.move},changed:final.answers.move.choice!==first.answers.move.choice}};
 }

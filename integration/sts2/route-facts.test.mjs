@@ -125,3 +125,27 @@ test('kill-cost facts put on-death damage against current HP',()=>{
  const dead=giant(27,36);dead.battle.enemies[0].hp=999999999;
  assert.equal(computedFacts(dead,[],null).death_effects,undefined,'placeholder HP after death is ignored');
 });
+
+test('v3 route facts are order-aware and exclude the rest before the boss',async()=>{
+ const {orderedOptionRoutes}=await import('./route-facts.mjs');
+ assert.deepEqual(orderedOptionRoutes(map,candidates),{
+  a0:{paths_to_boss:2,elites:0,max_elites_with_rest_before:0,rests_before_boss_rest:0,next_rest_in:3,next_elite_in:null,shops:'0-1',shop_in:2,example_routes:['M$R']},
+  a1:{paths_to_boss:1,elites:1,max_elites_with_rest_before:0,rests_before_boss_rest:0,next_rest_in:3,next_elite_in:1,shops:0,shop_in:null,example_routes:['E?R']}});
+ // A rest before an elite is credited; the pre-boss rest is not.
+ const m2={...map,nodes:[node(0,0,'Ancient',[[0,1]]),node(0,1,'RestSite',[[0,2]]),node(0,2,'Elite',[[0,3]]),node(0,3,'RestSite',[[0,4]]),node(0,4,'Boss')]};
+ const c2=[{id:'a0',command:{action:'choose_map_node',index:0},details:{col:0,row:1,type:'RestSite'}}];
+ const r=orderedOptionRoutes(m2,c2).a0;
+ assert.equal(r.max_elites_with_rest_before,1);assert.equal(r.rests_before_boss_rest,1);assert.equal(r.next_rest_in,1);assert.equal(r.next_elite_in,2);
+});
+
+test('v2 facts are unchanged; v3 is used only when requested and labels its policy',async()=>{
+ const s=mapState();
+ assert.deepEqual(computedFacts(s,candidates,null).route_options,optionRoutes(map,candidates));
+ assert.equal(computedFacts(s,candidates,null).route_note,undefined);
+ const v3=computedFacts(s,candidates,null,{version:3});
+ assert.ok(v3.route_options.a1.example_routes);assert.match(v3.route_note,/right before its boss/);
+ let request;
+ await hierarchicalDeliberate({state:s,candidates,factsVersion:3,
+  ask:async q=>{request=q;return {model:'t',answers:{move:{type:'choice',choice:'a1',confidence:.9,probabilities:{a1:.9}}},usage:{input_tokens:1,output_tokens:1}};}});
+ assert.equal(request.state.policy,'jev-compact-v3');assert.ok(request.state.computed_facts.route_options.a0.example_routes);
+});
