@@ -168,3 +168,14 @@ test('under the hallway floor, a potion line that saves at least max(10, 12% of 
  const unknown=cands.map(c=>c.id==='block'?{...c,forecast:{...c.forecast,quality:'unknown'}}:c);
  assert.deepEqual(ids(combatConstraints(fight({hp:70}),unknown,plan({hallway_potion_below_hp_percent:40}))),['defend','end'],'an unknown forecast does not qualify');
 });
+
+test('a death countdown at 4 or less forces an affordable card that extends it',()=>{
+ const boss=enemy('b','The Insatiable',200,[{name:'Sandpit',amount:3,description:'In 3 turns, you will be eaten and die.'}]);
+ const st={...fight({type:'boss',enemies:[boss]}),player:{hp:60,max_hp:80,energy:3,hand:[
+  {index:0,name:'Frantic Escape',cost:'1',can_play:true,description:'Get farther away. Increase Sandpit by 1. Increase the cost of this card by 1.'},
+  {index:1,name:'Strike',cost:'1',can_play:true,description:'Deal 6 damage.'}]}};
+ const cands=[cand('escape',{action:'play_card',card_index:0}),cand('strike',{action:'play_card',card_index:1,target:'b'}),cand('end',{action:'end_turn'})];
+ const r=combatConstraints(st,cands,plan({}));
+ assert.deepEqual(ids(r),['escape']);assert.equal(r.rules.at(-1).kind,'countdown_escape');
+ boss.status[0].amount=6;assert.equal(combatConstraints(st,cands,plan({})).rules.some(x=>x.kind==='countdown_escape'),false,'not yet urgent');
+});
