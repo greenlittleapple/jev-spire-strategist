@@ -124,7 +124,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(constraint&&options.length===1)return direct('claude','Strategist',options[0],{constraint});
   const strategy=strategyContext(status.plan,state,fight);
   // Saved explanations of mechanics present now reach Jev directly, not only through plan text.
-  const here=presentNames(state),notes=Object.entries(known).filter(([n])=>here.has(n)).map(([name,{note}])=>({name,note}));
+  const here=presentNames(state),notes=Object.entries(known).filter(([n,{note}])=>here.has(n)&&note!=='No special handling noted.').map(([name,{note}])=>({name,note}));
   if(strategy&&notes.length)strategy.mechanics=notes;
   return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy}),constraint};
  };

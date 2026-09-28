@@ -2,7 +2,7 @@
 // (.private/sts2/strategy/mechanics.json). Explanations are shown to Jev whenever the item is present.
 import {readFile,writeFile,mkdir,rename,stat} from 'node:fs/promises';
 import {join} from 'node:path';
-import {supportedCards} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
+import {supportedCards,supportedPotions} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
 
 // Names the forecasts flag as unmodeled ("Unmodeled enemy power: Ravenous") or could not play.
 export function unmodeledNames(candidates) {
@@ -14,7 +14,7 @@ export function unmodeledNames(candidates) {
   }
   // notModeled names the card a line stopped on; a supported card there stopped for another reason
   // (an enemy power already flagged above), so only unsupported cards count.
-  for(const n of c.forecast?.notModeled??[]){const name=String(n??'').replace(/\+$/,'');if(name&&!supportedCards.has(name.toLowerCase()))names.set(name,'card');}
+  for(const n of c.forecast?.notModeled??[]){const name=String(n??'').replace(/\+$/,'');if(name&&!supportedCards.has(name.toLowerCase())&&!supportedPotions.has(name.toLowerCase()))names.set(name,'card');}
  }
  return names;
 }
