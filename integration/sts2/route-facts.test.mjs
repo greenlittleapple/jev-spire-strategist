@@ -116,7 +116,8 @@ test('the facts policy passes facts to Jev without a strategist',async()=>{
 test('kill-cost facts put on-death damage against current HP',()=>{
  const giant=(hp,amount)=>({state_type:'boss',run,player:{hp,max_hp:80,potions:[]},battle:{round:9,enemies:[
   {name:'Waterfall Giant',hp:59,max_hp:240,status:[{name:'Steam Eruption',amount,description:`When killed, deals ${amount} damage at the end of your next turn.`}]},
-  {name:'Minion',hp:5,max_hp:5,status:[{name:'Rage',description:'Gains Strength.'}]}]}});
+  {name:'Minion',hp:5,max_hp:5,status:[{name:'Rage',description:'Gains Strength.'}]},
+  {name:'Eye with Teeth',hp:20,max_hp:20,status:[{name:'Revive',description:'When this dies, it revives next turn at full HP.'}]}]}});
  const k=computedFacts(giant(27,36),[],null).death_effects;
  assert.deepEqual(k.effects.map(e=>[e.enemy,e.damage]),[['Waterfall Giant',36]]);
  assert.equal(k.known_damage_total,36);assert.equal(k.exceeds_current_hp,true);

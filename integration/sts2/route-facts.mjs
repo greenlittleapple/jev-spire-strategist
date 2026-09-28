@@ -110,12 +110,13 @@ export function killCosts(state) {
   if (!(enemy.hp > 0) || enemy.hp >= 1e8) continue;
   for (const s of enemy.status ?? []) {
    if (!/when (?:it is |this enemy is )?killed|when this (?:enemy )?dies|on death/i.test(s.description ?? '')) continue;
+   // Only damage-dealing rules; revival and other death rules are covered by forecasts.
    const damage = Number(s.description.match(/deals? (\d+) damage/i)?.[1]);
-   effects.push({enemy: enemy.name, rule: s.description, ...(Number.isFinite(damage) ? {damage} : {})});
+   if (Number.isFinite(damage)) effects.push({enemy: enemy.name, rule: s.description, damage});
   }
  }
  if (!effects.length) return null;
- const hp = state.player?.hp ?? null, total = effects.reduce((n, e) => n + (e.damage ?? 0), 0);
+ const hp = state.player?.hp ?? null, total = effects.reduce((n, e) => n + e.damage, 0);
  return {effects, player_hp: hp, known_damage_total: total,
   exceeds_current_hp: hp != null && total >= hp,
   note: 'Killing these enemies triggers this damage; plan HP and block for when it resolves. Values change as the power grows.'};
