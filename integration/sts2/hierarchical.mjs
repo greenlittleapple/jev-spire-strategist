@@ -20,7 +20,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
  const version=strategist?3:factsVersion,factsPolicy=version>=3?FACTS_V3_POLICY:FACTS_POLICY;
  const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
- if(!strategist)return efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy});
+ // v3 also enables the potion and shop resource reviews.
+ const resourceReviews=version>=3;
+ if(!strategist)return efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews});
  const {channel,status}=strategist,events=[];
  const {map,position}=currentMap(state,mapMemory);
  const adopt=async()=>{
@@ -58,7 +60,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   // A single allowed option is Claude's choice; no Jev call is needed.
   if(constraint&&options.length===1)return {decisionSource:'claude',model:'Claude strategy',usage:{input_tokens:0,output_tokens:0},deliberation:null,constraint,
    answers:{move:{type:'choice',choice:options[0].id,confidence:null,probabilities:{}}}};
-  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,strategy:strategyContext(status.plan,state)}),constraint};
+  return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy:strategyContext(status.plan,state)}),constraint};
  };
 
  await adopt();

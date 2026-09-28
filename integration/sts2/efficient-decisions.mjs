@@ -80,7 +80,22 @@ export function isForcedChoice(state,candidates) {
  return false;
 }
 
-export function reviewReason(state,candidates,chosen) {
+// v3 adds two resource reviews: potions in normal fights (always drunk in round 1 at
+// full HP in logged runs) and leaving a shop with gold for an affordable removal or potion.
+export function resourceReviewReason(state,candidates,chosen) {
+ const p=state.player??{},action=chosen.command.action;
+ if(state.state_type==='monster'&&action==='use_potion')
+  return 'This spends a potion in a normal (non-elite, non-boss) fight. Potions are scarce and elites and the boss are harder. Using computed_facts (potions held, floors to boss) and the visible enemy intents, compare the HP this fight can realistically cost without the potion against keeping it. Keep the potion choice only if this fight threatens a large HP loss or death.';
+ if(state.state_type==='shop'&&action==='proceed'&&(p.gold??0)>=100){
+  const slotFree=(p.potions?.length??0)<(p.max_potion_slots??0);
+  const useful=candidates.filter(c=>c.command.action==='shop_purchase'&&(c.details?.category==='card_removal'||(c.details?.category==='potion'&&slotFree)));
+  if(useful.length)return `Leaving the shop with ${p.gold} gold while a card removal or potion is affordable. Gold has no value at the end of the run; computed_facts give shops still reachable this act. Compare leaving against every affordable purchase, including removing a weak card. Keep leaving only if nothing offered helps the run.`;
+ }
+ return null;
+}
+
+export function reviewReason(state,candidates,chosen,{resourceReviews=false}={}) {
+ if(resourceReviews){const reason=resourceReviewReason(state,candidates,chosen);if(reason)return reason;}
  if(!combatScreens.has(state.state_type))return null;
  if(chosen.command.action==='end_turn'&&candidates.some(c=>['play_card','use_potion'].includes(c.command.action)))
   return 'Ending while a card or potion can still be used: compare a concrete beneficial alternative, retaliation, self-damage and potion timing. Keeping end turn is valid if those alternatives are harmful or wasteful.';
@@ -89,7 +104,7 @@ export function reviewReason(state,candidates,chosen) {
  return null;
 }
 
-export async function efficientDeliberate({state,candidates,ask,recent={},strategy=null,facts=null,factsPolicy=FACTS_POLICY,onStage=()=>{}}) {
+export async function efficientDeliberate({state,candidates,ask,recent={},strategy=null,facts=null,factsPolicy=FACTS_POLICY,resourceReviews=false,onStage=()=>{}}) {
  if(!candidates.length)throw Error('No legal candidates');
  if(isForcedChoice(state,candidates))return {
   decisionSource:'forced',model:null,usage:{input_tokens:0,output_tokens:0},deliberation:null,
@@ -105,7 +120,7 @@ export async function efficientDeliberate({state,candidates,ask,recent={},strate
  };
  const first=await evaluate(payload,'Jev is choosing');
  const selected=candidates.find(c=>c.id===first.answers.move.choice);
- const reason=reviewReason(state,candidates,selected);
+ const reason=reviewReason(state,candidates,selected,{resourceReviews});
  let final=first;
  if(reason){
   const review=structuredClone(payload);
