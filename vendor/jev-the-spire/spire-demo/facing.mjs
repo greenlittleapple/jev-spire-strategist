@@ -17,7 +17,7 @@ export function facingDamage(state,steps,enemies){
  for(const e of targets){
   for(const intent of e.intents??[]){
    if(!/attack/i.test(intent.type??''))continue;
-   const m=String(intent.label).match(/^(\d+)(?:\s*[x×]\s*(\d+))?$/);if(!m)return null;
+   const m=String(intent.label).match(/^(\d+)(?:\s*[x×]\s*(\d+))?(?:\s*\(\d+\))?$/);if(!m)return null;
    const displayed=+m[1],hits=+(m[2]??1);
    if(final===current){low+=displayed*hits;high+=displayed*hits;continue;}
    // Keep both rounding conventions; no double multiplication of rear damage.

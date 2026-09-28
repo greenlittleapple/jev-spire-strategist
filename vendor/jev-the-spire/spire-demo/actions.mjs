@@ -122,7 +122,7 @@ export function factsFor(s) {
   for (const enemy of enemies.filter(e => e.hp > 0)) for (const intent of enemy.intents ?? []) {
     if (!/attack|deathblow/i.test(intent.type) && !/attack.*\d+ damage/i.test(intent.description??'')) continue;
     const text = String(intent.label ?? '').replace(/\[.*?\]/g, '').trim();
-    const match = text.match(/^(\d+)(?:\s*[x×]\s*(\d+))?$/i);
+    const match = text.match(/^(\d+)(?:\s*[x×]\s*(\d+))?(?:\s*\(\d+\))?$/i);
     if (match) knownAttack += Number(match[1]) * Number(match[2] ?? 1);
     else allAttacksParsed = false;
   }

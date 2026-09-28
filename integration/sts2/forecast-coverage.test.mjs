@@ -116,3 +116,27 @@ test('random or choice plays keep known effects and stop; simple potions and car
  const r=fight([card(0,'Rupture','1','Power','Whenever you lose HP on your turn, gain 1 Strength.','Self'),strike(1)],{enemyStatus:[]});
  assert.equal(byLabel(decisionCandidates(r),'Rupture → Strike → E').forecast.damage,6,'Rupture gives no Strength by itself');
 });
+
+test('Replay repeats the whole card; Duplicator and One-Two Punch add a play; Buffer cancels a hit',()=>{
+ const pommel=card(0,'Pommel Strike','1','Attack','Deal 9 damage. Draw 1 card. Replay 1.');
+ const p=byLabel(decisionCandidates(fight([pommel],{enemyStatus:[]})),'Pommel Strike → E').forecast;
+ assert.equal(p.damage,18,'the replay still happens after the draw');assert.equal(p.boundary,'draw');
+ const bash=card(0,'Bash','2','Attack','Deal 8 damage. Apply 2 Vulnerable. Replay 1.');
+ assert.equal(byLabel(decisionCandidates(fight([bash],{enemyStatus:[]})),'Bash → E').forecast.damage,20,'8, then 12 into the Vulnerable it applied');
+ const otp=card(0,'One-Two Punch','0','Skill','This turn, your next Attack is played an extra time.','Self');
+ assert.equal(byLabel(decisionCandidates(fight([otp,strike(1)],{enemyStatus:[]})),'One-Two Punch → Strike → E').forecast.damage,12);
+ const s=fight([],{enemyStatus:[]});s.battle.enemies[0].intents=[{type:'Attack',label:'5x2',description:'x'}];
+ s.player.potions=[{slot:0,name:'Lucky Tonic',description:'Gain 1 Buffer.',target_type:'AnyPlayer',can_use_in_combat:true}];
+ assert.equal(byLabel(decisionCandidates(s),'Lucky Tonic').forecast.hpLoss,5,'one of the two hits is cancelled');
+ const r=card(0,'Forgotten Ritual','0','Skill','Gain [ironclad_energy_icon.png][ironclad_energy_icon.png][ironclad_energy_icon.png]. Exhaust.','Self');
+ assert.equal(byLabel(decisionCandidates(fight([r],{enemyStatus:[]})),'Forgotten Ritual').forecast.energyLeft,6);
+});
+
+test('multi-hit intents labelled with a total ("3x7 (21)") are parsed',async()=>{
+ const {factsFor}=await import('../../vendor/jev-the-spire/spire-demo/actions.mjs');
+ const s=fight([card(0,'Defend','1','Skill','Gain 5 Block.','Self')],{enemyStatus:[]});
+ s.battle.enemies[0].intents=[{type:'Attack',label:'3x7 (21)',description:'This enemy intends to Attack for 3 damage 7 times.'}];
+ const f=byLabel(decisionCandidates(s),'Defend').forecast;
+ assert.equal(f.incoming,21);assert.equal(f.hpLoss,16);assert.equal(f.survives,true);
+ assert.equal(factsFor(s).displayed_incoming_attack_total,21);
+});
