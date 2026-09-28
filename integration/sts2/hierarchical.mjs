@@ -65,7 +65,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    status.screenChoices[status.plan.screen]=status.plan.allowed_options;
    const keys=Object.keys(status.screenChoices);if(keys.length>60)delete status.screenChoices[keys[0]];
   }
-  if(mechanics)for(const m of answer.plan.mechanics??[])await mechanics.set(m.name,m.note,{run:request.stamp.run_id,floor:request.stamp.floor});
+  if(mechanics){
+   const meta={run:request.stamp.run_id,floor:request.stamp.floor};
+   for(const m of answer.plan.mechanics??[])await mechanics.set(m.name,m.note,meta);
+   // Items asked about but not explained are recorded too, so they do not trigger again.
+   const answered=new Set((answer.plan.mechanics??[]).map(m=>m.name));
+   for(const m of request.brief?.unknown_mechanics??[])if(!answered.has(m.name))await mechanics.set(m.name,'No special handling noted.',meta);
+  }
   if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
    await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
   events.push({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,plan:status.plan});
