@@ -2,7 +2,7 @@
 
 Watch **TypeSafe Jev play Slay the Spire 2** on your computer.
 
-![Jev the Spire: Ironclad with the TypeSafe logo head beside the Jev decision panel](docs/images/jev-the-spire.png)
+![Jev the Spire: Ironclad with the TypeSafe logo head beside the Jev decision panel](https://raw.githubusercontent.com/alexmeckes/jev-the-spire/8bab787b7e2a135d86d674007a4a8fa80b4a9c3c/docs/images/jev-the-spire.png)
 
 Jev chooses cards, targets, rewards, routes, and purchases. A local dashboard shows its choices, competing options, and estimated outcomes. You can preview a decision, play one move, or turn on autoplay.
 
