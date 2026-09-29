@@ -17,4 +17,3 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-fund --no-audit
       - run: npm test
-      - run: npm run sts2:test

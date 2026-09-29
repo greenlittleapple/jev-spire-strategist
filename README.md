@@ -119,6 +119,26 @@ You need Slay the Spire 2 on Steam (tested on v0.111.0), the .NET 9 SDK, Node.js
 
 `npm run sts2:scorecard` summarizes every logged run, and `npm run sts2:progress -- --refresh` rebuilds the charts above from the local logs. Logs, saves and the key stay in the ignored `.private/` folder and `.env`. Setup details, controls and recovery steps are in [docs/STS2.md](docs/STS2.md); verification evidence is in [docs/STS2-VERIFICATION.md](docs/STS2-VERIFICATION.md).
 
+## Porting to another game
+
+Only Slay the Spire 2 is implemented so far. The division of work between a fast decider, a slower strategist and enforced rules doesn't depend on the game, but most of the code that makes it play well does.
+
+- **Reusable as is:** the file channel the strategist answers through (`integration/sts2/strategy-channel.mjs`) and the plan validator (`validatePlan` in `strategy.mjs`, which takes the plan's JSON schema as an argument).
+- **Reusable after separating out STS2 code:**
+  - the session CLI (`strategy-cli.mjs`), whose check that route nodes are on the act map is STS2-specific
+  - the decision loop in `integration/sts2/hierarchical.mjs`: check triggers, consult the strategist, remove options outside the plan, take a single remaining option without a model call, otherwise ask Jev
+  - the runner's safety checks: a fresh observation before every action, pause, and a dispatch log written before each command
+  - the scorecard and chart generator
+
+Each new game needs:
+
+1. A bridge that exposes structured state and legal actions (here a C# mod serving localhost HTTP).
+2. Candidate actions with the facts and forecasts Jev chooses from (here one-turn combat forecasts and route facts).
+3. Triggers: the moments worth a strategist consult.
+4. A plan schema: what the strategist decides, and how each field is enforced.
+5. Rules: deterministic filters over the candidates, each leaving at least one option.
+6. A progress measure for the scorecard and chart (here the floor reached).
+
 ## Repository layout
 
 | Path | Contents |
@@ -128,7 +148,6 @@ You need Slay the Spire 2 on Steam (tested on v0.111.0), the .NET 9 SDK, Node.js
 | `integration/sts2-draw-tests/` | .NET harness for the draw-pile tracker |
 | `vendor/jev-the-spire/` | Jev the Spire's runner, planner and dashboard, modified to load the strategist layer |
 | `docs/` | Setup and design (`STS2.md`), verification records, chart data |
-| `src/`, `docs/WORKSHOP.md` | A separate game-independent harness and offline demo |
 
 ## License and credits
 
