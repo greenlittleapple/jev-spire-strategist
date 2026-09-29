@@ -119,7 +119,15 @@ let snapshotChain = Promise.resolve(), snapshotTimer = null;
 function writeSnapshot() {
   const write = snapshotChain.then(async () => {
     await writeFile(snapshotFile + '.tmp', JSON.stringify(view), { mode: 0o600 });
-    await rename(snapshotFile + '.tmp', snapshotFile);
+    // Windows reports EPERM/EACCES/EBUSY while another process (scanner, indexer, reader) briefly
+    // holds session.json; JEV15 paused at the Act 2 boss on one. Retry before failing the step.
+    for (let attempt = 0; ; attempt++) {
+      try { await rename(snapshotFile + '.tmp', snapshotFile); break; }
+      catch (error) {
+        if (attempt >= 9 || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
+        await new Promise(r => setTimeout(r, Math.min(500, 50 * 2 ** attempt)));
+      }
+    }
   });
   snapshotChain = write.catch(error => console.error('Snapshot write failed:', error.message));
   return write;
