@@ -225,3 +225,11 @@ test('a healing potion is not drunk when less HP is missing than it heals, even 
  const dying=cands.map(c=>c.id==='drink'?c:{...c,forecast:{...c.forecast,survives:false}});
  assert.deepEqual(ids(combatConstraints(s(85),dying,null)),['drink'],'kept when everything else dies');
 });
+
+test('play_first yields when the forced line loses much more HP than the best line',()=>{
+ const st={...fight({type:'boss'}),player:{hp:40,max_hp:80,energy:4,hand:[{index:0,name:'Juggernaut',cost:'2',can_play:true,description:'x'},{index:1,name:'Uppercut+',cost:'2',can_play:true,description:'y'}]}};
+ const fp={plan:'x',target_priority:[],play_first:['Juggernaut']};
+ const lines=jug=>[cand('jug',{action:'play_card',card_index:0},{hpLoss:jug}),cand('upper',{action:'play_card',card_index:1,target:'a'},{hpLoss:3}),cand('end',{action:'end_turn'},{hpLoss:30})];
+ assert.equal(ids(combatConstraints(st,lines(27),plan({}),fp)).includes('upper'),true,'27 vs 3 exceeds the margin: not forced');
+ assert.deepEqual(ids(combatConstraints(st,lines(5),plan({}),fp)),['jug'],'within the margin: forced');
+});

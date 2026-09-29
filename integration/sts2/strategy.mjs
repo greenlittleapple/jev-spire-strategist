@@ -389,7 +389,14 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  const first=new Set((fight?.play_first??[]).map(n=>String(n).replace(/\+$/,'').toLowerCase()));
  if(first.size){
   const idx=new Set((state.player?.hand??[]).filter(c=>c.can_play!==false&&Number(c.cost)<=(state.player?.energy??0)&&first.has(String(c.name).replace(/\+$/,'').toLowerCase())).map(c=>c.index));
-  if(idx.size)apply('play_first',kept.filter(c=>c.command.action==='use_potion'||(c.command.action==='play_card'&&idx.has(c.command.card_index))));
+  const firstLines=kept.filter(c=>c.command.action==='use_potion'||(c.command.action==='play_card'&&idx.has(c.command.card_index)));
+  // A setup card is not forced into a turn it makes much worse: the best forced line must stay within
+  // the danger margin (max(10, 12% max HP)) of the best surviving line. Countdown escapes always apply.
+  const bestLoss=list=>Math.min(...list.filter(c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives!==false&&Number.isFinite(c.forecast?.hpLoss)).map(c=>c.forecast.hpLoss));
+  const margin=Math.max(10,Math.ceil(0.12*(state.player?.max_hp??0)));
+  const bf=bestLoss(firstLines),bk=bestLoss(kept);
+  const costly=!deathCountdown(state)&&Number.isFinite(bf)&&Number.isFinite(bk)&&bf-bk>=margin;
+  if(idx.size&&!costly)apply('play_first',firstLines);
  }
  // Target priority: the first entry that matches a living enemy picks the focus.
  const enemies=alive(state);

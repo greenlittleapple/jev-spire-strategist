@@ -453,7 +453,9 @@ function forecast(m, s) {
   const positioningUnknown = [...(s.player.status??[]),...s.battle.enemies.flatMap(e=>e.status??[])].some(p=>/from behind|orientation/i.test(p.description??''));
   const lethalTurnRule=m.enemies.filter(e=>e.hp>0&&!m.stunned.includes(e.entity_id)).flatMap(e=>e.status??[]).some(p=>/takes? (?:its|their) turn.*(?:you.*die|kill you)/i.test(p.description??''));
   const facingProjection=positioningUnknown?facingDamage(s,m.steps,m.enemies):null;
-  const facingEffectsChanged=m.enemies.some(e=>JSON.stringify(e.status)!==JSON.stringify(s.battle.enemies.find(x=>x.entity_id===e.entity_id)?.status));
+  // Weak and Vulnerable applied in this prefix are handled by facingDamage; other status changes still void the projection.
+  const facingStatus=st=>JSON.stringify((st??[]).filter(p=>!/^(weak|vulnerable)$/i.test(p.name??"")));
+  const facingEffectsChanged=m.enemies.some(e=>facingStatus(e.status)!==facingStatus(s.battle.enemies.find(x=>x.entity_id===e.entity_id)?.status));
   const facingUsable=facingProjection&&!facingEffectsChanged&&!m.unsupported;
   if(facingUsable)incoming=facingProjection.incomingMax;
   const uncertain = m.unsupportedRunes.length > 0 || lethalTurnRule || (positioningUnknown&&!facingUsable) || m.unsupported || m.deathUnresolved || defeatedEnemies.some(e=>e.deathRules.length) || !parsed;

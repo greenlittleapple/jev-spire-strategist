@@ -14,16 +14,20 @@ export function facingDamage(state,steps,enemies){
  if(enemies.some(e=>e.hp<=0))return null;
  const final=[...steps].reverse().find(a=>['play_card','use_potion'].includes(a.command.action)&&targets.some(e=>e.entity_id===a.command.target))?.command.target??current;
  let low=0,high=0;
+ const weak=list=>(list??[]).some(p=>/^weak$/i.test(p.name??"")&&Number(p.amount)>0);
  for(const e of targets){
+  // Weak applied in this prefix (not already in the displayed intent) cuts that enemy by 25%.
+  const newWeak=weak(enemies.find(x=>x.entity_id===e.entity_id)?.status)&&!weak(e.status);
+  const cut=list=>newWeak?list.flatMap(n=>[Math.floor(n*.75),Math.ceil(n*.75)]):list;
   for(const intent of e.intents??[]){
    if(!/attack/i.test(intent.type??''))continue;
    const m=String(intent.label).match(/^(\d+)(?:\s*[x×]\s*(\d+))?(?:\s*\(\d+\))?$/);if(!m)return null;
    const displayed=+m[1],hits=+(m[2]??1);
-   if(final===current){low+=displayed*hits;high+=displayed*hits;continue;}
+   if(final===current){const v=cut([displayed]);low+=Math.min(...v)*hits;high+=Math.max(...v)*hits;continue;}
    // Keep both rounding conventions; no double multiplication of rear damage.
    const bases=e.entity_id===current?[displayed]:Array.from({length:displayed+1},(_,n)=>n).filter(n=>Math.floor(n*1.5)===displayed||Math.ceil(n*1.5)===displayed);
    if(!bases.length)return null;
-   const values=e.entity_id===final?bases:bases.flatMap(n=>[Math.floor(n*1.5),Math.ceil(n*1.5)]);
+   const values=e.entity_id===final?cut(bases):cut(bases).flatMap(n=>[Math.floor(n*1.5),Math.ceil(n*1.5)]);
    low+=Math.min(...values)*hits;high+=Math.max(...values)*hits;
   }
  }
