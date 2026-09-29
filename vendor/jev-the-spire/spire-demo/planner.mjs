@@ -478,10 +478,12 @@ function forecast(m, s) {
   };
   // Crimson Mantle costs HP at the start of the next turn (after the enemy turn), whether or not it was played this turn.
   const mantleText=[...(s.player.status??[]),...m.steps.filter(x=>x.command.action==='play_card').map(x=>x.details??{})].filter(p=>String(p.name??'').replace(/\+$/,'').toLowerCase()==='crimson mantle').map(p=>p.description??'');
-  const mantleLoss=m.enemies.some(e=>e.hp>0)?mantleText.reduce((n,d)=>n+number(d,/lose (\d+) HP/i),0):0;
+  // An empty board (a boss between revives) means the fight goes on.
+  const fightContinues=!m.enemies.length||m.enemies.some(e=>e.hp>0);
+  const mantleLoss=fightContinues?mantleText.reduce((n,d)=>n+number(d,/lose (\d+) HP/i),0):0;
   const projectedLoss = mantleLoss + (m.buffer > 0 && m.enemies.some(e=>e.hp>0) ? bufferedLoss() : endTurnCardHpLoss + Math.max(0,incoming+endTurnCardDamage-block));
   // Regen already active heals at the end of this turn, before the enemy attacks.
-  const regenHeal = m.enemies.some(e=>e.hp>0) ? Math.max(0, Math.min(amount(s.player.status,'Regen'), (m.maxHp ?? m.hp) - m.hp)) : 0;
+  const regenHeal = fightContinues ? Math.max(0, Math.min(amount(s.player.status,'Regen'), (m.maxHp ?? m.hp) - m.hp)) : 0;
   const loss = Math.max(0,s.player.hp-m.hp + projectedLoss - regenHeal);
   const warnings = [...new Set(m.warnings)];
   if(!m.enemies.length)warnings.push('No enemy is on the board: one may revive or arrive. Attacks have no target; keep potions.');
