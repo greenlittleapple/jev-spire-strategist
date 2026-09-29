@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="1310" viewBox="0 0 960 1310" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 17</desc>
+<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 48</desc>
 <rect width="960" height="1310" rx="12" fill="#fcfcfb"/>
 <text x="24" y="40" font-size="20" font-weight="600" fill="#0b0b0b" text-anchor="start">How far each version got</text>
 <text x="24" y="64" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers). Each dot is one run, green if it won; the bar reaches the best run.</text>
@@ -120,11 +120,12 @@
 <path d="M590,1119 H732.8333333333334 A3,3 0 0 1 735.8333333333334,1122 V1122 A3,3 0 0 1 732.8333333333334,1125 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
 <circle cx="735.8333333333334" cy="1122" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="747.8333333333334" y="1127" font-size="13" font-weight="600"><tspan fill="#0b0b0b">25</tspan></text>
-<text x="24" y="1166" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.13</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
+<text x="24" y="1166" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.13</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="1186" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Orichalcum forecast; route facts give the fewest elites before the first rest</text>
-<path d="M590,1171 H686.1666666666666 A3,3 0 0 1 689.1666666666666,1174 V1174 A3,3 0 0 1 686.1666666666666,1177 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<path d="M590,1171 H867 A3,3 0 0 1 870,1174 V1174 A3,3 0 0 1 867,1177 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
 <circle cx="689.1666666666666" cy="1174" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="701.1666666666666" y="1179" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
+<circle cx="870" cy="1174" r="6.5" fill="#0ca30c" stroke="#fcfcfb" stroke-width="2"/>
+<text x="882" y="1179" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan><tspan fill="#006300"> ✓ won</tspan></text>
 <text x="24" y="1232" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it);</text>
 <text x="24" y="1250" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">from v3.5 on, every run uses a new seed.</text>
 <text x="24" y="1268" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted.</text>

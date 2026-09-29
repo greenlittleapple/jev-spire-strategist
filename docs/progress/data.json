@@ -193,7 +193,7 @@
    "added": "Orichalcum forecast; route facts give the fewest elites before the first rest",
    "runs": [
     {"run": "1790663063", "seed": "JEV14", "result": "lost", "act": 1, "floor": 17, "moves": 221, "tokens": 1205027},
-    {"run": "1790663721", "seed": "JEV15", "result": "in progress", "act": 1, "floor": 7, "moves": 68, "tokens": 304928}
+    {"run": "1790663721", "seed": "JEV15", "result": "won", "act": 3, "floor": 48, "moves": 733, "tokens": 5659949}
    ]
   }
  ],
@@ -206,7 +206,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 15, "moves": 5955, "median_s": 0.73}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 15, "moves": 6620, "median_s": 0.75}
   ]
  }
 }

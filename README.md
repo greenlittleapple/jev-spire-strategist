@@ -8,7 +8,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 <!-- results:start -->
 
-**Results so far** (Ironclad, Ascension 0, standard runs): 2 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8. Of the 21 finished strategist runs, 5 reached the final boss on floor 48. Jev alone got no further than floor 28 in 11 runs.
+**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 22 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 28 in 11 runs.
 
 <!-- results:end -->
 
@@ -44,7 +44,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 | Strategist v3.10 (`claude-strategy-v3`) | JEV11: 17 | Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast |
 | Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17 | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
 | Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25 | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
-| Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, JEV15: in progress (floor 7) | Orichalcum forecast; route facts give the fewest elites before the first rest |
+| Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, **JEV15: won (floor 48)** | Orichalcum forecast; route facts give the fewest elites before the first rest |
 
 <!-- progress-table:end -->
 
