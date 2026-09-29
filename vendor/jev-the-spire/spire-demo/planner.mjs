@@ -399,7 +399,8 @@ function apply(m0, a) {
   if(leaders.length===1 && leaders[0].hp<=0 && !leaderDeathUncertain && !m.unsupported){
     for(const e of m.enemies.filter(e=>e.hp>0 && minionRule(e))){e.hp=0;e.departedWithLeader=leaders[0].entity_id;}
   }
-  if (m.enemies.every(e => e.hp <= 0)) {
+  // An empty board (a boss between revives) is not a win: nothing was killed.
+  if (m.enemies.length && m.enemies.every(e => e.hp <= 0)) {
     const deathEffects=m.enemies.filter(e=>!e.departedWithLeader).flatMap(e=>(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')));
     m.boundary=deathEffects.length?'death_effect':'combat_won';
     if(deathEffects.length){m.deathUnresolved=true;m.warnings.push('Enemy death triggers remain unresolved: do not assume victory or survival. Re-observe the death effect.');}
@@ -475,11 +476,15 @@ function forecast(m, s) {
     for (const h of [endTurnCardDamage, ...(facingUsable ? [incoming] : hitList)]) { const through = Math.max(0, h - left); left = Math.max(0, left - h); lose(through); }
     return loss;
   };
-  const projectedLoss = m.buffer > 0 && m.enemies.some(e=>e.hp>0) ? bufferedLoss() : endTurnCardHpLoss + Math.max(0,incoming+endTurnCardDamage-block);
+  // Crimson Mantle costs HP at the start of the next turn (after the enemy turn), whether or not it was played this turn.
+  const mantleText=[...(s.player.status??[]),...m.steps.filter(x=>x.command.action==='play_card').map(x=>x.details??{})].filter(p=>String(p.name??'').replace(/\+$/,'').toLowerCase()==='crimson mantle').map(p=>p.description??'');
+  const mantleLoss=m.enemies.some(e=>e.hp>0)?mantleText.reduce((n,d)=>n+number(d,/lose (\d+) HP/i),0):0;
+  const projectedLoss = mantleLoss + (m.buffer > 0 && m.enemies.some(e=>e.hp>0) ? bufferedLoss() : endTurnCardHpLoss + Math.max(0,incoming+endTurnCardDamage-block));
   // Regen already active heals at the end of this turn, before the enemy attacks.
   const regenHeal = m.enemies.some(e=>e.hp>0) ? Math.max(0, Math.min(amount(s.player.status,'Regen'), (m.maxHp ?? m.hp) - m.hp)) : 0;
   const loss = Math.max(0,s.player.hp-m.hp + projectedLoss - regenHeal);
   const warnings = [...new Set(m.warnings)];
+  if(!m.enemies.length)warnings.push('No enemy is on the board: one may revive or arrive. Attacks have no target; keep potions.');
   if(m.unsupportedRunes.length)warnings.push('Active Hextech effects require live rule interpretation: '+m.unsupportedRunes.map(r=>r.name).join(', ')+'. Numeric outcomes are unknown; use a single legal action and re-observe.');
   if(lethalTurnRule)warnings.push('A visible rule says the enemy taking its turn kills you regardless of ordinary block. Attack-only HP estimates cannot establish survival; prevent that turn using a supported kill or stated interruption.');
   if(positioningUnknown&&!facingUsable)warnings.push('Position-dependent incoming damage is not modeled; targeting can change orientation. Survival is uncertain.');

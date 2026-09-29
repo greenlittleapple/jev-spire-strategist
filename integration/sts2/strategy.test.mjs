@@ -94,8 +94,10 @@ test('the strategist brief is compact run context without combat piles',()=>{
  const s=shop(),brief=strategistBrief(s,decisionCandidates(s),'rich_shop',null);
  assert.deepEqual(brief.deck,[{name:'Strike',cost:'1',description:'Deal 6 damage.',count:2}]);
  assert.equal(brief.current_options.length,4);
- const b=strategistBrief(boss(),[],'boss_start',plan());
+ const b=strategistBrief(boss(),[],'boss_start',{...plan(),run_id:'run-1'});
  assert.equal(b.current_options,undefined);assert.equal(b.enemies[0].name,'Boss');assert.equal(b.previous_plan.archetype,'Strength');
+ const other=strategistBrief(boss(),[],'run_start',{...plan(),run_id:'another-run'});
+ assert.equal(other.previous_plan,undefined,'a plan from another run is not shown');
  assert.ok(b.combat_state,'combat consults include the player side');assert.equal(JSON.stringify(b).includes('draw_pile":['),false,'pile contents stay out; counts only');
 });
 

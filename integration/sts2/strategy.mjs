@@ -106,7 +106,9 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   for(const c of candidates)for(const k of c.details?.keywords??[])if(k?.name&&k.description&&!keywords.has(k.name))keywords.set(k.name,k.description);
   if(keywords.size)brief.keywords=Object.fromEntries(keywords);
  }
- if(previous)brief.previous_plan=planFields(previous);
+ // A plan from another run (another seed) is not shown: cross-run knowledge comes from the playbook,
+ // the mechanics registry and card stats, and an old plan's combat section was copied into new runs.
+ if(previous&&previous.run_id===state.run?.live_id)brief.previous_plan=planFields(previous);
  return brief;
 }
 
@@ -320,8 +322,10 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  }
  // Potions kept for the boss: outside boss fights, plays that would leave fewer than the
  // reserve are removed, unless every option that keeps the reserve is forecast to die.
+ // Below the plan's hallway potion threshold (when it is a real limit, under 100) HP matters more than the reserve, so it yields.
  const reserve=plan?.combat?.potion_reserve,held=state.player?.potions?.length??0;
- if(state.state_type!=='boss'&&Number.isInteger(reserve)&&reserve>0){
+ const lowHp=Number.isInteger(floor)&&floor<100&&hp!=null&&hp<floor;
+ if(state.state_type!=='boss'&&Number.isInteger(reserve)&&reserve>0&&!lowHp){
   const potionCount=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
   const next=kept.filter(c=>held-potionCount(c)>=reserve||!usesPotion(c));
   if(next.some(c=>c.forecast?.survives!==false))apply('potion_reserve',next,{held,reserve});
@@ -330,9 +334,13 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  // Runs after the hallway potion rule, so a win that needs a held-back potion is not forced.
  // A win whose forecast names an unmodeled enemy power or an unobserved per-turn cap is not trusted.
  // Ravenous (a survivor eats the dead) cannot trigger with one enemy left.
+ // An unmodeled debuff on the player (Tender: lose Strength per card) makes the damage untrusted.
+ // With no living enemy (a boss between revives) there is nothing to win: the rule does not apply.
  const lone=alive(state).length===1;
- const trusted=c=>!(c.forecast.warnings??[]).some(w=>/Unmodeled enemy power|not observed/i.test(w)&&!(lone&&/Unmodeled enemy power: Ravenous/i.test(w)));
- const wins=kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown'&&trusted(c));
+ const debuffs=new Set((state.player?.status??[]).filter(p=>p.type==='Debuff').map(p=>String(p.name).toLowerCase()));
+ const untrustedDebuff=w=>{const m=String(w).match(/^Unmodeled player power: (.+)$/);return m&&debuffs.has(m[1].trim().toLowerCase());};
+ const trusted=c=>!(c.forecast.warnings??[]).some(w=>(/Unmodeled enemy power|not observed/i.test(w)&&!(lone&&/Unmodeled enemy power: Ravenous/i.test(w)))||untrustedDebuff(w));
+ const wins=alive(state).length===0?[]:kept.filter(c=>c.forecast?.boundary==='combat_won'&&c.forecast.survives===true&&c.forecast.quality!=='unknown'&&trusted(c));
  if(wins.length){
   const potions=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
   const fewest=Math.min(...wins.map(potions));

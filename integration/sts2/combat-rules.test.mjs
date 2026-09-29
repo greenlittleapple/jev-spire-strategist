@@ -187,3 +187,22 @@ test('fight.play_first keeps only the listed card while it is affordable (potion
  assert.deepEqual(ids(r),['escape','potion']);
  st.player.energy=0;assert.equal(combatConstraints(st,cands,plan({}),{plan:'x',target_priority:[],play_first:['Frantic Escape']}).rules.some(x=>x.kind==='play_first'),false,'unaffordable: no constraint');
 });
+
+test('no lethal rule on an empty board, and an unmodeled player debuff makes a win untrusted',()=>{
+ const win=(id,command,warnings=[])=>cand(id,command,{boundary:'combat_won',survives:true,warnings});
+ const cands=[win('howl',{action:'play_card',card_index:0}),cand('end',{action:'end_turn'})];
+ assert.deepEqual(ids(combatConstraints(fight({type:'boss',enemies:[]}),cands,null)),['howl','end'],'a reviving boss leaves the board empty');
+ const tender={...fight(),player:{hp:60,max_hp:80,status:[{name:'Tender',type:'Debuff'}]}};
+ const tendered=[win('kill',{action:'play_card',card_index:0,target:'a'},['Unmodeled player power: Tender']),cand('end',{action:'end_turn'})];
+ assert.deepEqual(ids(combatConstraints(tender,tendered,null)),['kill','end']);
+ const buffed={...tender,player:{...tender.player,status:[{name:'Tender',type:'Buff'}]}};
+ assert.deepEqual(ids(combatConstraints(buffed,tendered,null)),['kill'],'an unmodeled buff does not block the win');
+});
+
+test('the potion reserve yields below the hallway potion floor',()=>{
+ const withPotions=(s,n)=>({...s,player:{...s.player,potions:Array.from({length:n},(_,i)=>({name:'P'+i}))}});
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'}),cand('potion',{action:'use_potion',slot:0}),cand('end',{action:'end_turn'})];
+ const p=plan({potion_reserve:1,hallway_potion_below_hp_percent:40});
+ assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite',hp:60}),1),cands,p)),['strike','end']);
+ assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite',hp:20}),1),cands,p)),['strike','potion','end'],'at 25% HP the potion is allowed');
+});

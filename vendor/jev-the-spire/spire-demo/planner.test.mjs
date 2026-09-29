@@ -391,3 +391,12 @@ test('positioning forecast exposes final targeted action while leaving exact dam
  assert.equal(projectSequence(s,['Defend']).facingReview.lastTargetedAction,null);
  s.player.status=[];assert.equal(projectSequence(s,['Defend']).facingReview,undefined);
 });
+test('an empty board (a boss between revives) is not a win, and Crimson Mantle HP loss is forecast',()=>{
+  const s=fixture('slippery');
+  const empty={...s,battle:{...s.battle,enemies:[]}};
+  const f=projectSequence(empty,[]);
+  assert.notEqual(f.boundary,'combat_won');assert.ok(f.warnings.some(w=>/No enemy is on the board/.test(w)));
+  const base=projectSequence(s,[]);
+  const mantled={...s,player:{...s.player,status:[...(s.player.status??[]),{name:'Crimson Mantle',amount:7,description:'At the start of your turn, lose 1 HP and gain 7 Block.'}]}};
+  assert.equal(projectSequence(mantled,[]).hpLoss,base.hpLoss+1);
+});
