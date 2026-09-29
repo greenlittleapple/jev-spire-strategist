@@ -3,7 +3,7 @@
 // every ordinary decision with it.
 import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
-import {nodeKey} from './route-facts.mjs';
+import {nodeKey,minElitesFrom} from './route-facts.mjs';
 
 export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -47,12 +47,12 @@ Fields:
 - combat: run-level risk tolerance, potion policy and general focus for the deck (not a single fight; that goes in fight). potion_reserve is enforced: outside boss fights, potion plays that would leave fewer potions than this are removed unless every other option is forecast to die; set it (usually 1) when the boss is near and potions matter there, 0 otherwise. hallway_potion_below_hp_percent is enforced: in normal (non-elite, non-boss) fights, potions are removed from Jev's options while HP is at or above this percentage (100 = no limit, 0 = never in hallways). They stay available when every option without a potion is forecast to die.
   Code also takes a play forecast to win the fight when one exists, removes plays forecast to be fatal when another play is forecast to survive, ending the turn while an affordable Beckon-style card is in hand, plays that lose more HP than the best while every enemy is Intangible, pure block cards when ending the turn would lose no HP, resting that wastes half its heal when Smith is offered, and exhaust picks other than status, curse, exhaust-payoff or plain Strike/Defend cards when those exist. Your allowed_option_ids for a screen take precedence over the rest and exhaust rules.
 - fight: when the trigger is a fight start (new_encounter, review_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names or the selectors lowest_hp, biggest_attack, can_kill, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. Each enemy may carry seen_pattern: the intents it showed round by round in recent fights; plan around the turns it repeats. encounter_results shows how this encounter went before (HP start→end, rounds, won; after_plan marks fights played with the saved plan). review_encounter means the saved plan did badly: write a better one. A power on an enemy that counts down to your death ("In N turns, you will be eaten and die") must be pushed back with the cards that name it; the combat rules force those at 3 or less, and the fight plan should say to play them. Trigger death_countdown asks once per fight when such a power appears: rewrite the fight plan around it. fight.play_first (optional, card names) is enforced: while a listed card is affordable in hand, other card plays and ending the turn are removed; use it for cards that must be played (an escape from a death countdown). Trigger unknown_mechanic lists powers, relics or cards the forecast does not model (brief.unknown_mechanics with their text): answer mechanics with one entry per item, {name, note}, a one-line explanation of what it does and what to do about it; notes are saved and shown to Jev whenever the item is present. On other triggers during a fight (low_hp, jev_uncertain) a non-empty fight plan replaces the saved plan for the current encounter, so write one only to improve it; otherwise use {"plan":"","target_priority":[]} and the saved fight plans are unaffected. brief.glossary and brief.keywords explain names and keywords the options mention; combat_state is your hand, energy, block and powers. Card options may carry past_runs from earlier logged runs (different seeds and policies): times offered and picked, plays per fight after picking, and the floor those runs reached; treat it as a rough signal.
-- card_reward: the kinds of cards the deck needs, what to avoid, and when to skip.
+- card_reward: the kinds of cards the deck needs, what to avoid, and when to skip. In Act 1 the deck needs damage for the boss: take the best offered card unless it hurts the deck (JEV12 and JEV14 skipped 3-4 of 7-8 Act 1 rewards and lost at the Act 1 boss).
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
-- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing.
+- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
-- elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, you are consulted again before entering it (0 = never).
-- rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact.
+- elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer.
+- rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact. Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
 - replan_below_hp_percent: HP percentage at which you want to be consulted again (10-60; 25 is typical).
 - allowed_option_ids: only for a non-combat screen whose current_options you were shown. On card rewards, shops, events, rest sites, treasure, runes and card selections outside combat you decide: list the option IDs in the order to take them; the first one still offered is taken directly each time (a shop list of purchases ending with leaving buys them in order, skipping any no longer offered). You are asked again if none of your IDs is offered. Use [] in combat or when no options are shown.
 - option_note: one sentence on the current screen, or "".`;
@@ -135,7 +135,15 @@ export function planFields(plan) {
 }
 
 // Deterministic triggers evaluated before Jev. Returns a reason or null.
-const routeOptions=(candidates,plan)=>candidates.filter(c=>c.command?.action==='choose_map_node'&&c.details?.col!=null&&plan.route_path.includes(nodeKey(c.details)));
+const mapOptions=candidates=>candidates.filter(c=>c.command?.action==='choose_map_node'&&c.details?.col!=null);
+const routeOptions=(candidates,plan)=>mapOptions(candidates).filter(c=>plan.route_path.includes(nodeKey(c.details)));
+// The route's next node leads through more elites than another offered node must, so an elite
+// can still be avoided here (JEV13 at 33% and JEV14 at 39% HP kept such routes and lost).
+const commitsToElite=(map,candidates,next)=>{
+ const min=minElitesFrom(map),count=list=>list.map(c=>min(nodeKey(c.details))).filter(Number.isFinite);
+ const all=count(mapOptions(candidates)),mine=count(next);
+ return all.length>0&&mine.length>0&&Math.min(...mine)>Math.min(...all);
+};
 
 // The first option in the plan's order that is still offered.
 const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
@@ -166,7 +174,7 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true,screenCho
   if(plan.route_path?.length){
    const next=routeOptions(candidates,plan);
    if(!next.length)return 'route_off';
-   if(next.some(c=>c.details.type==='Elite')&&hp!=null&&hp<(plan.elite_min_hp_percent??0))return 'route_risk';
+   if(hp!=null&&hp<(plan.elite_min_hp_percent??0)&&(next.some(c=>c.details.type==='Elite')||commitsToElite(state.map,candidates,next)))return 'route_risk';
   }
  }
  // Relic/rune pickups can change the plan: consult at the first screen outside combat after one.

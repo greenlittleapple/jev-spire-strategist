@@ -83,6 +83,22 @@ test('the first map screen of an act asks for a route; the route then constrains
  assert.equal(replanReason({...next,player:{...next.player,hp:70}},risky,candidates),null);
 });
 
+test('at low HP, a route whose next node commits to an avoidable elite asks again',()=>{
+ // The monster leads only to an elite; the shop reaches the rest site without one.
+ const m={current_position:{col:0,row:0,type:'Ancient'},boss:{col:0,row:4,name:'Boss'},
+  nodes:[node(0,0,'Ancient',[[0,1],[1,1]]),node(0,1,'Monster',[[0,2]]),node(1,1,'Shop',[[1,2]]),
+   node(0,2,'Elite',[[0,3]]),node(1,2,'Unknown',[[0,3]]),node(0,3,'RestSite',[[0,4]]),node(0,4,'Boss')]};
+ const opts=[
+  {id:'a0',label:'Travel to Monster (column 0)',command:{action:'choose_map_node',index:0},details:{index:0,col:0,row:1,type:'Monster'}},
+  {id:'a1',label:'Travel to Shop (column 1)',command:{action:'choose_map_node',index:1},details:{index:1,col:1,row:1,type:'Shop'}}];
+ const at=hp=>({...mapState(hp),map:m,run:{...run,floor:2}});
+ const routed=path=>({...stampPlan(plan({route_path:path}),requestStamp({...mapState(),map:m},opts,'route_plan',['0,0','0,1','1,1','0,2','1,2','0,3','0,4'])),elite_min_hp_percent:60});
+ assert.equal(replanReason(at(40),routed(['0,1','0,2','0,3']),opts),'route_risk');
+ assert.equal(replanReason(at(70),routed(['0,1','0,2','0,3']),opts),null,'HP at or above the threshold');
+ assert.equal(replanReason(at(40),routed(['1,1','1,2','0,3']),opts),null,'the route avoids the elite');
+ assert.equal(replanReason(at(40),{...routed(['0,1','0,2','0,3']),elite_min_hp_percent:0},opts),null,'0 turns it off');
+});
+
 test('route plans are validated against the act map',()=>{
  assert.deepEqual(validatePlan(plan({route_path:['1,1']})),[]);
  assert.match(validatePlan(plan({route_path:['a-b']})).join(),/col,row/);

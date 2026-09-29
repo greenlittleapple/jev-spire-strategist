@@ -60,6 +60,12 @@ export function optionRoutes(map, candidates) {
  return out;
 }
 
+// Fewest elites on any path from a node to the boss, the node included; null for an unknown node.
+export function minElitesFrom(map) {
+ const {summary} = graph(map);
+ return key => summary(key)?.min.elites ?? null;
+}
+
 // What remains ahead of a position (the node the player is at or travelling to).
 export function remainingRoute(map, position) {
  if (!map || !position) return null;
