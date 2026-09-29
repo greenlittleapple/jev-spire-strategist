@@ -215,3 +215,13 @@ test('Flame Barrier counts as pure block on a turn with nothing incoming',()=>{
  const s=fight();s.player.hand=[];s.player.status=[];s.player.relics=[];
  assert.deepEqual(ids(combatConstraints(s,cands,null)),['strike','end']);
 });
+
+test('a healing potion is not drunk when less HP is missing than it heals, even in a boss fight',()=>{
+ const potion={name:'Blood Potion',description:'Heal for 20% of your Max HP.',slot:0};
+ const s=hp=>({...fight({type:'boss',hp}),player:{hp,max_hp:90,potions:[potion]}});
+ const cands=[cand('drink',{action:'use_potion',slot:0}),cand('strike',{action:'play_card',card_index:0,target:'a'}),cand('end',{action:'end_turn'})];
+ assert.deepEqual(ids(combatConstraints(s(90),cands,null)),['strike','end']);
+ assert.equal(ids(combatConstraints(s(60),cands,null)).includes('drink'),true,'30 missing covers the 18 heal');
+ const dying=cands.map(c=>c.id==='drink'?c:{...c,forecast:{...c.forecast,survives:false}});
+ assert.deepEqual(ids(combatConstraints(s(85),dying,null)),['drink'],'kept when everything else dies');
+});

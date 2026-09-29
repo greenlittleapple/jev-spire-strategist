@@ -308,6 +308,16 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  let kept=candidates;const rules=[];
  const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
  if(kept.some(survives))apply('avoid_fatal',kept.filter(c=>!fatal(c)));
+ // A healing potion drunk with less HP missing than it heals wastes the heal (Blood Potion at full
+ // HP on round 1 of a boss). In every fight type, unless every line without it is forecast to die.
+ const maxHp=state.player?.max_hp,missing=Number.isFinite(maxHp)?maxHp-(state.player?.hp??maxHp):null;
+ const healOf=p=>{const d=p?.description??'';const pc=d.match(/Heal for (\d+)% of your Max HP/i),flat=d.match(/^Heal (\d+) HP/i);
+  return pc&&maxHp?Math.floor(maxHp*Number(pc[1])/100):flat?Number(flat[1]):0;};
+ const wastes=c=>(c.plan??[c]).some(s=>s.command?.action==='use_potion'&&healOf((state.player?.potions??[]).find(p=>p.slot===s.command.slot)??state.player?.potions?.[s.command.slot])>missing);
+ if(missing!=null&&kept.some(wastes)){
+  const next=kept.filter(c=>!wastes(c));
+  if(next.some(c=>c.forecast?.survives!==false))apply('heal_potion_waste',next,{missing});
+ }
  const floor=plan?.combat?.hallway_potion_below_hp_percent;
  const hp=pct(state.player);
  if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp>=floor){
