@@ -214,6 +214,15 @@
     {"run": "1790667548", "seed": "JEV17", "result": "lost", "act": 2, "floor": 27, "moves": 450, "tokens": 3062360},
     {"run": "1790711902", "seed": "JEV18", "result": "lost", "act": 1, "floor": 17, "moves": 200, "tokens": 1100861}
    ]
+  },
+  {
+   "name": "Strategist v3.16",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "In the last 6 floors before the Act 1 boss, an optional elite only near full HP",
+   "runs": [
+    {"run": "1790712713", "seed": "JEV19", "result": "lost", "act": 2, "floor": 30, "moves": 360, "tokens": 2413014}
+   ]
   }
  ],
  "notes": [
@@ -225,7 +234,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 18, "moves": 7545, "median_s": 0.77}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 19, "moves": 7905, "median_s": 0.77}
   ]
  }
 }
