@@ -61,3 +61,12 @@ test('optional redraw offers cards even when empty selection can be confirmed',(
  s.hand_select.prompt='Select a card to Exhaust.';
  assert.deepEqual(actionsFor(s).map(a=>a.command),[{action:'combat_confirm_selection'}]);
 });
+
+test('a transform preview that cycles random results does not change the fingerprint; the selection still does', () => {
+  const base = { state_type: 'card_select', card_select: { screen_type: 'transform', can_confirm: true, preview_showing: true,
+    cards: [{ name: 'Strike', index: 0, is_selected: true }], preview_cards: [{ name: 'Strike' }, { name: 'Barricade' }] } };
+  const spun = structuredClone(base); spun.card_select.preview_cards[1] = { name: 'Spite' };
+  assert.equal(fingerprint(spun), fingerprint(base));
+  const other = structuredClone(base); other.card_select.cards[0].is_selected = false;
+  assert.notEqual(fingerprint(other), fingerprint(base));
+});

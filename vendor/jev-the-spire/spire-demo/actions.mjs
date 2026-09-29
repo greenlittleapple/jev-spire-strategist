@@ -4,6 +4,9 @@ export function fingerprint(state) {
   // saved_run is re-read from the save file every few seconds; its save time and history
   // change without the live screen changing, so it is not part of the screen's identity.
   const { ready, busy, saved_run, ...content } = state ?? {};
+  // A transform screen cycles its preview through random possible results, so the preview never
+  // settles (JEV12 stalled on New Leaf). The chosen card and the confirm state still count.
+  if (content.card_select?.preview_cards) { const { preview_cards, ...rest } = content.card_select; content.card_select = rest; }
   return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
