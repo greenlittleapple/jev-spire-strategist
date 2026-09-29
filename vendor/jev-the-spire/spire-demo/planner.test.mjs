@@ -400,3 +400,12 @@ test('an empty board (a boss between revives) is not a win, and Crimson Mantle H
   const mantled={...s,player:{...s.player,status:[...(s.player.status??[]),{name:'Crimson Mantle',amount:7,description:'At the start of your turn, lose 1 HP and gain 7 Block.'}]}};
   assert.equal(projectSequence(mantled,[]).hpLoss,base.hpLoss+1);
 });
+
+test('recorded Insatiable: Frantic Escape is forecast (no effect this turn), so a 3-cost escape at 13 HP shows as fatal',()=>{
+  const s=fixture('insatiable-escape');
+  const escape=projectSequence(s,['Frantic Escape']);
+  assert.equal(escape.quality==='unknown',false);assert.equal(escape.survives,false);assert.equal(escape.hpLoss,28);
+  assert.equal(escape.warnings.some(w=>/Sandpit/.test(w)),false,'Sandpit is a known power');
+  const block=projectSequence(s,['Defend','Defend','Iron Wave → The Insatiable']);
+  assert.equal(block.survives,true);assert.equal(block.hpLoss,10);
+});

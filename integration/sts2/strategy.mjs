@@ -302,6 +302,11 @@ export function deathCountdown(state){
  const p=found.reduce((a,b)=>Number(b.amount)<Number(a.amount)?b:a);
  return {name:p.name,amount:Number(p.amount)};
 }
+// Forcing lines is dropped when none of them is known to survive this turn while another kept line is
+// (JEV9: a 3-cost Frantic Escape at 13 HP against 28 incoming, with 10-loss block lines available).
+// A countdown at 1 kills this turn anyway, so the escape still applies then.
+const knownSurvivor=c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives===true;
+const diesNow=(forced,kept,countdown)=>!(countdown&&countdown.amount<=1)&&!forced.some(knownSurvivor)&&kept.some(knownSurvivor);
 // fight = the saved plan for the current encounter ({plan, target_priority}) or null.
 export function combatConstraints(state,candidates,plan,fight=null) {
  if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
@@ -375,7 +380,8 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  if(countdown&&countdown.amount<=3){
   const extenders=new Set((state.player?.hand??[]).filter(c=>c.can_play!==false&&Number(c.cost)<=(state.player?.energy??0)
    &&new RegExp(`Increase ${countdown.name} by \\d+`,'i').test(c.description??'')).map(c=>c.index));
-  if(extenders.size)apply('countdown_escape',kept.filter(c=>c.command.action==='play_card'&&extenders.has(c.command.card_index)),{power:countdown.name,amount:countdown.amount});
+  const escapes=kept.filter(c=>c.command.action==='play_card'&&extenders.has(c.command.card_index));
+  if(extenders.size&&!diesNow(escapes,kept,countdown))apply('countdown_escape',escapes,{power:countdown.name,amount:countdown.amount});
  }
  // Pure block does nothing when ending the turn now takes no damage and nothing uses block.
  // HP lost from held cards (Beckon) ignores block, so only damage counts; End turn is read from
@@ -396,7 +402,7 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const margin=Math.max(10,Math.ceil(0.12*(state.player?.max_hp??0)));
   const bf=bestLoss(firstLines),bk=bestLoss(kept);
   const costly=!deathCountdown(state)&&Number.isFinite(bf)&&Number.isFinite(bk)&&bf-bk>=margin;
-  if(idx.size&&!costly)apply('play_first',firstLines);
+  if(idx.size&&!costly&&!diesNow(firstLines,kept,deathCountdown(state)))apply('play_first',firstLines);
  }
  // Target priority: the first entry that matches a living enemy picks the focus.
  const enemies=alive(state);

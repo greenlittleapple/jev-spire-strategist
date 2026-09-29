@@ -233,3 +233,18 @@ test('play_first yields when the forced line loses much more HP than the best li
  assert.equal(ids(combatConstraints(st,lines(27),plan({}),fp)).includes('upper'),true,'27 vs 3 exceeds the margin: not forced');
  assert.deepEqual(ids(combatConstraints(st,lines(5),plan({}),fp)),['jug'],'within the margin: forced');
 });
+
+test('a forced escape yields when it dies this turn and a blocking line survives, unless the countdown is at 1',()=>{
+ const boss=enemy('b','The Insatiable',149,[{name:'Sandpit',amount:4,description:'In 4 turns, you will be eaten and die.'}]);
+ const st={...fight({type:'boss',enemies:[boss]}),player:{hp:13,max_hp:91,energy:3,hand:[
+  {index:0,name:'Frantic Escape',cost:'3',can_play:true,description:'Get farther away. Increase Sandpit by 1. Increase the cost of this card by 1.'},
+  {index:1,name:'Defend',cost:'1',can_play:true,description:'Gain 6 Block.'}]}};
+ const fp={plan:'x',target_priority:[],play_first:['Frantic Escape']};
+ const cands=[cand('escape',{action:'play_card',card_index:0},{quality:'unknown',survives:null,hpLoss:null}),
+  cand('block',{action:'play_card',card_index:1},{hpLoss:10}),cand('end',{action:'end_turn'},{hpLoss:28,survives:false})];
+ assert.equal(ids(combatConstraints(st,cands,plan({}),fp)).includes('block'),true,'play_first yields');
+ boss.status[0].amount=3;
+ assert.equal(ids(combatConstraints(st,cands,plan({}),fp)).includes('block'),true,'countdown_escape yields at 3');
+ boss.status[0].amount=1;
+ assert.deepEqual(ids(combatConstraints(st,cands,plan({}),fp)),['escape'],'at 1 the escape is forced');
+});
