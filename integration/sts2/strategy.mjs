@@ -390,7 +390,17 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  }
  // Ending the turn with energy to play a card that costs HP if held (Beckon) wastes that HP.
  const hpIfHeld=(state.player?.hand??[]).filter(c=>c.can_play!==false&&/if this is in your Hand,\s+lose \d+ HP/i.test(c.description??'')&&Number(c.cost)<=(state.player?.energy??0));
- if(hpIfHeld.length)apply('play_hp_loss_cards',kept.filter(c=>c.command.action!=='end_turn'),{card:hpIfHeld[0].name});
+ if(hpIfHeld.length){
+  // Also remove a play that leaves too little energy for one (JEV12: Whirlwind spent all 3 energy
+  // with two Beckons in hand, 12 HP lost), unless it wins the fight.
+  const energy=state.player?.energy??0,hand=state.player?.hand??[],need=Math.min(...hpIfHeld.map(c=>Number(c.cost)));
+  const starves=c=>{if(c.command.action!=='play_card'||c.forecast?.boundary==='combat_won')return false;
+   const card=hand.find(h=>h.index===c.command.card_index)??hand[c.command.card_index];
+   if(!card||hpIfHeld.includes(card))return false;
+   const cost=String(card.cost).toUpperCase()==='X'?energy:Number(card.cost);
+   return Number.isFinite(cost)&&energy-cost<need;};
+  apply('play_hp_loss_cards',kept.filter(c=>c.command.action!=='end_turn'&&!starves(c)),{card:hpIfHeld[0].name});
+ }
  // A death countdown on an enemy ("In 2 turns, you will be eaten and die", The Insatiable's
  // Sandpit) is pushed back only by cards that name it ("Increase Sandpit by 1"). The one-turn
  // forecast sees the death only on the last turn, so once the countdown is at 3 or less, an

@@ -264,3 +264,13 @@ test('idle_potion keeps a potion whose effect the forecast cannot show (new card
   cand('attackpot',{action:'use_potion',slot:0},{hpLoss:6,warnings:['Attack Potion adds or chooses unknown cards; re-observe.']})];
  assert.deepEqual(ids(combatConstraints(st,cands,plan({hallway_potion_below_hp_percent:40}))),['strike','attackpot']);
 });
+
+test('a play that leaves too little energy for a held Beckon is removed unless it wins',()=>{
+ const beckon=i=>({index:i,name:'Beckon',cost:'1',can_play:true,description:'At the end of your turn, if this is in your Hand,  lose 6 HP.'});
+ const s=fight({type:'boss'});s.player.energy=2;
+ s.player.hand=[{index:0,name:'Whirlwind',cost:'X',can_play:true,description:'Deal 5 damage to ALL enemies X times.'},beckon(1),beckon(2),{index:3,name:'Strike',cost:'1',can_play:true,description:'Deal 6 damage.'}];
+ const cands=[cand('whirl',{action:'play_card',card_index:0}),cand('beckon',{action:'play_card',card_index:1}),cand('strike',{action:'play_card',card_index:3,target:'a'}),cand('end',{action:'end_turn'})];
+ assert.deepEqual(ids(combatConstraints(s,cands,null)),['beckon','strike'],'Whirlwind would spend the Beckon energy');
+ const winning=cands.map(c=>c.id==='whirl'?{...c,forecast:{...c.forecast,boundary:'combat_won'}}:c);
+ assert.equal(ids(combatConstraints(s,winning,null)).includes('whirl'),true,'a winning play stays');
+});
