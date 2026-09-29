@@ -206,3 +206,17 @@ test('reward screens are owned only for a potion swap',async()=>{
  assert.equal(isOwnedScreen(rewards(2,[{type:'potion',description:'Fire Potion'}])),false,'a free slot needs no decision');
  assert.equal(isOwnedScreen(rewards(3,[{type:'gold',description:'17 Gold'}])),false);
 });
+
+test('an answered event option does not carry to a later page whose same-named option costs more',()=>{
+ const page=dmg=>({state_type:'event',run:{live_id:'run-1',act:1,floor:4},player:{hp:60,max_hp:82},
+  event:{event_id:'ABYSSAL_BATHS',body:'x',options:[]}});
+ const cands=dmg=>[{id:'a0',label:'Linger',command:{action:'choose_event_option',index:0},details:{title:'Linger',description:`Gain 2 Max HP. Take ${dmg} damage.`}},
+  {id:'a1',label:'Exit Baths',command:{action:'choose_event_option',index:1},details:{title:'Exit Baths',description:''}}];
+ const base={...plan(),run_id:'run-1',allowed_option_ids:['a0']};
+ const stamped=stampPlan(base,requestStamp(page(4),cands(4),'owned_screen'));
+ const first=constrainCandidates(page(4),cands(4),stamped);
+ assert.equal(first.constraint?.kind,'strategist_choice');
+ const later=constrainCandidates(page(12),cands(12),stamped);
+ assert.notEqual(later.constraint?.kind,'strategist_choice','Linger at 12 damage is a new choice');
+ assert.equal(replanReason(page(12),stamped,cands(12)),'owned_screen');
+});

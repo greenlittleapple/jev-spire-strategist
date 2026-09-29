@@ -60,7 +60,10 @@ Fields:
 const pct = p => p?.max_hp ? Math.round(100*p.hp/p.max_hp) : null;
 export const screenKey = s => `${s.run?.live_id}:${s.run?.act}:${s.run?.floor}:${s.state_type}`;
 // Label is included: after a reroll or purchase an index can name a different option.
-const optionKey = c => JSON.stringify({command:c.command,label:c.label});
+// An event option's description is part of its identity: a repeated page ("Linger — Take 4 damage",
+// then 12) is a new choice, not the one already answered (JEV12 lingered nine times, 69 to 25 HP).
+const optionKey = c => JSON.stringify({command:c.command,label:c.label,
+ ...(c.command?.action==='choose_event_option'&&c.details?.description?{description:c.details.description}:{})});
 const relicIds = s => (s.player?.relics ?? []).map(r => r.id).sort();
 
 function deckSummary(deck=[]) {
