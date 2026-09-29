@@ -116,7 +116,7 @@ function optionPaths(nodes, key, maxPaths) {
 function pathStats(path) {
  const last = path.length - 1;
  // path[i] is i+1 floors away from the current position.
- const s = {elites:0, rests_before_boss_rest:0, shops:0, next_rest_in:null, next_elite_in:null, shop_in:[], elites_with_rest_before:0,
+ const s = {elites:0, rests_before_boss_rest:0, shops:0, next_rest_in:null, next_elite_in:null, shop_in:[], elites_with_rest_before:0, elites_before_first_rest:0,
   rooms: path.map(n => ROOM[n.type] ?? '?').join('')};
  let restSinceElite = false;
  path.forEach((n, i) => {
@@ -126,6 +126,7 @@ function pathStats(path) {
   }
   if (n.type === 'Elite') {
    s.elites++; s.next_elite_in ??= i + 1;
+   if (s.next_rest_in == null) s.elites_before_first_rest++;
    if (restSinceElite) s.elites_with_rest_before++;
    restSinceElite = false;
   }
@@ -158,6 +159,8 @@ export function orderedOptionRoutes(map, candidates, {maxPaths=2000}={}) {
   out[c.id] = {paths_to_boss: stats.length,
    elites: span(stats.map(s => s.elites)),
    max_elites_with_rest_before: Math.max(...stats.map(s => s.elites_with_rest_before)),
+   // 0: some path reaches a rest without an elite; 1+: an elite before any rest cannot be avoided.
+   min_elites_before_first_rest: Math.min(...stats.map(s => s.elites_before_first_rest)),
    rests_before_boss_rest: span(stats.map(s => s.rests_before_boss_rest)),
    next_rest_in: span(rests), next_elite_in: span(elites),
    shops: span(stats.map(s => s.shops)), shop_in: span(stats.flatMap(s => s.shop_in)),
@@ -223,6 +226,6 @@ export function computedFacts(state, candidates, mapMemory, {version=2}={}) {
  if (deathEffects) facts.death_effects = deathEffects;
  if (!Object.keys(facts).length) return null;
  facts.note = 'Exact counts from the visible act map and live state. Ranges are minimum-maximum over all paths to this act\'s boss. Unknown rooms are unrevealed; potion and gold values carry no judgment.';
- if (version >= 3 && facts.route_options) facts.route_note = 'Distances are floors from now (the option itself is 1). rests_before_boss_rest excludes the rest site every act has right before its boss. max_elites_with_rest_before counts elites reachable with a rest since the previous elite. example_routes list rooms in order (M monster, E elite, R rest, $ shop, T treasure, ? unknown, B boss) for routes no other route beats on elites, rests and shops together.';
+ if (version >= 3 && facts.route_options) facts.route_note = 'Distances are floors from now (the option itself is 1). rests_before_boss_rest excludes the rest site every act has right before its boss. max_elites_with_rest_before counts elites reachable with a rest since the previous elite. example_routes list rooms in order (M monster, E elite, R rest, $ shop, T treasure, ? unknown, B boss) for routes no other route beats on elites, rests and shops together. min_elites_before_first_rest 0 means some path reaches a rest site without an elite; 1 or more means an elite before any rest cannot be avoided.';
  return facts;
 }

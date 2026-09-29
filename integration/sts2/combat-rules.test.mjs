@@ -274,3 +274,11 @@ test('a play that leaves too little energy for a held Beckon is removed unless i
  const winning=cands.map(c=>c.id==='whirl'?{...c,forecast:{...c.forecast,boundary:'combat_won'}}:c);
  assert.equal(ids(combatConstraints(s,winning,null)).includes('whirl'),true,'a winning play stays');
 });
+
+test('a play that spends the Beckon energy stays when its forecast beats every line that keeps energy for one',()=>{
+ const beckon={index:1,name:'Beckon',cost:'1',can_play:true,description:'At the end of your turn, if this is in your Hand,  lose 6 HP.'};
+ const s=fight({type:'boss'});s.player.energy=2;
+ s.player.hand=[{index:0,name:'Impervious',cost:'2',can_play:true,description:'Gain 30 Block. Exhaust.'},beckon];
+ const cands=[cand('imp',{action:'play_card',card_index:0},{hpLoss:6}),cand('beckon',{action:'play_card',card_index:1},{hpLoss:24}),cand('end',{action:'end_turn'},{hpLoss:30})];
+ assert.deepEqual(ids(combatConstraints(s,cands,null)),['imp','beckon'],'blocking a 24 hit is worth the 6-HP Beckon');
+});

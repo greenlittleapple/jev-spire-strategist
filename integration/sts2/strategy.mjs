@@ -399,7 +399,12 @@ export function combatConstraints(state,candidates,plan,fight=null) {
    if(!card||hpIfHeld.includes(card))return false;
    const cost=String(card.cost).toUpperCase()==='X'?energy:Number(card.cost);
    return Number.isFinite(cost)&&energy-cost<need;};
-  apply('play_hp_loss_cards',kept.filter(c=>c.command.action!=='end_turn'&&!starves(c)),{card:hpIfHeld[0].name});
+  // Keep a starving play when its forecast (which counts held Beckons) beats every line that keeps energy for one.
+  const known=c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives!==false&&Number.isFinite(c.forecast?.hpLoss);
+  const fed=kept.filter(c=>c.command.action!=='end_turn'&&!starves(c)&&known(c));
+  const bestFed=Math.min(...fed.map(c=>c.forecast.hpLoss));
+  const worth=c=>known(c)&&c.forecast.hpLoss<bestFed;
+  apply('play_hp_loss_cards',kept.filter(c=>c.command.action!=='end_turn'&&(!starves(c)||worth(c))),{card:hpIfHeld[0].name});
  }
  // A death countdown on an enemy ("In 2 turns, you will be eaten and die", The Insatiable's
  // Sandpit) is pushed back only by cards that name it ("Increase Sandpit by 1"). The one-turn

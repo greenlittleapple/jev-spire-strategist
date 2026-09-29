@@ -16,7 +16,7 @@ export const supportedCards = new Set(['beckon','strike','defend','bash','upperc
 export const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
 const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict','colossus']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit','paper cuts']);
-const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
+const knownRelics = new Set(['ORICHALCUM','BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
   'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
   // No effect within a player turn, or the effect is already in live status, energy or card text
   // (Oddly Smooth Stone as Dexterity, Red Mask as Weak, Ember Tea as Strength, Miniature Cannon in upgraded Attack text).
@@ -72,6 +72,7 @@ function initial(s) {
     rage: amount(s.player.status,'Rage'), plating: amount(s.player.status,'Plating'), metallicize: amount(s.player.status,'Metallicize'),
     attacks: 0, fan: Boolean(fan), fanProgress, steps: [], warnings,
     // Cloak Clasp: 1 Block per card in hand at end of turn. Charon's Ashes / Forgotten Soul: damage on exhaust.
+    orichalcum:(()=>{const r=(s.player?.relics??[]).find(r=>r.id==='ORICHALCUM');return r?number(r.description??'',/without Block, gain (\d+) Block/i,6):0;})(),
     cloakClasp:hasRelic(s,'CLOAK_CLASP'), charonsAshes:hasRelic(s,'CHARONS_ASHES'), forgottenSoul:hasRelic(s,'FORGOTTEN_SOUL'),
     // Letter Opener: every 3rd Skill in a turn deals 5 to all enemies; counter = Skills played this turn.
     letterOpener:letterProgress(s), skills:0,
@@ -458,7 +459,9 @@ function forecast(m, s) {
     },0),
     deathRules:(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')).map(p=>p.description),
   }));
-  const block = (m.block + m.plating) * (m.runes.grounded ? 2 : 1) + m.metallicize + (m.cloakClasp ? m.hand.length : 0);
+  // Orichalcum: ending the turn with no Block from cards gives its Block before the enemy attacks.
+  const orichalcumBlock = m.orichalcum && m.block === 0 ? m.orichalcum : 0;
+  const block = (m.block + m.plating) * (m.runes.grounded ? 2 : 1) + m.metallicize + (m.cloakClasp ? m.hand.length : 0) + orichalcumBlock;
   const positioningUnknown = [...(s.player.status??[]),...s.battle.enemies.flatMap(e=>e.status??[])].some(p=>/from behind|orientation/i.test(p.description??''));
   const lethalTurnRule=m.enemies.filter(e=>e.hp>0&&!m.stunned.includes(e.entity_id)).flatMap(e=>e.status??[]).some(p=>/takes? (?:its|their) turn.*(?:you.*die|kill you)/i.test(p.description??''));
   const facingProjection=positioningUnknown?facingDamage(s,m.steps,m.enemies):null;

@@ -429,3 +429,12 @@ test('Paper Cuts: each unblocked hit adds its Max HP loss to hpLoss; blocked hit
   const blocked=projectSequence(s,['Defend','Defend']);
   assert.equal(blocked.maxHpLoss??0,0);assert.equal(blocked.hpLoss,0);
 });
+
+test('Orichalcum: a turn ended with no Block from cards gets its Block; a turn with card Block does not',()=>{
+  const s=structuredClone(fixture('insatiable-escape'));s.player.status=[];s.player.block=0;s.player.hp=60;
+  s.player.relics=[...(s.player.relics??[]),{id:'ORICHALCUM',name:'Orichalcum',description:'If you end your turn without Block, gain 6 Block.'}];
+  const e=s.battle.enemies[0];e.status=[];e.intents=[{type:'Attack',title:'Aggressive',label:'7',description:'This enemy intends to Attack for 7 damage.'}];
+  const open=projectSequence(s,['Frantic Escape']);
+  assert.equal(open.hpLoss,1);assert.equal(open.warnings.some(w=>/Orichalcum/.test(w)),false);
+  assert.equal(projectSequence(s,['Defend']).hpLoss,1,'Defend blocks 6; Orichalcum does not add to card Block');
+});
