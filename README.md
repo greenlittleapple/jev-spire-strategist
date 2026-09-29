@@ -30,7 +30,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 | Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay) | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
 | Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay) | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
 | Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48 | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
-| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, JEV4: won (floor 48), JEV5: in progress (floor 2) | A second look when Jev's line loses far more HP than the best surviving line |
+| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, **JEV4: won (floor 48)**, JEV5: in progress (floor 2) | A second look when Jev's line loses far more HP than the best surviving line |
 
 <!-- progress-table:end -->
 
@@ -107,7 +107,9 @@ You need Slay the Spire 2 on Steam (tested on v0.111.0), the .NET 9 SDK, Node.js
 | `docs/` | Setup and design (`STS2.md`), verification records, chart data |
 | `src/`, `docs/WORKSHOP.md` | A separate game-independent harness and offline demo |
 
-## Credits
+## License and credits
+
+MIT, see [LICENSE](LICENSE). The vendored components keep their own MIT license files:
 
 - [Jev the Spire](https://github.com/alexmeckes/jev-the-spire) (MIT, Jev The Spire contributors), imported at commit `8bab787` under `vendor/jev-the-spire` and modified.
 - [STS2MCP](https://github.com/Gennadiyev/STS2MCP) (MIT, Yikun Ji), adapted under `integration/sts2-bridge`.

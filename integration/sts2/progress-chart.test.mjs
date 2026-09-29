@@ -33,14 +33,15 @@ const data = {game: 'Test <game>', bosses: [{floor: 17, label: 'Act 1 boss'}, {f
 test('the README table lists every run, with seeds, replays and runs in progress', () => {
  assert.equal(progressTable(data), ['| Version | Final floor of each run | What it added |', '|---|---|---|',
   '| Jev v1 (`jev-compact-v1`) | 17 | One question |',
-  '| Strategist v3 (`claude-strategy-v3`) | JEV1: won (floor 48) (replay), JEV2: in progress (floor 30) | Owned screens |'].join('\n'));
+  '| Strategist v3 (`claude-strategy-v3`) | **JEV1: won (floor 48)** (replay), JEV2: in progress (floor 30) | Owned screens |'].join('\n'));
 });
 
-test('charts escape text, plot only finished runs and label wins', () => {
- const svg = progressSvg(data, {surface: '#fff', text: '#000', secondary: '#333', muted: '#888', grid: '#eee', axis: '#ccc', track: 0.35, series: ['#00f', '#f80']});
+test('charts escape text, plot only finished runs and emphasize wins', () => {
+ const svg = progressSvg(data, {surface: '#fff', text: '#000', secondary: '#333', muted: '#888', grid: '#eee', axis: '#ccc', track: 0.35, series: ['#00f', '#f80'], good: '#0a0', goodText: '#060'});
  assert.match(svg, /Test &lt;game&gt;/);
- assert.match(svg, />48 won</);
- assert.equal(svg.match(/<circle [^>]*r="4.5"/g).length, 2);
+ assert.match(svg, />48<\/tspan><tspan fill="#060"> ✓ won</);
+ assert.equal(svg.match(/<circle [^>]*r="4.5" fill="#00f"/g).length, 1);
+ assert.equal(svg.match(/<circle [^>]*r="6.5" fill="#0a0"/g).length, 1);
  assert.doesNotMatch(svg + paceSvg(data, {surface: '#fff', text: '#000', secondary: '#333', muted: '#888', grid: '#eee', axis: '#ccc', series: ['#00f']}), /NaN|undefined/);
 });
 

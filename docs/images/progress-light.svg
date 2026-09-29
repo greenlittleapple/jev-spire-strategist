@@ -2,87 +2,87 @@
 <title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48</desc>
 <rect width="960" height="894" rx="12" fill="#fcfcfb"/>
 <text x="24" y="40" font-size="20" font-weight="600" fill="#0b0b0b" text-anchor="start">How far each version got</text>
-<text x="24" y="64" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers). Each dot is one run; the bar reaches the best one.</text>
-<text x="696.25" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Act 1 boss</text>
-<text x="696.25" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 17</text>
-<text x="796.25" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Act 2 boss</text>
-<text x="796.25" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 33</text>
-<text x="890" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Final boss</text>
-<text x="890" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 48</text>
+<text x="24" y="64" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers). Each dot is one run, green if it won; the bar reaches the best run.</text>
+<text x="689.1666666666666" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Act 1 boss</text>
+<text x="689.1666666666666" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 17</text>
+<text x="782.5" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Act 2 boss</text>
+<text x="782.5" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 33</text>
+<text x="870" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Final boss</text>
+<text x="870" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 48</text>
 <line x1="590" y1="130" x2="590" y2="790" stroke="#c3c2b7" stroke-width="1"/>
-<line x1="696.25" y1="130" x2="696.25" y2="790" stroke="#e1e0d9" stroke-width="1"/>
-<line x1="796.25" y1="130" x2="796.25" y2="790" stroke="#e1e0d9" stroke-width="1"/>
-<line x1="890" y1="130" x2="890" y2="790" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="689.1666666666666" y1="130" x2="689.1666666666666" y2="790" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="782.5" y1="130" x2="782.5" y2="790" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="870" y1="130" x2="870" y2="790" stroke="#e1e0d9" stroke-width="1"/>
 <circle cx="30" cy="151" r="6" fill="#2a78d6"/>
 <text x="44" y="156" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">Jev only</text>
 <text x="24" y="186" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v1</tspan><tspan fill="#898781" font-size="13"> · 6 runs</tspan></text>
 <text x="24" y="206" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">One compact question per screen, no call for forced moves, reviews on risky end turns</text>
-<path d="M590,191 H693.25 A3,3 0 0 1 696.25,194 V194 A3,3 0 0 1 693.25,197 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
-<circle cx="696.25" cy="176.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="696.25" cy="183.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="696.25" cy="190.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="696.25" cy="197.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="696.25" cy="204.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="696.25" cy="211.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<text x="707.25" y="199" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">17</text>
+<path d="M590,191 H686.1666666666666 A3,3 0 0 1 689.1666666666666,194 V194 A3,3 0 0 1 686.1666666666666,197 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
+<circle cx="689.1666666666666" cy="176.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="183.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="190.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="197.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="204.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="211.5" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="701.1666666666666" y="199" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
 <text x="24" y="238" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v2</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="258" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead</text>
-<path d="M590,243 H762 A3,3 0 0 1 765,246 V246 A3,3 0 0 1 762,249 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
-<circle cx="677.5" cy="246" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="765" cy="246" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<text x="776" y="251" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">28</text>
+<path d="M590,243 H750.3333333333334 A3,3 0 0 1 753.3333333333334,246 V246 A3,3 0 0 1 750.3333333333334,249 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
+<circle cx="671.6666666666666" cy="246" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="753.3333333333334" cy="246" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="765.3333333333334" y="251" font-size="13" font-weight="600"><tspan fill="#0b0b0b">28</tspan></text>
 <text x="24" y="290" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v3</tspan><tspan fill="#898781" font-size="13"> · 3 runs</tspan></text>
 <text x="24" y="310" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Ordered route facts; second looks at hallway potion use and leaving a shop with gold</text>
-<path d="M590,295 H730.75 A3,3 0 0 1 733.75,298 V298 A3,3 0 0 1 730.75,301 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
-<circle cx="683.75" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="633.75" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="733.75" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<text x="744.75" y="303" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">23</text>
+<path d="M590,295 H721.1666666666666 A3,3 0 0 1 724.1666666666666,298 V298 A3,3 0 0 1 721.1666666666666,301 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
+<circle cx="677.5" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="630.8333333333334" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="724.1666666666666" cy="298" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="736.1666666666666" y="303" font-size="13" font-weight="600"><tspan fill="#0b0b0b">23</tspan></text>
 <circle cx="30" cy="351" r="6" fill="#eb6834"/>
 <text x="44" y="356" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">Jev + Claude strategist</text>
 <text x="24" y="386" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v2</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="406" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Claude writes the run plan at key moments; map moves follow its chosen act route</text>
-<path d="M590,391 H887 A3,3 0 0 1 890,394 V394 A3,3 0 0 1 887,397 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="796.25" cy="394" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="890" cy="394" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="901" y="399" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">48</text>
+<path d="M590,391 H867 A3,3 0 0 1 870,394 V394 A3,3 0 0 1 867,397 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="782.5" cy="394" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="870" cy="394" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="882" y="399" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan></text>
 <text x="24" y="438" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v2.1</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="458" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Enforced combat rules: no fatal play if one survives, potion HP floor, focus target</text>
-<path d="M590,443 H887 A3,3 0 0 1 890,446 V446 A3,3 0 0 1 887,449 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="696.25" cy="446" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="890" cy="446" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="901" y="451" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">48</text>
+<path d="M590,443 H867 A3,3 0 0 1 870,446 V446 A3,3 0 0 1 867,449 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="689.1666666666666" cy="446" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="870" cy="446" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="882" y="451" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan></text>
 <text x="24" y="490" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
 <text x="24" y="510" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter</text>
-<path d="M590,495 H693.25 A3,3 0 0 1 696.25,498 V498 A3,3 0 0 1 693.25,501 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="696.25" cy="498" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="707.25" y="503" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">17</text>
+<path d="M590,495 H686.1666666666666 A3,3 0 0 1 689.1666666666666,498 V498 A3,3 0 0 1 686.1666666666666,501 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="689.1666666666666" cy="498" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="701.1666666666666" y="503" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
 <text x="24" y="542" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.1</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
 <text x="24" y="562" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken</text>
-<path d="M590,547 H693.25 A3,3 0 0 1 696.25,550 V550 A3,3 0 0 1 693.25,553 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="696.25" cy="550" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="707.25" y="555" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">17</text>
+<path d="M590,547 H686.1666666666666 A3,3 0 0 1 689.1666666666666,550 V550 A3,3 0 0 1 686.1666666666666,553 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="689.1666666666666" cy="550" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="701.1666666666666" y="555" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
 <text x="24" y="594" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.2</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
 <text x="24" y="614" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">No ending a turn with a playable Beckon; least HP loss while enemies are Intangible</text>
-<path d="M590,599 H693.25 A3,3 0 0 1 696.25,602 V602 A3,3 0 0 1 693.25,605 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="696.25" cy="602" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="707.25" y="607" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">17</text>
+<path d="M590,599 H686.1666666666666 A3,3 0 0 1 689.1666666666666,602 V602 A3,3 0 0 1 686.1666666666666,605 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="689.1666666666666" cy="602" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="701.1666666666666" y="607" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
 <text x="24" y="646" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.3</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
 <text x="24" y="666" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Moves wait for the game's ready signal instead of fixed delays (about 4x faster)</text>
-<path d="M590,651 H793.25 A3,3 0 0 1 796.25,654 V654 A3,3 0 0 1 793.25,657 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="796.25" cy="654" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="807.25" y="659" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">33</text>
+<path d="M590,651 H779.5 A3,3 0 0 1 782.5,654 V654 A3,3 0 0 1 779.5,657 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="782.5" cy="654" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="794.5" y="659" font-size="13" font-weight="600"><tspan fill="#0b0b0b">33</tspan></text>
 <text x="24" y="698" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.4</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
 <text x="24" y="718" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Briefs add enemy patterns, past card picks and fight results; potions saved for bosses</text>
-<path d="M590,703 H887 A3,3 0 0 1 890,706 V706 A3,3 0 0 1 887,709 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="890" cy="706" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="901" y="711" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">48</text>
+<path d="M590,703 H867 A3,3 0 0 1 870,706 V706 A3,3 0 0 1 867,709 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="870" cy="706" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="882" y="711" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan></text>
 <text x="24" y="750" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.5</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="770" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">A second look when Jev's line loses far more HP than the best surviving line</text>
-<path d="M590,755 H887 A3,3 0 0 1 890,758 V758 A3,3 0 0 1 887,761 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
-<circle cx="796.25" cy="758" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<circle cx="890" cy="758" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
-<text x="901" y="763" font-size="13" font-weight="600" fill="#0b0b0b" text-anchor="start">48 won</text>
+<path d="M590,755 H867 A3,3 0 0 1 870,758 V758 A3,3 0 0 1 867,761 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="782.5" cy="758" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="870" cy="758" r="6.5" fill="#0ca30c" stroke="#fcfcfb" stroke-width="2"/>
+<text x="882" y="763" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan><tspan fill="#006300"> ✓ won</tspan></text>
 <text x="24" y="816" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Strategist runs use fixed seeds (JEV1 to JEV5) so versions can be compared on the same maps; v3.1</text>
 <text x="24" y="834" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">to v3.3 replayed v3's non-combat choices on JEV1, so only their combat play differed.</text>
 <text x="24" y="852" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted.</text>

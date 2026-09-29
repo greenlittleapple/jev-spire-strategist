@@ -15,8 +15,8 @@ const dataFile = resolve(root, 'docs/progress/data.json');
 const outDir = resolve(root, 'docs/images');
 
 const THEMES = {
- light: {surface: '#fcfcfb', text: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e1e0d9', axis: '#c3c2b7', track: 0.35, series: ['#2a78d6', '#eb6834']},
- dark: {surface: '#1a1a19', text: '#ffffff', secondary: '#c3c2b7', muted: '#898781', grid: '#2c2c2a', axis: '#383835', track: 0.5, series: ['#3987e5', '#d95926']},
+ light: {surface: '#fcfcfb', text: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e1e0d9', axis: '#c3c2b7', track: 0.35, series: ['#2a78d6', '#eb6834'], good: '#0ca30c', goodText: '#006300'},
+ dark: {surface: '#1a1a19', text: '#ffffff', secondary: '#c3c2b7', muted: '#898781', grid: '#2c2c2a', axis: '#383835', track: 0.5, series: ['#3987e5', '#d95926'], good: '#0ca30c', goodText: '#0ca30c'},
 };
 const FONT = `system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif`;
 const W = 960, LEFT = 24;
@@ -44,11 +44,11 @@ const svg = (height, title, desc, t, body) =>
  + `<rect width="${W}" height="${height}" rx="12" fill="${t.surface}"/>\n${body.join('\n')}\n</svg>\n`;
 
 export function progressSvg(data, t) {
- const X0 = 590, X1 = 890, maxFloor = Math.max(...data.bosses.map(b => b.floor));
+ const X0 = 590, X1 = 870, maxFloor = Math.max(...data.bosses.map(b => b.floor));
  const x = f => X0 + (X1 - X0) * f / maxFloor;
  const body = [
   text(LEFT, 40, 'How far each version got', {size: 20, weight: 600, fill: t.text}),
-  text(LEFT, 64, esc(`${data.game}. Each dot is one run; the bar reaches the best one.`), {size: 14, fill: t.secondary}),
+  text(LEFT, 64, esc(`${data.game}. Each dot is one run, green if it won; the bar reaches the best run.`), {size: 14, fill: t.secondary}),
  ];
  for (const b of data.bosses) {
   body.push(text(x(b.floor), 100, esc(b.label), {size: 13, weight: 600, fill: t.secondary, anchor: 'middle'}),
@@ -69,14 +69,18 @@ export function progressSvg(data, t) {
    if (done.length) {
     const best = Math.max(...done.map(r => r.floor));
     rows.push(bar(X0, x(best), cy, 6, color, t.track));
-    // Runs that ended on the same floor stack vertically, centered on the row.
-    const byFloor = Map.groupBy(done, r => r.floor);
-    for (const [floor, same] of byFloor) same.forEach((r, i) => {
-     const dy = (i - (same.length - 1) / 2) * 7;
-     rows.push(`<circle cx="${x(floor)}" cy="${cy + dy}" r="4.5" fill="${color}" stroke="${t.surface}" stroke-width="2"/>`);
-    });
-    const won = done.some(r => r.result === 'won');
-    rows.push(text(x(best) + 11, cy + 5, won ? `${best} won` : String(best), {size: 13, weight: 600, fill: t.text}));
+    // Runs that ended on the same floor stack vertically, centered on the row. A win is a
+    // larger dot in the status green, drawn on top, and its label says so.
+    const dots = [...Map.groupBy(done, r => r.floor).values()]
+     .flatMap(same => same.map((r, i) => ({r, dy: (i - (same.length - 1) / 2) * 7})))
+     .sort((a, b) => (a.r.result === 'won') - (b.r.result === 'won'));
+    for (const {r, dy} of dots) {
+     const won = r.result === 'won';
+     rows.push(`<circle cx="${x(r.floor)}" cy="${cy + dy}" r="${won ? 6.5 : 4.5}" fill="${won ? t.good : color}" stroke="${t.surface}" stroke-width="2"/>`);
+    }
+    const won = done.some(r => r.result === 'won' && r.floor === best);
+    rows.push(`<text x="${x(best) + 12}" y="${cy + 5}" font-size="13" font-weight="600"><tspan fill="${t.text}">${best}</tspan>`
+     + `${won ? `<tspan fill="${t.goodText}"> ✓ won</tspan>` : ''}</text>`);
    }
    y += h;
   }
@@ -119,7 +123,8 @@ export function paceSvg(data, t) {
 // The README's table view of the progress chart.
 export function progressTable(data) {
  const floor = r => r.result === 'in progress' ? `in progress (floor ${r.floor})` : r.result === 'won' ? `won (floor ${r.floor})` : String(r.floor);
- const runs = v => v.runs.map(r => `${r.seed ? `${r.seed}: ` : ''}${floor(r)}${r.replay ? ' (replay)' : ''}`).join(', ');
+ const cell = r => `${r.seed ? `${r.seed}: ` : ''}${floor(r)}`;
+ const runs = v => v.runs.map(r => (r.result === 'won' ? `**${cell(r)}**` : cell(r)) + (r.replay ? ' (replay)' : '')).join(', ');
  return ['| Version | Final floor of each run | What it added |', '|---|---|---|',
   ...data.versions.map(v => `| ${v.name} (\`${v.policy}\`) | ${runs(v)} | ${v.added} |`)].join('\n');
 }
