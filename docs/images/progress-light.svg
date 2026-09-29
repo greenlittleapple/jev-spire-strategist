@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1380" viewBox="0 0 960 1380" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 48; Strategist v3.14: best floor 17</desc>
-<rect width="960" height="1380" rx="12" fill="#fcfcfb"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="1450" viewBox="0 0 960 1450" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 48; Strategist v3.14: best floor 17; Strategist v3.15: best floor 27</desc>
+<rect width="960" height="1450" rx="12" fill="#fcfcfb"/>
 <text x="24" y="40" font-size="20" font-weight="600" fill="#0b0b0b" text-anchor="start">How far each version got</text>
 <text x="24" y="64" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers). Each dot is one run, green if it won; the bar reaches the best run.</text>
 <text x="689.1666666666666" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Act 1 boss</text>
@@ -9,10 +9,10 @@
 <text x="782.5" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 33</text>
 <text x="870" y="100" font-size="13" font-weight="600" fill="#52514e" text-anchor="middle">Final boss</text>
 <text x="870" y="117" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">floor 48</text>
-<line x1="590" y1="130" x2="590" y2="1276" stroke="#c3c2b7" stroke-width="1"/>
-<line x1="689.1666666666666" y1="130" x2="689.1666666666666" y2="1276" stroke="#e1e0d9" stroke-width="1"/>
-<line x1="782.5" y1="130" x2="782.5" y2="1276" stroke="#e1e0d9" stroke-width="1"/>
-<line x1="870" y1="130" x2="870" y2="1276" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="590" y1="130" x2="590" y2="1346" stroke="#c3c2b7" stroke-width="1"/>
+<line x1="689.1666666666666" y1="130" x2="689.1666666666666" y2="1346" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="782.5" y1="130" x2="782.5" y2="1346" stroke="#e1e0d9" stroke-width="1"/>
+<line x1="870" y1="130" x2="870" y2="1346" stroke="#e1e0d9" stroke-width="1"/>
 <circle cx="30" cy="151" r="6" fill="#2a78d6"/>
 <text x="44" y="156" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">Jev only</text>
 <text x="24" y="186" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v1</tspan><tspan fill="#898781" font-size="13"> · 6 runs</tspan></text>
@@ -132,8 +132,14 @@
 <path d="M590,1232 H686.1666666666666 A3,3 0 0 1 689.1666666666666,1235 V1235 A3,3 0 0 1 686.1666666666666,1238 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
 <circle cx="689.1666666666666" cy="1235" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="701.1666666666666" y="1240" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
-<text x="24" y="1302" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it);</text>
-<text x="24" y="1320" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">from v3.5 on, every run uses a new seed.</text>
-<text x="24" y="1338" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted.</text>
-<text x="24" y="1356" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Runs still in progress are not plotted.</text>
+<text x="24" y="1288" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.15</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
+<text x="24" y="1308" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Block cards with scaling or energy-refund text count as pure block on a turn with</text>
+<text x="24" y="1326" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">nothing incoming</text>
+<path d="M590,1302 H744.5 A3,3 0 0 1 747.5,1305 V1305 A3,3 0 0 1 744.5,1308 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
+<circle cx="747.5" cy="1305" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="759.5" y="1310" font-size="13" font-weight="600"><tspan fill="#0b0b0b">27</tspan></text>
+<text x="24" y="1372" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it);</text>
+<text x="24" y="1390" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">from v3.5 on, every run uses a new seed.</text>
+<text x="24" y="1408" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted.</text>
+<text x="24" y="1426" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Runs still in progress are not plotted.</text>
 </svg>
