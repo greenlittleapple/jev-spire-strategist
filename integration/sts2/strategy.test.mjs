@@ -99,6 +99,10 @@ test('the strategist brief is compact run context without combat piles',()=>{
  const other=strategistBrief(boss(),[],'run_start',{...plan(),run_id:'another-run'});
  assert.equal(other.previous_plan,undefined,'a plan from another run is not shown');
  assert.ok(b.combat_state,'combat consults include the player side');assert.equal(JSON.stringify(b).includes('draw_pile":['),false,'pile contents stay out; counts only');
+ const small=boss();small.player={...small.player,draw_pile:[{name:'Strike'},{name:'Expect a Fight'},{name:'Taunt'}]};
+ assert.deepEqual(strategistBrief(small,[],'low_hp',{...plan(),run_id:'run-1'}).combat_state.draw_cards,['Expect a Fight','Strike','Taunt'],'a small draw pile is listed by name, sorted');
+ small.player.draw_pile=Array.from({length:11},()=>({name:'Strike'}));
+ assert.equal(strategistBrief(small,[],'low_hp',{...plan(),run_id:'run-1'}).combat_state.draw_cards,undefined,'large piles stay counts only');
 });
 
 async function withChannel(fn){

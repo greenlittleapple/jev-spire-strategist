@@ -92,7 +92,9 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
  if(state.battle)brief.combat_state={round:state.battle.round,energy:p.energy,max_energy:p.max_energy,block:p.block??0,
   status:(p.status??[]).map(({name,amount,description})=>({name,amount,description})),
   hand:(p.hand??[]).map(({name,cost,type,description})=>({name,cost,type,description})),
-  draw_pile:p.draw_pile_count??null,discard_pile:p.discard_pile_count??null,exhaust_pile:p.exhaust_pile_count??null};
+  draw_pile:p.draw_pile_count??null,discard_pile:p.discard_pile_count??null,exhaust_pile:p.exhaust_pile_count??null,
+  // A small draw pile's contents (sorted, order unknown) tell what next turn can hold (JEV11: when to kill the Waterfall Giant).
+  ...(Array.isArray(p.draw_pile)&&p.draw_pile.length&&p.draw_pile.length<=10?{draw_cards:p.draw_pile.map(c=>c.name).sort()}:{})};
  if(state.battle)brief.enemies=state.battle.enemies.map(({name,hp,max_hp,block,status,intents})=>({name,hp,max_hp,block,
   status:(status??[]).map(({name,amount,description})=>({name,amount,description})),intents:(intents??[]).map(({title,label,description})=>({title,label,description}))}));
  if(routes)brief.routes=routes;
@@ -345,7 +347,9 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const withoutPotion=kept.filter(c=>!usesPotion(c));
   const saving=hallwayPotionSaving(state,withoutPotion);
   const heals=c=>(c.plan??[c]).some(s=>s.command?.action==='use_potion'&&healOf((state.player?.potions??[]).find(p=>p.slot===s.command.slot))>0);
-  const idle=c=>usesPotion(c)&&!heals(c)&&c.forecast?.quality!=='unknown'&&Number.isFinite(c.forecast?.hpLoss)&&c.forecast.hpLoss>=saving.best;
+  // A potion whose effect this turn's forecast cannot show (new cards, draws, later effects) is unknown, not idle.
+  const unseen=c=>(c.forecast?.warnings??[]).some(w=>/adds or chooses unknown cards|unknown drawn cards|effect starts later/i.test(w));
+  const idle=c=>usesPotion(c)&&!heals(c)&&!unseen(c)&&c.forecast?.quality!=='unknown'&&Number.isFinite(c.forecast?.hpLoss)&&c.forecast.hpLoss>=saving.best;
   if(saving&&withoutPotion.some(c=>c.forecast?.survives!==false))apply('idle_potion',kept.filter(c=>!idle(c)),{hp_percent:hp,floor});
  }
  // Potions kept for the boss: outside boss fights, plays that would leave fewer than the

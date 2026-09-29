@@ -257,3 +257,10 @@ test('under the hallway floor, a non-healing potion that saves no HP this turn i
  const r=combatConstraints(st,cands,plan({hallway_potion_below_hp_percent:40}));
  assert.deepEqual(ids(r),['strike','blood','block']);assert.equal(r.rules.at(-1).kind,'idle_potion');
 });
+
+test('idle_potion keeps a potion whose effect the forecast cannot show (new cards, draws, later effects)',()=>{
+ const st={...fight({hp:20}),player:{hp:20,max_hp:80,potions:[{slot:0,name:'Attack Potion',description:'Choose 1 of 3 random Attacks to add into your Hand. It costs 0 this turn.'}]}};
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'},{hpLoss:6}),
+  cand('attackpot',{action:'use_potion',slot:0},{hpLoss:6,warnings:['Attack Potion adds or chooses unknown cards; re-observe.']})];
+ assert.deepEqual(ids(combatConstraints(st,cands,plan({hallway_potion_below_hp_percent:40}))),['strike','attackpot']);
+});
