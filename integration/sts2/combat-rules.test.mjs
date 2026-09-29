@@ -206,3 +206,12 @@ test('the potion reserve yields below the hallway potion floor',()=>{
  assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite',hp:60}),1),cands,p)),['strike','end']);
  assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite',hp:20}),1),cands,p)),['strike','potion','end'],'at 25% HP the potion is allowed');
 });
+
+test('Flame Barrier counts as pure block on a turn with nothing incoming',()=>{
+ const barrier={type:'Skill',description:'Gain 12 Block. Whenever you are attacked this turn, deal 4 damage back.'};
+ const cands=[{id:'barrier',label:'Flame Barrier',command:{action:'play_card',card_index:0},details:barrier,forecast:{hpLoss:0,quality:'partial',survives:true}},
+  {id:'strike',label:'Strike',command:{action:'play_card',card_index:1,target:'a'},details:{type:'Attack',description:'Deal 6 damage.'},forecast:{hpLoss:0,quality:'partial',survives:true}},
+  {id:'end',label:'End turn',command:{action:'end_turn'},forecast:{hpLoss:0,quality:'partial',survives:true}}];
+ const s=fight();s.player.hand=[];s.player.status=[];s.player.relics=[];
+ assert.deepEqual(ids(combatConstraints(s,cands,null)),['strike','end']);
+});

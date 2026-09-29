@@ -102,7 +102,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
     stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
      // Seen routes carry forward within an act; only a brief that lists them marks them seen.
-     route_act:routes?state.run.act:status.plan?.act===state.run.act?status.plan.route_act??null:null,
+     route_act:routes?state.run.act:status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.route_act??null:null,
      // A choice screen inside a fight (a potion's card pick) keeps that fight as the plan's encounter,
      // so the fight-start trigger does not fire again for the same fight.
      ...(!['monster','elite','boss'].includes(state.state_type)&&status.plan?.encounter&&status.plan.floor===state.run.floor&&status.plan.run_id===state.run.live_id?{encounter:status.plan.encounter}:{})}});

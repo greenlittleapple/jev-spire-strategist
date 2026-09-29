@@ -229,7 +229,8 @@ const usesPotion=c=>c.command.action==='use_potion'||(c.plan??[]).some(s=>s.comm
 const fatal=c=>c.forecast?.survives===false;
 const survives=c=>c.forecast?.survives===true;
 
-const pureBlock=card=>/^Gain \d+ Block\.?$/i.test((card?.description??'').trim());
+// Block with nothing else, or with an effect that only works when attacked (Flame Barrier).
+const pureBlock=card=>/^Gain \d+ Block\.?( Whenever you are attacked this turn, [^.]+\.)?$/i.test((card?.description??'').trim());
 // Block that carries over or is turned into damage keeps block useful with nothing incoming.
 const usesBlock=state=>(state.player?.status??[]).some(p=>/juggernaut|barricade|blur/i.test(p.name))
  ||(state.player?.relics??[]).some(r=>r.id==='CALIPERS')
