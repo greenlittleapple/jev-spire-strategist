@@ -8,7 +8,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 <!-- results:start -->
 
-**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 24 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 28 in 11 runs.
+**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 25 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 28 in 11 runs.
 
 <!-- results:end -->
 
@@ -46,7 +46,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 | Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25 | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
 | Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, **JEV15: won (floor 48)** | Orichalcum forecast; route facts give the fewest elites before the first rest |
 | Strategist v3.14 (`claude-strategy-v3`) | JEV16: 17 | Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting |
-| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
+| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
 
 <!-- progress-table:end -->
 

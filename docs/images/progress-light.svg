@@ -132,11 +132,12 @@
 <path d="M590,1232 H686.1666666666666 A3,3 0 0 1 689.1666666666666,1235 V1235 A3,3 0 0 1 686.1666666666666,1238 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
 <circle cx="689.1666666666666" cy="1235" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="701.1666666666666" y="1240" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
-<text x="24" y="1288" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.15</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
+<text x="24" y="1288" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.15</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="1308" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Block cards with scaling or energy-refund text count as pure block on a turn with</text>
 <text x="24" y="1326" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">nothing incoming</text>
 <path d="M590,1302 H744.5 A3,3 0 0 1 747.5,1305 V1305 A3,3 0 0 1 744.5,1308 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
 <circle cx="747.5" cy="1305" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="689.1666666666666" cy="1305" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="759.5" y="1310" font-size="13" font-weight="600"><tspan fill="#0b0b0b">27</tspan></text>
 <text x="24" y="1372" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it);</text>
 <text x="24" y="1390" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">from v3.5 on, every run uses a new seed.</text>
