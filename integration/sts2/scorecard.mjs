@@ -74,7 +74,9 @@ function score(r) {
   run: r.id, started: r.first, policy: policies.join('+') || null,
   modifiers: modifiers.map(m => m.id.replace(/^MODIFIER\./,'')).join(',') || 'standard',
   character: states[0]?.player?.character ?? null, ascension: last?.run?.ascension ?? null,
-  result: !r.end ? 'in progress' : (r.end.state?.player?.hp ?? 0) > 0 ? 'won' : 'lost',
+  // The Architect event follows the final boss, and the game then ends the run at 0 HP.
+  result: !r.end ? 'in progress' : (r.end.state?.player?.hp ?? 0) > 0
+   || states.some(s => s.state_type === 'event' && s.event?.event_id === 'THE_ARCHITECT') ? 'won' : 'lost',
   act: last?.run?.act, floor: last?.run?.floor, bosses,
   elites_fought: elites.size, elite_choices_taken: eliteOffers.filter(e => /Elite/.test(e.chosen.label)).length, elite_choices_offered: eliteOffers.length,
   relics_end: last?.player?.relics?.length ?? null, gold_end: last?.player?.gold ?? null,

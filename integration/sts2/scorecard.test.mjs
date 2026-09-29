@@ -26,3 +26,11 @@ test('a boss counts as killed when the run reaches a later floor',()=>{
  const [s]=scoreRuns([decision(boss(3,120),'Strike'),decision(state(18,'event'),'Go')]);
  assert.equal(s.bosses[0].killed,true);assert.equal(s.bosses[0].hp_removed_pct,100);
 });
+
+test('a run that reaches The Architect after the final boss is a win although it ends at 0 HP',()=>{
+ const end={kind:'run_end',time:'t',state:{...state(48,'game_over'),player:{hp:0,relics:[],gold:9}}};
+ const [won]=scoreRuns([decision(state(48,'rewards'),'Continue'),decision(state(48,'event',{event:{event_id:'THE_ARCHITECT'}}),'Proceed'),end]);
+ assert.equal(won.result,'won');
+ const [lost]=scoreRuns([decision(state(48,'boss',{battle:{round:3,enemies:[{name:'Boss',hp:50,max_hp:200}]}}),'Strike'),end]);
+ assert.equal(lost.result,'lost');
+});
