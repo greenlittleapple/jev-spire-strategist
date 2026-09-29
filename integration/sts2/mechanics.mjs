@@ -4,6 +4,10 @@ import {readFile,writeFile,mkdir,rename,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {supportedCards,supportedPotions} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
 
+// Entries are keyed by kind and name ("enemy power: Thorns"), so an enemy's Thorns and your own
+// Thorns (from Bronze Scales) keep separate notes. Kind "any" matches the name in every kind.
+export const mechanicKey=(kind,name)=>`${kind}: ${name}`;
+
 // Names the forecasts flag as unmodeled ("Unmodeled enemy power: Ravenous") or could not play.
 export function unmodeledNames(candidates) {
  const names=new Map();
@@ -28,10 +32,14 @@ export function mechanicText(state,name) {
  return hit?(hit.owner?hit.owner+': ':'')+(hit.description??''):'';
 }
 
-// Names present in a state (powers, relics, hand cards), for showing saved explanations.
+// Keys of the mechanics present in a state (powers, relics, hand cards, potions), for showing saved explanations.
 export function presentNames(state) {
- return new Set([...(state.player?.status??[]),...(state.player?.relics??[]),...(state.player?.hand??[]),...(state.player?.potions??[]),
-  ...(state.battle?.enemies??[]).flatMap(e=>e.status??[])].map(x=>String(x?.name??'').replace(/\+$/,'')).filter(Boolean));
+ const clean=x=>String(x?.name??'').replace(/\+$/,'');
+ const groups=[['player power',state.player?.status],['relic',state.player?.relics],['card',state.player?.hand],['card',state.player?.potions],
+  ['enemy power',(state.battle?.enemies??[]).flatMap(e=>e.status??[])]];
+ const keys=new Set();
+ for(const [kind,list] of groups)for(const x of list??[]){const n=clean(x);if(n){keys.add(mechanicKey(kind,n));keys.add(mechanicKey('any',n));}}
+ return keys;
 }
 
 export function fileMechanics(dir) {
@@ -48,10 +56,10 @@ export function fileMechanics(dir) {
  return {
   path,
   async all(){return (await load()).entries;},
-  async set(name,note,meta={}){
+  async set(name,note,meta={},kind='any'){
    if(!name||!note)return;
    const book=await load();
-   book.entries[name]={note,updatedAt:new Date().toISOString(),...meta};
+   book.entries[mechanicKey(kind,name)]={name,kind,note,updatedAt:new Date().toISOString(),...meta};
    await mkdir(dir,{recursive:true});
    await writeFile(path+'.tmp',JSON.stringify(book,null,1));
    await rename(path+'.tmp',path);

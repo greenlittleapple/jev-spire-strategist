@@ -7,7 +7,7 @@ import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId} from './playbook.mjs';
 import {encounterResults,planNeedsReview} from './fight-results.mjs';
-import {unmodeledNames,mechanicText,presentNames} from './mechanics.mjs';
+import {unmodeledNames,mechanicText,presentNames,mechanicKey} from './mechanics.mjs';
 import {replayChoice} from './replay.mjs';
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -49,7 +49,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  const mechanics=strategist.mechanics??null;
  const known=mechanics?await mechanics.all():{};
  // Unmodeled powers, relics and cards in this fight that have no saved explanation yet.
- const unknownHere=['monster','elite','boss'].includes(state.state_type)?[...unmodeledNames(candidates)].filter(([n])=>!known[n]):[];
+ const unknownHere=['monster','elite','boss'].includes(state.state_type)?[...unmodeledNames(candidates)].filter(([n,kind])=>!known[mechanicKey(kind,n)]&&!known[mechanicKey('any',n)]):[];
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
  const encounter=currentEncounter(state,status.fights);
@@ -67,10 +67,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   }
   if(mechanics){
    const meta={run:request.stamp.run_id,floor:request.stamp.floor};
-   for(const m of answer.plan.mechanics??[])await mechanics.set(m.name,m.note,meta);
+   // The kind comes from the request's list, else from a saved entry with that name, else "any".
+   const kinds=new Map((request.brief?.unknown_mechanics??[]).map(m=>[m.name,m.kind]));
+   const saved=Object.values(await mechanics.all()),savedKind=name=>saved.find(e=>e.name===name)?.kind;
+   for(const m of answer.plan.mechanics??[])await mechanics.set(m.name,m.note,meta,kinds.get(m.name)??savedKind(m.name)??'any');
    // Items asked about but not explained are recorded too, so they do not trigger again.
    const answered=new Set((answer.plan.mechanics??[]).map(m=>m.name));
-   for(const m of request.brief?.unknown_mechanics??[])if(!answered.has(m.name))await mechanics.set(m.name,'No special handling noted.',meta);
+   for(const m of request.brief?.unknown_mechanics??[])if(!answered.has(m.name))await mechanics.set(m.name,'No special handling noted.',meta,m.kind??'any');
   }
   if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
    await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
@@ -124,7 +127,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(constraint&&options.length===1)return direct('claude','Strategist',options[0],{constraint});
   const strategy=strategyContext(status.plan,state,fight);
   // Saved explanations of mechanics present now reach Jev directly, not only through plan text.
-  const here=presentNames(state),notes=Object.entries(known).filter(([n,{note}])=>here.has(n)&&note!=='No special handling noted.').map(([name,{note}])=>({name,note}));
+  const here=presentNames(state),notes=Object.entries(known).filter(([k,{note}])=>here.has(k)&&note!=='No special handling noted.').map(([k,{name,note}])=>({name:name??k,note}));
   if(strategy&&notes.length)strategy.mechanics=notes;
   return {...await efficientDeliberate({state,candidates:options,ask,recent,onStage,facts,factsPolicy,resourceReviews,strategy}),constraint};
  };
