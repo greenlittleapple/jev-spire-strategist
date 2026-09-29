@@ -331,10 +331,22 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   if(withoutPotion.some(c=>c.forecast?.survives!==false)){
    // Also keep a potion line that is forecast to save a lot of HP this turn: known, surviving,
    // and at least max(10, 12% of max HP) less HP lost than the best line without a potion.
+   // The saving only counts when the best line without a potion would leave HP under the floor
+   // (JEV10 drank two potions at 80/80 to avoid a 15-damage hit).
    const saving=hallwayPotionSaving(state,withoutPotion);
-   const savers=saving?kept.filter(c=>usesPotion(c)&&saves(c,saving)):[];
+   const dropsBelow=saving&&maxHp&&((state.player.hp-saving.best)/maxHp)*100<floor;
+   const savers=dropsBelow?kept.filter(c=>usesPotion(c)&&saves(c,saving)):[];
    apply('hallway_potion',kept.filter(c=>!usesPotion(c)||savers.includes(c)),{hp_percent:hp,floor,...(savers.length?{potion_lines_kept:savers.length}:{})});
   }
+ }
+ // Below the floor potions are allowed, but not one that saves no HP this turn (JEV10 threw an
+ // Explosive Ampoule on a turn forecast to lose nothing). Healing potions are exempt.
+ if(state.state_type==='monster'&&Number.isInteger(floor)&&floor<100&&hp!=null&&hp<floor){
+  const withoutPotion=kept.filter(c=>!usesPotion(c));
+  const saving=hallwayPotionSaving(state,withoutPotion);
+  const heals=c=>(c.plan??[c]).some(s=>s.command?.action==='use_potion'&&healOf((state.player?.potions??[]).find(p=>p.slot===s.command.slot))>0);
+  const idle=c=>usesPotion(c)&&!heals(c)&&c.forecast?.quality!=='unknown'&&Number.isFinite(c.forecast?.hpLoss)&&c.forecast.hpLoss>=saving.best;
+  if(saving&&withoutPotion.some(c=>c.forecast?.survives!==false))apply('idle_potion',kept.filter(c=>!idle(c)),{hp_percent:hp,floor});
  }
  // Potions kept for the boss: outside boss fights, plays that would leave fewer than the
  // reserve are removed, unless every option that keeps the reserve is forecast to die.

@@ -2,6 +2,8 @@
 // runs die at the same boss, so this also reports boss progress and resource use.
 //   node integration/sts2/scorecard.mjs [--json] [--since ISO-time]
 import {readFile,readdir} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
+import {createInterface} from 'node:readline';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {resolve,dirname} from 'node:path';
 
@@ -103,7 +105,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
  const since = process.argv.includes('--since') ? process.argv[process.argv.indexOf('--since') + 1] : null;
  const events = [];
  for (const f of (await readdir(dir)).filter(f => f.endsWith('.jsonl')).sort())
-  for (const line of (await readFile(resolve(dir, f), 'utf8')).split('\n')) if (line.trim()) events.push(JSON.parse(line));
+  // Streamed: the log passes the ~512 MB string limit. Only decisions and run ends are scored.
+  for await (const line of createInterface({input: createReadStream(resolve(dir, f))})) {
+   if (!line.includes('"kind":"decision"') && !line.includes('"kind":"run_end"')) continue;
+   const e = JSON.parse(line); delete e.candidates; delete e.memory; events.push(e);
+  }
  const seriesFile = resolve(dir, '../series.jsonl');
  const series = (await readFile(seriesFile, 'utf8').catch(() => '')).split(/\r?\n/).filter(Boolean).map(l => JSON.parse(l));
  const rows = scoreRuns(events, series).filter(s => (!since || s.started >= since) && (s.moves >= 5 || process.argv.includes('--all')));

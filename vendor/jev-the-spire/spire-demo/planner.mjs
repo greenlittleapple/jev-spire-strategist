@@ -15,7 +15,7 @@ const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
 export const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang","frantic escape"]);
 export const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
 const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict','colossus']);
-const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit']);
+const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit','paper cuts']);
 const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
   'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
   // No effect within a player turn, or the effect is already in live status, energy or card text
@@ -27,13 +27,17 @@ const knownRelics = new Set(['BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','
   'YUMMY_COOKIE','TOASTY_MITTENS','ICE_CREAM','BRONZE_SCALES']);
 
 const hasRelic=(s,id)=>(s.player.relics??[]).some(r=>r.id===id);
+// A relic whose whole text is a one-time pickup effect (Large Capsule, Alchemical Coffer, Tri-Boomerang)
+// does nothing in combat; its results are already in the deck, relics or potions.
+export const pickupOnly=r=>{const d=String(r?.description??'');
+ return /^(Upon pickup,|Choose \d+ [^.]* in your Deck\.)/i.test(d)&&!/\b(combat|turns?|whenever|at the (start|end)|rest site|shop)\b/i.test(d);};
 function letterProgress(s){const r=(s.player.relics??[]).find(r=>r.id==='LETTER_OPENER');return r&&Number.isInteger(r.counter)?r.counter:null;}
 function initial(s) {
   const warnings = [];
   const runes = modeledRunes(s);
   for (const p of s.player.status ?? []) if (!knownPlayerPowers.has(p.name.toLowerCase())) warnings.push(`Unmodeled player power: ${p.name}`);
   for (const e of s.battle.enemies) for (const p of e.status ?? []) if (!knownEnemyPowers.has(p.name.toLowerCase()) && retaliationRule(p)?.damage==null) warnings.push(`Unmodeled enemy power: ${p.name}`);
-  for (const r of s.player.relics ?? []) if (!knownRelics.has(r.id)
+  for (const r of s.player.relics ?? []) if (!knownRelics.has(r.id) && !pickupOnly(r)
     && !(r.id === 'GROUNDED_RUNE' && runes.grounded)
     && !(r.id === 'FLYING_KICK_RUNE' && runes.flyingKick)) warnings.push(`Unmodeled relic: ${r.name}`);
   const fan = (s.player.relics ?? []).find(r => r.id === 'ORNAMENTAL_FAN');
@@ -420,7 +424,7 @@ function unknownRuneForecast(rules) {
 
 function forecast(m, s) {
   if(m.unsupportedRunes.length)return unknownRuneForecast(m.unsupportedRunes);
-  let incoming = 0, parsed = true; const hitList = [];
+  let incoming = 0, parsed = true; const hitList = [], hitMaxHp = [];
   for (const e of m.enemies.filter(e => e.hp > 0)) {
     if(m.stunned.includes(e.entity_id))continue;
     const before = s.battle.enemies.find(x => x.entity_id === e.entity_id);
@@ -440,7 +444,9 @@ function forecast(m, s) {
       // or an active Colossus against an enemy made Vulnerable in this plan.
       if((m.colossus||m.colossusStart) && amount(e.status,'Vulnerable')>0 && !(m.colossusStart && (m.originalVulnerable[e.entity_id]??0)>0))perHit=Math.floor(perHit*.5);
       incoming += perHit * Number(match[2] ?? 1);
-      for (let i = 0; i < Number(match[2] ?? 1); i++) hitList.push(perHit);
+      // Paper Cuts: each unblocked hit from this enemy also costs Max HP.
+      const maxHpPerHit = (e.status??[]).reduce((n,p)=>n+number(p.description??'',/deals unblocked attack damage to you, you lose (\d+) Max HP/i),0);
+      for (let i = 0; i < Number(match[2] ?? 1); i++) { hitList.push(perHit); hitMaxHp.push(maxHpPerHit); }
     }
   }
   const defeatedEnemies = s.battle.enemies.filter(e=>e.hp>0 && m.enemies.some(after=>after.entity_id===e.entity_id && after.hp<=0 && !after.departedWithLeader)).map(e=>({
@@ -489,7 +495,10 @@ function forecast(m, s) {
   const projectedLoss = mantleLoss + (m.buffer > 0 && m.enemies.some(e=>e.hp>0) ? bufferedLoss() : endTurnCardHpLoss + Math.max(0,incoming+endTurnCardDamage-block));
   // Regen already active heals at the end of this turn, before the enemy attacks.
   const regenHeal = fightContinues ? Math.max(0, Math.min(amount(s.player.status,'Regen'), (m.maxHp ?? m.hp) - m.hp)) : 0;
-  const loss = Math.max(0,s.player.hp-m.hp + projectedLoss - regenHeal);
+  // Max HP lost to unblocked hits (Paper Cuts) is permanent: it counts in hpLoss at least like HP.
+  let maxHpLoss = 0;
+  if (!facingUsable && hitMaxHp.some(n=>n>0)) { let left = Math.max(0, block - endTurnCardDamage); hitList.forEach((h,i)=>{ if (h > left) maxHpLoss += hitMaxHp[i]; left = Math.max(0, left - h); }); }
+  const loss = Math.max(0,s.player.hp-m.hp + projectedLoss - regenHeal) + maxHpLoss;
   const warnings = [...new Set(m.warnings)];
   if(!m.enemies.length)warnings.push('No enemy is on the board: one may revive or arrive. Attacks have no target; keep potions.');
   if(m.unsupportedRunes.length)warnings.push('Active Hextech effects require live rule interpretation: '+m.unsupportedRunes.map(r=>r.name).join(', ')+'. Numeric outcomes are unknown; use a single legal action and re-observe.');
@@ -502,7 +511,7 @@ function forecast(m, s) {
     damage: m.unsupported || m.unsupportedRunes.length ? null : m.cardDamage,
     block: m.unsupported || m.unsupportedRunes.length ? null : block,
     incoming: parsed ? incoming : null,
-    endTurnCardDamage, endTurnCardHpLoss,
+    endTurnCardDamage, endTurnCardHpLoss, ...(maxHpLoss?{maxHpLoss}:{}),
     defeatedEnemies,
     retaliationEvents:m.retaliationEvents,
     runeEffects:{grounded:m.runes.grounded,extraBlock:m.runes.grounded?m.block+m.plating:0,events:m.runeEvents},

@@ -160,13 +160,14 @@ test('a target name covers every living enemy with that name',()=>{
  assert.deepEqual(ids(r),['hit_a','hit_b']);
 });
 
-test('under the hallway floor, a potion line that saves at least max(10, 12% of max HP) stays',()=>{
+test('above the hallway floor, a potion line stays when it saves max(10, 12% of max HP) and the best line without one would drop under the floor',()=>{
  const cands=[cand('defend',{action:'play_card',card_index:0},{hpLoss:20}),cand('end',{action:'end_turn'},{hpLoss:25}),
   cand('block',{action:'use_potion',slot:0},{hpLoss:8}),cand('fire',{action:'use_potion',slot:1},{hpLoss:15})];
- const r=combatConstraints(fight({hp:70}),cands,plan({hallway_potion_below_hp_percent:40}));
+ const r=combatConstraints(fight({hp:40}),cands,plan({hallway_potion_below_hp_percent:40}));
  assert.deepEqual(ids(r),['defend','end','block']);assert.equal(r.rules[0].potion_lines_kept,1);
+ assert.deepEqual(ids(combatConstraints(fight({hp:70}),cands,plan({hallway_potion_below_hp_percent:40}))),['defend','end'],'70 - 20 stays above the floor: no potion');
  const unknown=cands.map(c=>c.id==='block'?{...c,forecast:{...c.forecast,quality:'unknown'}}:c);
- assert.deepEqual(ids(combatConstraints(fight({hp:70}),unknown,plan({hallway_potion_below_hp_percent:40}))),['defend','end'],'an unknown forecast does not qualify');
+ assert.deepEqual(ids(combatConstraints(fight({hp:40}),unknown,plan({hallway_potion_below_hp_percent:40}))),['defend','end'],'an unknown forecast does not qualify');
 });
 
 test('a death countdown at 4 or less forces an affordable card that extends it',()=>{
@@ -247,4 +248,12 @@ test('a forced escape yields when it dies this turn and a blocking line survives
  assert.equal(ids(combatConstraints(st,cands,plan({}),fp)).includes('block'),true,'countdown_escape yields at 3');
  boss.status[0].amount=1;
  assert.deepEqual(ids(combatConstraints(st,cands,plan({}),fp)),['escape'],'at 1 the escape is forced');
+});
+
+test('under the hallway floor, a non-healing potion that saves no HP this turn is removed; healing potions stay',()=>{
+ const st={...fight({hp:26}),player:{hp:26,max_hp:70,potions:[{slot:0,name:'Explosive Ampoule',description:'Deal 10 damage to ALL enemies.'},{slot:1,name:'Blood Potion',description:'Heal for 20% of your Max HP.'},{slot:2,name:'Block Potion',description:'Gain 12 Block.'}]}};
+ const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'},{hpLoss:6}),cand('bomb',{action:'use_potion',slot:0},{hpLoss:6}),
+  cand('blood',{action:'use_potion',slot:1},{hpLoss:6}),cand('block',{action:'use_potion',slot:2},{hpLoss:0})];
+ const r=combatConstraints(st,cands,plan({hallway_potion_below_hp_percent:40}));
+ assert.deepEqual(ids(r),['strike','blood','block']);assert.equal(r.rules.at(-1).kind,'idle_potion');
 });

@@ -409,3 +409,23 @@ test('recorded Insatiable: Frantic Escape is forecast (no effect this turn), so 
   const block=projectSequence(s,['Defend','Defend','Iron Wave → The Insatiable']);
   assert.equal(block.survives,true);assert.equal(block.hpLoss,10);
 });
+
+test('pickup-only relics are known: no Unmodeled relic warning',async()=>{
+  const {pickupOnly}=await import('./planner.mjs');
+  assert.equal(pickupOnly({description:'Upon pickup, gain 4 potion slots filled with random Potions.'}),true);
+  assert.equal(pickupOnly({description:'Choose 3 Attacks in your Deck. Enchant them with Instinct.'}),true);
+  assert.equal(pickupOnly({description:'At the start of each combat, deal 9 damage to ALL enemies.'}),false);
+  assert.equal(pickupOnly({description:'Whenever you enter a shop room, heal 15 HP.'}),false);
+});
+
+test('Paper Cuts: each unblocked hit adds its Max HP loss to hpLoss; blocked hits add none',()=>{
+  const s=structuredClone(fixture('insatiable-escape'));
+  const e=s.battle.enemies[0];
+  e.status=[{name:'Paper Cuts',amount:2,description:'Whenever Scroll of Biting deals unblocked attack damage to you, you lose 2 Max HP.'}];
+  e.intents=[{type:'Attack',title:'Aggressive',label:'5x2 (10)',description:'This enemy intends to Attack for 5 damage 2 times.'}];
+  s.player.hp=60;
+  const open=projectSequence(s,['Frantic Escape']);
+  assert.equal(open.maxHpLoss,4);assert.equal(open.hpLoss,14);assert.equal(open.warnings.some(w=>/Paper Cuts/.test(w)),false);
+  const blocked=projectSequence(s,['Defend','Defend']);
+  assert.equal(blocked.maxHpLoss??0,0);assert.equal(blocked.hpLoss,0);
+});
