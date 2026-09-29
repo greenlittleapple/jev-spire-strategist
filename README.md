@@ -1,6 +1,6 @@
 # Jev + Claude strategist for Slay the Spire 2
 
-[![Tests](https://github.com/greenlittleapple/jev-game-lab/actions/workflows/test.yml/badge.svg)](https://github.com/greenlittleapple/jev-game-lab/actions/workflows/test.yml)
+[![Tests](https://github.com/greenlittleapple/jev-spire-strategist/actions/workflows/test.yml/badge.svg)](https://github.com/greenlittleapple/jev-spire-strategist/actions/workflows/test.yml)
 
 An agent that plays Slay the Spire 2 through a local game bridge. [Jev](https://docs.typesafe.ai/api), TypeSafe's decision model (`jev-1.13.0`), picks every move from legal options that code builds out of the live game state. Claude, running in a Claude Code session, is a slower strategist: at set trigger points it writes a plan for the run and decides run-shaping screens such as card rewards, shops and rest sites. Deterministic rules between the two enforce that plan, and every move is checked against a fresh observation before it is sent.
 
