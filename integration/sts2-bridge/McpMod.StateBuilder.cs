@@ -537,7 +537,7 @@ public static partial class McpMod
             }
             // Check the same event object that BuildFakeMerchantState casts; the canonical and
             // mutable events can differ (Room Full of Cheese reported a FakeMerchant canonical event).
-            else if ((eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent) is FakeMerchant)
+            else if (LiveEvent(eventRoom) is FakeMerchant)
             {
                 result["state_type"] = "fake_merchant";
                 result["fake_merchant"] = BuildFakeMerchantState(eventRoom, runState);
@@ -1403,6 +1403,14 @@ public static partial class McpMod
         return state;
     }
 
+    // LocalMutableEvent asks EventSynchronizer for this player's copy, which throws
+    // ArgumentOutOfRangeException while the event room is still loading; use the canonical event then.
+    internal static EventModel LiveEvent(EventRoom room)
+    {
+        try { return room.LocalMutableEvent ?? room.CanonicalEvent; }
+        catch (ArgumentOutOfRangeException) { return room.CanonicalEvent; }
+    }
+
     private static Dictionary<string, object?> BuildEventState(EventRoom eventRoom, RunState runState)
     {
         var state = new Dictionary<string, object?>();
@@ -1430,7 +1438,7 @@ public static partial class McpMod
         // Event body text
         // The page text lives on the per-player mutable event; the canonical template never advances
         // pages, so its Description stays null. Fall back to the opening page text.
-        var liveEvent = eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent;
+        var liveEvent = LiveEvent(eventRoom);
         state["body"] = SafeGetText(() => liveEvent.Description) ?? SafeGetText(() => liveEvent.InitialDescription);
 
         // Options from UI
@@ -1471,7 +1479,7 @@ public static partial class McpMod
         var state = new Dictionary<string, object?>();
         // LocalMutableEvent holds the per-player mutable copy with populated inventory;
         // CanonicalEvent is the shared template which may not have it.
-        var fakeMerchant = (FakeMerchant)(eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent);
+        var fakeMerchant = (FakeMerchant)LiveEvent(eventRoom);
 
         state["event_id"] = fakeMerchant.Id.Entry;
         state["event_name"] = SafeGetText(() => fakeMerchant.Title);

@@ -368,7 +368,7 @@ public static partial class McpMod
         }
         else if (player.RunState.CurrentRoom is EventRoom eventRoom
                  && eventRoom.CanonicalEvent is FakeMerchant
-                 && (eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent) is FakeMerchant fakeMerchant)
+                 && LiveEvent(eventRoom) is FakeMerchant fakeMerchant)
         {
             // Fake merchant event - auto-open via button if needed
             if (!fakeMerchant.StartedFight)

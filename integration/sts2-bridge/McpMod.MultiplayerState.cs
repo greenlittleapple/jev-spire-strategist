@@ -170,7 +170,7 @@ public static partial class McpMod
             }
             // Check the same event object that BuildFakeMerchantState casts; the canonical and
             // mutable events can differ (Room Full of Cheese reported a FakeMerchant canonical event).
-            else if ((eventRoom.LocalMutableEvent ?? eventRoom.CanonicalEvent) is FakeMerchant)
+            else if (LiveEvent(eventRoom) is FakeMerchant)
             {
                 result["state_type"] = "fake_merchant";
                 result["fake_merchant"] = BuildFakeMerchantState(eventRoom, runState);
