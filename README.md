@@ -1,5 +1,7 @@
 # Jev + Claude strategist for Slay the Spire 2
 
+[![Tests](https://github.com/greenlittleapple/jev-game-lab/actions/workflows/test.yml/badge.svg)](https://github.com/greenlittleapple/jev-game-lab/actions/workflows/test.yml)
+
 An agent that plays Slay the Spire 2 through a local game bridge. [Jev](https://docs.typesafe.ai/api), TypeSafe's decision model (`jev-1.13.0`), picks every move from legal options that code builds out of the live game state. Claude, running in a Claude Code session, is a slower strategist: at set trigger points it writes a plan for the run and decides run-shaping screens such as card rewards, shops and rest sites. Deterministic rules between the two enforce that plan, and every move is checked against a fresh observation before it is sent.
 
 It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where Jev plays alone. This repository adds the strategist layer, route and resource facts computed in code, enforced combat rules, cross-run memory, and moves that wait on the game's readiness instead of fixed delays.
@@ -68,6 +70,10 @@ flowchart LR
 - **Strategist.** Claude answers through a file channel (`npm run sts2:strategy -- wait | show | answer`) in the operator's Claude Code session. No Anthropic API key is used. Triggers include run and act start, elite and boss fights, every card reward, shop, event, rest site and treasure, a new relic, low HP, a normal fight with no saved plan, and mechanics the forecasts don't model. The plan is a fixed JSON schema: archetype and priorities, the act route as map node IDs, a fight plan and target order per encounter, a potion HP floor and boss reserve, and the exact options to take on the current screen.
 - **Rules between them.** Options outside the plan are removed on its screens. Combat rules remove a play forecast to be fatal while a surviving one exists, take a forecast win when there is one, hold potions above the plan's HP floor in normal fights, keep the boss reserve, and follow the encounter's target order. Each rule leaves at least one option, and anything that executes goes through the same freshness check, pause control and dispatch log.
 - **Memory across runs.** Fight plans are saved per encounter and reused, with the results of past fights against it. Strategist briefs also show each enemy's observed move sequence and how earlier picks of an offered card worked out.
+
+The dashboard during the Act 1 boss fight of seed JEV5, with the strategist's current plan and the decision stream (each move is labelled as Jev's, forced, or the strategist's):
+
+<img alt="Dashboard: run progress, the strategist panel with its current plan, the current room showing the Ironclad against Waterfall Giant, and the decision stream." src="docs/images/dashboard.png" width="900">
 
 Why split it this way: in the five-run Jev-only baseline, Jev never took an optional elite (0 of 6), drank 14 of its 21 potions in normal fights, died with 161 to 329 gold unspent, and spread near-uniform probabilities over card rewards. Those are planning problems. A strategist answer takes far longer than a Jev call, so Claude is consulted only at trigger points (between 7 and 92 times per run so far) while Jev makes the hundreds of moves in between. The full design, rule list and trigger list are in [docs/STS2.md](docs/STS2.md#claude-strategy-layer).
 
