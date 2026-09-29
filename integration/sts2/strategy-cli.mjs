@@ -11,15 +11,10 @@ import {validatePlan} from './strategy.mjs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../..');
 const channel=fileChannel(process.env.STRATEGY_DIR??resolve(root,'.private/sts2/strategy'));
 const [command,...args]=process.argv.slice(2);
-const unanswered=async()=>{
- const request=await channel.current();
- if(!request)return null;
- return (await channel.pendingAnswer())?.id===request.id?null:request;
-};
 
 if(command==='wait'){
  for(;;){
-  const request=await unanswered();
+  const request=await channel.pending();
   if(request){console.log(`Strategy request ${request.id} (${request.stamp.reason}, act ${request.stamp.act} floor ${request.stamp.floor})`);break;}
   await new Promise(r=>setTimeout(r,1000));
  }

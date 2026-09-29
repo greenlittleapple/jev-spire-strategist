@@ -19,6 +19,13 @@ export function fileChannel(dir) {
   dir,requestFile,answerFile,
   current:()=>readJson(requestFile),
   pendingAnswer:()=>readJson(answerFile),
+  // Session side: the request if it is still unanswered. take() deletes the request before the
+  // answer, so a request that is still there after no answer was found has not been consumed.
+  async pending() {
+   const request=await readJson(requestFile);
+   if(!request||(await readJson(answerFile))?.id===request.id)return null;
+   return (await readJson(requestFile))?.id===request.id?request:null;
+  },
   async post(fields) {
    await mkdir(dir,{recursive:true,mode:0o700});
    const request={id:randomUUID(),createdAt:new Date().toISOString(),...fields};
@@ -29,9 +36,11 @@ export function fileChannel(dir) {
   async take(id) {
    const answer=await readJson(answerFile);
    if(!answer)return null;
-   await unlink(answerFile).catch(()=>{});
-   if(answer.id!==id)return null;
+   if(answer.id!==id){await unlink(answerFile).catch(()=>{});return null;}
+   // Request first: a session polling between the two deletes must not find the request
+   // without its answer and answer it again.
    await unlink(requestFile).catch(()=>{});
+   await unlink(answerFile).catch(()=>{});
    return answer;
   },
   // Session side: answer only the request that was read.

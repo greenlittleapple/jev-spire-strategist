@@ -28,7 +28,7 @@ async function withDir(fn){const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));try
 function session(channel,makePlan,seen=[]){
  let stop=false;
  // The loop is awaited on halt, so the directory is never removed while an answer is being written.
- const done=(async()=>{while(!stop){const r=await channel.current();if(r&&!(await channel.pendingAnswer())){seen.push(r);await channel.answer(r.id,makePlan(r));}await new Promise(x=>setTimeout(x,30));}})();
+ const done=(async()=>{while(!stop){const r=await channel.pending();if(r){seen.push(r);await channel.answer(r.id,makePlan(r));}await new Promise(x=>setTimeout(x,30));}})();
  const halt=async()=>{stop=true;await done.catch(()=>{});};sessions.push(halt);return halt;
 }
 

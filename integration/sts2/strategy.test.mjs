@@ -112,9 +112,18 @@ async function withChannel(fn){
 // Plays the Claude session: answers the first request it sees.
 function session(channel,makePlan){
  let stop=false;
- (async()=>{while(!stop){const r=await channel.current();if(r&&!(await channel.pendingAnswer())){await channel.answer(r.id,makePlan(r));return;}await new Promise(x=>setTimeout(x,50));}})();
+ (async()=>{while(!stop){const r=await channel.pending();if(r){await channel.answer(r.id,makePlan(r));return;}await new Promise(x=>setTimeout(x,50));}})();
  return ()=>{stop=true;};
 }
+
+test('a request is pending until answered, and not once its answer is waiting or taken',()=>withChannel(async channel=>{
+ const r=await channel.post({stamp:{reason:'x'}});
+ assert.equal((await channel.pending()).id,r.id);
+ await channel.answer(r.id,{});
+ assert.equal(await channel.pending(),null,'answered, not yet taken');
+ assert.equal((await channel.take(r.id)).id,r.id);
+ assert.equal(await channel.pending(),null);assert.equal(await channel.current(),null);
+}));
 
 test('run start waits for the session plan, then Jev sees it and Claude-constrained options',()=>withChannel(async channel=>{
  const s=shop(),c=decisionCandidates(s),status=newStrategyStatus({enabled:true,waitMs:5000}),requests=[];
