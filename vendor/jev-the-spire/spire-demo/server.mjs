@@ -301,7 +301,7 @@ async function step(token, preview = false) {
         view.runeAwareness = payload.state?.hextech_runes ?? null;
         const response=await fetch('https://api.typesafe.ai/v1/systemone',{
           method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
-          body:JSON.stringify({model:JEV_MODEL,...payload}),signal:AbortSignal.timeout(30000),
+          body:JSON.stringify({...payload,model:JEV_MODEL}),signal:AbortSignal.timeout(30000),
         });
         if(!response.ok){
           // Report a bounded error code only, never a provider echo of request data.
