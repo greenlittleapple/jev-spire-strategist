@@ -244,7 +244,12 @@ const fatal=c=>c.forecast?.survives===false;
 const survives=c=>c.forecast?.survives===true;
 
 // Block with nothing else, or with an effect that only works when attacked (Flame Barrier).
-const pureBlock=card=>/^Gain \d+ Block\.?( Whenever you are attacked this turn, [^.]+\.)?$/i.test((card?.description??'').trim());
+// Every sentence only adds block, a thorns-style reply to attacks this turn, or a refund of energy
+// (a Sown enchantment). JEV16 played Sown Expect a Fight on Vantom's buff turn with attacks in hand.
+const blockSentences=[/^Gain \d+ Block$/i,/^Gains? (?:\d+ )?additional Block for each [^.]+$/i,/^Gain another \d+ Block if [^.]+$/i,
+ /^Whenever you are attacked this turn, [^.]+$/i,/^Gain (?:\[[^\]]*energy[^\]]*\])+$/i];
+const pureBlock=card=>{const parts=String(card?.description??'').split(/\.(?:\s+|$)/).map(s=>s.trim()).filter(Boolean);
+ return parts.length>0&&blockSentences[0].test(parts[0])&&parts.every(p=>blockSentences.some(r=>r.test(p)));};
 // Block that carries over or is turned into damage keeps block useful with nothing incoming.
 const usesBlock=state=>(state.player?.status??[]).some(p=>/juggernaut|barricade|blur/i.test(p.name))
  ||(state.player?.relics??[]).some(r=>r.id==='CALIPERS')

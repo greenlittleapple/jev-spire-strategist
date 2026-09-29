@@ -217,6 +217,16 @@ test('Flame Barrier counts as pure block on a turn with nothing incoming',()=>{
  assert.deepEqual(ids(combatConstraints(s,cands,null)),['strike','end']);
 });
 
+test('block cards with scaling, conditional or energy-refund text are pure block too; draw or upgrade is not',()=>{
+ const card=(id,description,i)=>({id,label:id,command:{action:'play_card',card_index:i},details:{type:'Skill',description},forecast:{hpLoss:0,quality:'partial',survives:true}});
+ const cands=[card('fight','Gain 15 Block. Gains 5 additional Block for each Strength you have. Gain [ironclad_energy_icon.png].',0),
+  card('eye','Gain 8 Block. Gain another 8 Block if you have Exhausted a card this turn.',1),
+  card('armaments','Gain 5 Block. Upgrade a card in your Hand.',2),card('shrug','Gain 8 Block. Draw 1 card.',3),
+  {id:'end',label:'End turn',command:{action:'end_turn'},forecast:{hpLoss:0,quality:'partial',survives:true}}];
+ const s=fight();s.player.hand=[];s.player.status=[];s.player.relics=[];
+ assert.deepEqual(ids(combatConstraints(s,cands,null)),['armaments','shrug','end']);
+});
+
 test('a healing potion is not drunk when less HP is missing than it heals, even in a boss fight',()=>{
  const potion={name:'Blood Potion',description:'Heal for 20% of your Max HP.',slot:0};
  const s=hp=>({...fight({type:'boss',hp}),player:{hp,max_hp:90,potions:[potion]}});
