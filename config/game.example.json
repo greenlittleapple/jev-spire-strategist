@@ -1,8 +1,0 @@
-{
-  "provider": "jev", "model": "jev-1.13.0", "adapter": "bridge",
-  "bridgeUrl": "http://127.0.0.1:8791",
-  "objective": "REPLACE AFTER CHOOSING A GAME",
-  "maxSteps": 100, "maxCalls": 50, "maxSeconds": 300,
-  "minIntervalMs": 1000, "minConfidence": 0.65, "maxRepeatedStates": 3,
-  "maxRequestBytes": 16000, "maxInputTokens": 100000
-}
