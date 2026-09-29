@@ -1,0 +1,138 @@
+{
+ "about": "Chart data for the README. Versions, their descriptions and run IDs are curated; run results and pace come from the private run logs via `npm run sts2:progress -- --refresh`.",
+ "game": "Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers)",
+ "bosses": [
+  {"floor": 17, "label": "Act 1 boss"},
+  {"floor": 33, "label": "Act 2 boss"},
+  {"floor": 48, "label": "Final boss"}
+ ],
+ "groups": [
+  {"id": "jev", "label": "Jev only"},
+  {"id": "strategist", "label": "Jev + Claude strategist"}
+ ],
+ "versions": [
+  {
+   "name": "Jev v1",
+   "policy": "jev-compact-v1",
+   "group": "jev",
+   "added": "One compact question per screen, no call for forced moves, reviews on risky end turns",
+   "runs": [
+    {"run": "1790568890", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 262},
+    {"run": "1790569858", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 235},
+    {"run": "1790570942", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 177},
+    {"run": "1790571562", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 225},
+    {"run": "1790572332", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 221},
+    {"run": "1790573042", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 250}
+   ]
+  },
+  {
+   "name": "Jev v2",
+   "policy": "jev-compact-v2",
+   "group": "jev",
+   "added": "Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead",
+   "runs": [
+    {"run": "1790573872", "seed": null, "result": "lost", "act": 1, "floor": 14, "moves": 220},
+    {"run": "1790574625", "seed": null, "result": "lost", "act": 2, "floor": 28, "moves": 396}
+   ]
+  },
+  {
+   "name": "Jev v3",
+   "policy": "jev-compact-v3",
+   "group": "jev",
+   "added": "Ordered route facts; second looks at hallway potion use and leaving a shop with gold",
+   "runs": [
+    {"run": "1790576340", "seed": null, "result": "lost", "act": 1, "floor": 15, "moves": 223},
+    {"run": "1790577124", "seed": null, "result": "lost", "act": 1, "floor": 7, "moves": 144},
+    {"run": "1790577570", "seed": null, "result": "lost", "act": 2, "floor": 23, "moves": 301}
+   ]
+  },
+  {
+   "name": "Strategist v2",
+   "policy": "claude-strategy-v2",
+   "group": "strategist",
+   "added": "Claude writes the run plan at key moments; map moves follow its chosen act route",
+   "runs": [
+    {"run": "1790578663", "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 456},
+    {"run": "1790582151", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 792}
+   ]
+  },
+  {
+   "name": "Strategist v2.1",
+   "policy": "claude-strategy-v2.1",
+   "group": "strategist",
+   "added": "Enforced combat rules: no fatal play if one survives, potion HP floor, focus target",
+   "runs": [
+    {"run": "1790618954", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 224},
+    {"run": "1790619864", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 782}
+   ]
+  },
+  {
+   "name": "Strategist v3",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter",
+   "runs": [
+    {"run": "1790622821", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 210}
+   ]
+  },
+  {
+   "name": "Strategist v3.1",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken",
+   "runs": [
+    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226}
+   ]
+  },
+  {
+   "name": "Strategist v3.2",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "No ending a turn with a playable Beckon; least HP loss while enemies are Intangible",
+   "runs": [
+    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209}
+   ]
+  },
+  {
+   "name": "Strategist v3.3",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Moves wait for the game's ready signal instead of fixed delays (about 4x faster)",
+   "runs": [
+    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444}
+   ]
+  },
+  {
+   "name": "Strategist v3.4",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Briefs add enemy patterns, past card picks and fight results; potions saved for bosses",
+   "runs": [
+    {"run": "1790633009", "seed": "JEV1", "result": "lost", "act": 3, "floor": 48, "moves": 676}
+   ]
+  },
+  {
+   "name": "Strategist v3.5",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "A second look when Jev's line loses far more HP than the best surviving line",
+   "runs": [
+    {"run": "1790636473", "seed": "JEV3", "result": "lost", "act": 2, "floor": 33, "moves": 361},
+    {"run": "1790637679", "seed": "JEV4", "result": "won", "act": 3, "floor": 48, "moves": 749},
+    {"run": "1790639994", "seed": "JEV5", "result": "in progress", "act": 1, "floor": 2, "moves": 19}
+   ]
+  }
+ ],
+ "notes": [
+  "Beating the final boss on floor 48 wins the run. Strategist runs use fixed seeds (JEV1 to JEV5) so versions can be compared on the same maps; v3.1 to v3.3 replayed v3's non-combat choices on JEV1, so only their combat play differed.",
+  "The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted. Runs still in progress are not plotted."
+ ],
+ "pace": {
+  "about": "Median seconds between consecutive executed moves, including the Jev call. Gaps over 10 minutes (pauses) are left out.",
+  "groups": [
+   {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
+   {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 5, "moves": 2249, "median_s": 0.64}
+  ]
+ }
+}

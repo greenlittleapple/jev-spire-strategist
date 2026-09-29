@@ -32,11 +32,11 @@ The adapter handles visible rune choice, confirmation, player-rune rerolls and e
 
 ## Installation and recovery
 
-- Game: `E:/Games (E)/Steam/steamapps/common/Slay the Spire 2`, v0.111.0.
-- Bridge source: `integration/sts2-bridge`; installed as `mods/STS2_MCP.dll` and `mods/STS2_MCP.json`.
-- Build: `dotnet build integration/sts2-bridge/STS2_MCP.csproj -c Release "-p:STS2GameDir=E:\Games (E)\Steam\steamapps\common\Slay the Spire 2"`.
+- Game: Slay the Spire 2 from Steam, v0.111.0; `<game dir>` below is its install folder (`steamapps/common/Slay the Spire 2`).
+- Bridge source: `integration/sts2-bridge`; installed as `mods/STS2_MCP.dll` and `mods/STS2_MCP.json` (a copy of `mod_manifest.json`).
+- Build: `dotnet build integration/sts2-bridge/STS2_MCP.csproj -c Release "-p:STS2GameDir=<game dir>"`.
 - Quit the game before replacing the bridge DLL; confirm installed/build hashes match.
-- **Readiness** (bridge source from 2026-09-28, not yet installed): every state carries `ready` (no game action executing, all action queues empty, player actions enabled in combat) and `busy` details, read from `ActionExecutor.IsRunning`, `ActionQueueSet.IsEmpty` and `CombatManager.PlayerActionsDisabled`. The runner waits while `ready` is false and, when it is true, replaces the fixed waits (1,200 ms after each move, 700 ms settle, 600 ms loop tick; median 2.4 s per move) with a 60 ms recheck in combat and 250 ms on other screens. Without the field (older bridge) the fixed waits apply. Overrides: `SPIRE_SETTLE_MS`, `SPIRE_COOLDOWN_MS`, `SPIRE_READY_SETTLE_MS`, `SPIRE_READY_SCREEN_SETTLE_MS`, `SPIRE_TICK_MS`. `ready`/`busy` are excluded from the state fingerprint.
+- **Readiness** (bridge installed 2026-09-28; runs from `1790627417` on use it): every state carries `ready` (no game action executing, all action queues empty, player actions enabled in combat) and `busy` details, read from `ActionExecutor.IsRunning`, `ActionQueueSet.IsEmpty` and `CombatManager.PlayerActionsDisabled`. The runner waits while `ready` is false and, when it is true, replaces the fixed waits (1,200 ms after each move, 700 ms settle, 600 ms loop tick; median 2.4 s per move) with a 60 ms recheck in combat and 250 ms on other screens. Without the field (older bridge) the fixed waits apply. Overrides: `SPIRE_SETTLE_MS`, `SPIRE_COOLDOWN_MS`, `SPIRE_READY_SETTLE_MS`, `SPIRE_READY_SCREEN_SETTLE_MS`, `SPIRE_TICK_MS`. `ready`/`busy` are excluded from the state fingerprint.
 - Original settings and profile1 saves: `.private/backups/before-sts2-setup/`. Restore only deliberately with the game closed; restoring progression can discard newer progress.
 - Disable only STS2 MCP in the game's mod list to stop exposing its local API. Other mods were not disabled or replaced.
 - Private run logs and session: `.private/sts2/runs/`.
@@ -46,7 +46,6 @@ The adapter handles visible rune choice, confirmation, player-rune rerolls and e
 - [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), MIT, commit `8bab787b7e2a135d86d674007a4a8fa80b4a9c3c`, imported under `vendor/jev-the-spire`. Runtime, tests and license retained; published progress-site assets and illustrations omitted. Upstream reports its first A0 victory in archived run 182 across multiple policies, not an A10 result or a current win-rate estimate.
 - [STS2MCP](https://github.com/Gennadiyev/STS2MCP), commit `55e064850a68f3b4cde7e5fd525bf9b2dec4e885`, source/license retained under `integration/sts2-bridge`. Local changes adapt v0.111.0 lobby fields, expose full deck and live run identity, support Hextech selection, reject browser-origin requests and restrict control to single-player.
 - [TypeSafe API](https://docs.typesafe.ai/api), [Choice](https://docs.typesafe.ai/primitives/choice), [models and pricing](https://docs.typesafe.ai/models), checked 2026-09-27. `jev-latest` currently resolves to `jev-1.13.0`; each decision logs the returned model.
-- Referenced conversation: Jev learnings, `6ab842f5-90b8-83e8-9692-f617dcd2fe3c`.
 
 Jev does not learn new model weights from these runs. Improvements require evaluating observations, candidate coverage, forecasts and question design. Multiple seeds and higher-ascension results are needed to establish playing strength.
 

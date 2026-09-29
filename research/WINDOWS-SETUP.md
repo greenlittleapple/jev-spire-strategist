@@ -1,6 +1,6 @@
 # Windows Jev setup research
 
-Researched 2026-09-26. Reference conversation: **Weird Programming Watch**, ChatGPT ID `6aaf6c85-ca70-83e8-bf75-ec4db5940491`. Its September 25–26 entry links specifically to christianmat/jev-pokemon. The thread's badge/cost reports are author claims, not a benchmark reproduced here.
+Researched 2026-09-26, starting from christianmat/jev-pokemon. That project's badge and cost reports are its author's claims, not a benchmark reproduced here.
 
 ## Decision
 
