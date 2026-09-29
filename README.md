@@ -6,7 +6,11 @@ An agent that plays Slay the Spire 2 through a local game bridge. [Jev](https://
 
 It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where Jev plays alone. This repository adds the strategist layer, route and resource facts computed in code, enforced combat rules, cross-run memory, and moves that wait on the game's readiness instead of fixed delays.
 
-**Results so far** (Ironclad, Ascension 0, standard runs): one win, by Strategist v3.5 on seed JEV4, which beat the final boss on floor 48 with 78 of 94 HP left. Four of the 12 finished strategist runs reached the final boss. Jev alone never got past Act 2 in 11 runs (best: floor 28).
+<!-- results:start -->
+
+**Results so far** (Ironclad, Ascension 0, standard runs): 2 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8. Of the 21 finished strategist runs, 5 reached the final boss on floor 48. Jev alone got no further than floor 28 in 11 runs.
+
+<!-- results:end -->
 
 ## Progress by version
 
@@ -33,6 +37,14 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 | Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay) | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
 | Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48 | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
 | Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, **JEV4: won (floor 48)**, JEV5: 17 | A second look when Jev's line loses far more HP than the best surviving line |
+| Strategist v3.6 (`claude-strategy-v3`) | JEV6: 17 | Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP |
+| Strategist v3.7 (`claude-strategy-v3`) | JEV7: 33 | No healing potion that would mostly overheal; route plans start fresh each run |
+| Strategist v3.8 (`claude-strategy-v3`) | **JEV8: won (floor 48)**, JEV9: 33 | Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield |
+| Strategist v3.9 (`claude-strategy-v3`) | JEV10: 42 | Frantic Escape forecast; a forced escape yields when it dies and a block line survives |
+| Strategist v3.10 (`claude-strategy-v3`) | JEV11: 17 | Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast |
+| Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17 | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
+| Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25 | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
+| Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, JEV15: in progress (floor 7) | Orichalcum forecast; route facts give the fewest elites before the first rest |
 
 <!-- progress-table:end -->
 
@@ -75,15 +87,20 @@ The dashboard during the Act 1 boss fight of seed JEV5, with the strategist's cu
 
 <img alt="Dashboard: run progress, the strategist panel with its current plan, the current room showing the Ironclad against Waterfall Giant, and the decision stream." src="docs/images/dashboard.png" width="900">
 
-Why split it this way: in the five-run Jev-only baseline, Jev never took an optional elite (0 of 6), drank 14 of its 21 potions in normal fights, died with 161 to 329 gold unspent, and spread near-uniform probabilities over card rewards. Those are planning problems. A strategist answer takes far longer than a Jev call, so Claude is consulted only at trigger points (between 7 and 92 times per run so far) while Jev makes the hundreds of moves in between. The full design, rule list and trigger list are in [docs/STS2.md](docs/STS2.md#claude-strategy-layer).
+Why split it this way: in the five-run Jev-only baseline, Jev never took an optional elite (0 of 6), drank 14 of its 21 potions in normal fights, died with 161 to 329 gold unspent, and spread near-uniform probabilities over card rewards. Those are planning problems. A strategist answer takes far longer than a Jev call, so Claude is consulted only at trigger points (a few dozen times in a typical run) while Jev makes the hundreds of moves in between. The full design, rule list and trigger list are in [docs/STS2.md](docs/STS2.md#claude-strategy-layer).
 
 ## Limits
 
-- The samples are small. Seven of the 12 finished strategist runs use seed JEV1, and three of those replayed an earlier run's non-combat choices, while the Jev-only runs used unseeded maps. One win is not a win rate, and the comparison is indicative, not a controlled measurement.
+- The samples are small. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it); from v3.5 on, every run uses a new seed. The Jev-only runs used unseeded maps. The wins so far are not a win rate, and the comparison is indicative, not a controlled measurement.
 - Ascension 0 only, Ironclad only. Stronger play at higher ascensions has not been shown.
 - Runs were played on a modded install: mostly cosmetic and interface mods, plus Hextech Runes, which changes the game only when its run modifier is selected. Standard runs don't select it.
-- Jev used 1.0 to 3.2 million input tokens per Jev-only run and 1.3 to 7.4 million with the strategist, about $0.04 to $0.31 per run at TypeSafe's listed $0.042 per million input tokens (output is free). Claude's usage counts against the Claude Code subscription and is not measured here.
 - Built and tested on Windows only.
+
+<!-- cost:start -->
+
+Jev used 1.0 to 3.2 million input tokens per Jev-only run and 1.1 to 7.4 million with the strategist, about $0.04 to $0.31 per run at TypeSafe's listed $0.042 per million input tokens (output is free). Claude's usage counts against the Claude Code subscription and is not measured here.
+
+<!-- cost:end -->
 
 ## Running it
 

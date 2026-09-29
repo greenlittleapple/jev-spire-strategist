@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {paceGroups, progressTable, compactJson, progressSvg, paceSvg} from './progress-chart.mjs';
+import {paceGroups, progressTable, compactJson, progressSvg, paceSvg, readmeSummary} from './progress-chart.mjs';
 
 const moves = (run, seconds, {ready = false, policy = 'jev-compact-v1'} = {}) => seconds.map(s => ({kind: 'decision', outcome: 'executed', policy,
  time: new Date(Date.UTC(2026, 8, 28) + s * 1000).toISOString(), state: {run: {live_id: run}, ...(ready ? {ready: true} : {})}}));
@@ -49,4 +49,13 @@ test('compact JSON keeps the data and puts each run on one line', () => {
  const text = compactJson(data);
  assert.deepEqual(JSON.parse(text), data);
  assert.match(text, /\n {4}\{"run": "1", "seed": null, "result": "lost", "floor": 17\},?\n/);
+});
+
+test('the README summary counts wins, final-boss runs and token ranges from the data', () => {
+ const d = structuredClone(data);
+ d.versions[0].runs[0].tokens = 1.5e6; d.versions[1].runs[0].tokens = 3e6; d.versions[1].runs[1].tokens = 9e6;
+ const {results, cost} = readmeSummary(d);
+ assert.equal(results, '**Results so far** (Ironclad, Ascension 0, standard runs): 1 win, by Strategist v3 on seed JEV1. '
+  + 'Of the 1 finished strategist run, 1 reached the final boss on floor 48. Jev alone got no further than floor 17 in 1 run.');
+ assert.match(cost, /^Jev used 1\.5 to 1\.5 million input tokens per Jev-only run and 3\.0 to 3\.0 million with the strategist, about \$0\.06 to \$0\.13 per run/);
 });

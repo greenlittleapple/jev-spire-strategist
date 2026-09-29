@@ -1,6 +1,6 @@
 // README charts: how far each version got, and the median time per move. Renders light and
-// dark SVGs into docs/images from docs/progress/data.json and fills the README's table between
-// its progress-table markers. With --refresh it first updates each listed run's result and the
+// dark SVGs into docs/images from docs/progress/data.json and fills the README's results, table
+// and cost blocks between their markers. With --refresh it first updates each listed run's result and the
 // pace figures from the private run logs. A new version is a new entry in data.json.
 //   npm run sts2:progress [-- --refresh]
 import {readFile, writeFile, readdir, mkdir} from 'node:fs/promises';
@@ -129,6 +129,26 @@ export function progressTable(data) {
   ...data.versions.map(v => `| ${v.name} (\`${v.policy}\`) | ${runs(v)} | ${v.added} |`)].join('\n');
 }
 
+// The README's results summary and cost line, so its numbers follow the data.
+export function readmeSummary(data) {
+ const finished = g => data.versions.filter(v => v.group === g).flatMap(v => v.runs.map(r => ({...r, version: v.name})))
+  .filter(r => r.floor != null && r.result !== 'in progress');
+ const jev = finished('jev'), strategist = finished('strategist'), final = Math.max(...data.bosses.map(b => b.floor));
+ const wins = strategist.filter(r => r.result === 'won').map(r => `${r.version} on seed ${r.seed}`);
+ const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+ const results = `**Results so far** (Ironclad, Ascension 0, standard runs): `
+  + (wins.length ? `${count(wins.length, 'win')}, by ${wins.join(' and ')}. ` : 'no win yet. ')
+  + `Of the ${count(strategist.length, 'finished strategist run')}, ${strategist.filter(r => r.floor >= final).length} reached the final boss on floor ${final}. `
+  + `Jev alone got no further than floor ${Math.max(...jev.map(r => r.floor))} in ${count(jev.length, 'run')}.`;
+ const millions = runs => runs.map(r => r.tokens).filter(Boolean).map(t => t / 1e6);
+ const range = m => `${Math.min(...m).toFixed(1)} to ${Math.max(...m).toFixed(1)} million`;
+ const all = [...millions(jev), ...millions(strategist)], dollars = m => `$${(m * 0.042).toFixed(2)}`;
+ const cost = `Jev used ${range(millions(jev))} input tokens per Jev-only run and ${range(millions(strategist))} with the strategist, `
+  + `about ${dollars(Math.min(...all))} to ${dollars(Math.max(...all))} per run at TypeSafe's listed $0.042 per million input tokens (output is free). `
+  + `Claude's usage counts against the Claude Code subscription and is not measured here.`;
+ return {results, cost};
+}
+
 // Median seconds between consecutive executed moves, by how the runner waited between moves:
 // on the bridge's readiness report (states carry `ready`), or fixed waits with the imported
 // jev-visible policies or the compact ones. Gaps over 10 minutes are pauses and left out.
@@ -165,7 +185,7 @@ async function refresh(data) {
  for (const r of data.versions.flatMap(v => v.runs)) {
   const s = scored.get(r.run);
   if (!s) throw Error(`Run ${r.run} is not in the logs`);
-  Object.assign(r, {seed: s.seed, result: s.result, act: s.act, floor: s.floor, moves: s.moves});
+  Object.assign(r, {seed: s.seed, result: s.result, act: s.act, floor: s.floor, moves: s.moves, tokens: s.input_tokens});
  }
  const pace = paceGroups(events);
  for (const g of data.pace.groups) Object.assign(g, pace[g.id] ?? {runs: 0, moves: 0, median_s: null});
@@ -184,9 +204,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   await writeFile(resolve(outDir, `progress-${mode}.svg`), progressSvg(data, t));
   await writeFile(resolve(outDir, `pace-${mode}.svg`), paceSvg(data, t));
  }
+ // Generated README blocks sit between <!-- name:start --> and <!-- name:end --> markers.
  const readmeFile = resolve(root, 'README.md'), readme = await readFile(readmeFile, 'utf8');
- const updated = readme.replace(/<!-- progress-table:start -->[\s\S]*?<!-- progress-table:end -->/,
-  () => `<!-- progress-table:start -->\n\n${progressTable(data)}\n\n<!-- progress-table:end -->`);
+ const {results, cost} = readmeSummary(data);
+ let updated = readme;
+ for (const [name, content] of [['results', results], ['progress-table', progressTable(data)], ['cost', cost]])
+  updated = updated.replace(new RegExp(`<!-- ${name}:start -->[\\s\\S]*?<!-- ${name}:end -->`),
+   () => `<!-- ${name}:start -->\n\n${content}\n\n<!-- ${name}:end -->`);
  if (updated !== readme) await writeFile(readmeFile, updated);
  console.log(`Wrote progress and pace charts to ${outDir}`);
 }

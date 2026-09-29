@@ -17,12 +17,12 @@
    "group": "jev",
    "added": "One compact question per screen, no call for forced moves, reviews on risky end turns",
    "runs": [
-    {"run": "1790568890", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 262},
-    {"run": "1790569858", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 235},
-    {"run": "1790570942", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 177},
-    {"run": "1790571562", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 225},
-    {"run": "1790572332", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 221},
-    {"run": "1790573042", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 250}
+    {"run": "1790568890", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 262, "tokens": 1729066},
+    {"run": "1790569858", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 235, "tokens": 1538389},
+    {"run": "1790570942", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 177, "tokens": 1115639},
+    {"run": "1790571562", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 225, "tokens": 1590127},
+    {"run": "1790572332", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 221, "tokens": 1571625},
+    {"run": "1790573042", "seed": null, "result": "lost", "act": 1, "floor": 17, "moves": 250, "tokens": 1671297}
    ]
   },
   {
@@ -31,8 +31,8 @@
    "group": "jev",
    "added": "Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead",
    "runs": [
-    {"run": "1790573872", "seed": null, "result": "lost", "act": 1, "floor": 14, "moves": 220},
-    {"run": "1790574625", "seed": null, "result": "lost", "act": 2, "floor": 28, "moves": 396}
+    {"run": "1790573872", "seed": null, "result": "lost", "act": 1, "floor": 14, "moves": 220, "tokens": 1656189},
+    {"run": "1790574625", "seed": null, "result": "lost", "act": 2, "floor": 28, "moves": 396, "tokens": 3236035}
    ]
   },
   {
@@ -41,9 +41,9 @@
    "group": "jev",
    "added": "Ordered route facts; second looks at hallway potion use and leaving a shop with gold",
    "runs": [
-    {"run": "1790576340", "seed": null, "result": "lost", "act": 1, "floor": 15, "moves": 223},
-    {"run": "1790577124", "seed": null, "result": "lost", "act": 1, "floor": 7, "moves": 144},
-    {"run": "1790577570", "seed": null, "result": "lost", "act": 2, "floor": 23, "moves": 301}
+    {"run": "1790576340", "seed": null, "result": "lost", "act": 1, "floor": 15, "moves": 223, "tokens": 1938301},
+    {"run": "1790577124", "seed": null, "result": "lost", "act": 1, "floor": 7, "moves": 144, "tokens": 1004428},
+    {"run": "1790577570", "seed": null, "result": "lost", "act": 2, "floor": 23, "moves": 301, "tokens": 2274613}
    ]
   },
   {
@@ -52,8 +52,8 @@
    "group": "strategist",
    "added": "Claude writes the run plan at key moments; map moves follow its chosen act route",
    "runs": [
-    {"run": "1790578663", "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 456},
-    {"run": "1790582151", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 792}
+    {"run": "1790578663", "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 456, "tokens": 4344924},
+    {"run": "1790582151", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 792, "tokens": 7390515}
    ]
   },
   {
@@ -62,8 +62,8 @@
    "group": "strategist",
    "added": "Enforced combat rules: no fatal play if one survives, potion HP floor, focus target",
    "runs": [
-    {"run": "1790618954", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 224},
-    {"run": "1790619864", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 782}
+    {"run": "1790618954", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 224, "tokens": 1706573},
+    {"run": "1790619864", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 782, "tokens": 6874153}
    ]
   },
   {
@@ -72,7 +72,7 @@
    "group": "strategist",
    "added": "Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter",
    "runs": [
-    {"run": "1790622821", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 210}
+    {"run": "1790622821", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 210, "tokens": 1505728}
    ]
   },
   {
@@ -81,7 +81,7 @@
    "group": "strategist",
    "added": "Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken",
    "runs": [
-    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226}
+    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226, "tokens": 1429430}
    ]
   },
   {
@@ -90,7 +90,7 @@
    "group": "strategist",
    "added": "No ending a turn with a playable Beckon; least HP loss while enemies are Intangible",
    "runs": [
-    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209}
+    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209, "tokens": 1306588}
    ]
   },
   {
@@ -99,7 +99,7 @@
    "group": "strategist",
    "added": "Moves wait for the game's ready signal instead of fixed delays (about 4x faster)",
    "runs": [
-    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444}
+    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444, "tokens": 2961920}
    ]
   },
   {
@@ -108,7 +108,7 @@
    "group": "strategist",
    "added": "Briefs add enemy patterns, past card picks and fight results; potions saved for bosses",
    "runs": [
-    {"run": "1790633009", "seed": "JEV1", "result": "lost", "act": 3, "floor": 48, "moves": 676}
+    {"run": "1790633009", "seed": "JEV1", "result": "lost", "act": 3, "floor": 48, "moves": 676, "tokens": 4958146}
    ]
   },
   {
@@ -117,14 +117,88 @@
    "group": "strategist",
    "added": "A second look when Jev's line loses far more HP than the best surviving line",
    "runs": [
-    {"run": "1790636473", "seed": "JEV3", "result": "lost", "act": 2, "floor": 33, "moves": 361},
-    {"run": "1790637679", "seed": "JEV4", "result": "won", "act": 3, "floor": 48, "moves": 749},
-    {"run": "1790639994", "seed": "JEV5", "result": "lost", "act": 1, "floor": 17, "moves": 356}
+    {"run": "1790636473", "seed": "JEV3", "result": "lost", "act": 2, "floor": 33, "moves": 361, "tokens": 1789633},
+    {"run": "1790637679", "seed": "JEV4", "result": "won", "act": 3, "floor": 48, "moves": 749, "tokens": 5542733},
+    {"run": "1790639994", "seed": "JEV5", "result": "lost", "act": 1, "floor": 17, "moves": 356, "tokens": 2363044}
+   ]
+  },
+  {
+   "name": "Strategist v3.6",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP",
+   "runs": [
+    {"run": "1790645754", "seed": "JEV6", "result": "lost", "act": 1, "floor": 17, "moves": 199, "tokens": 1082178}
+   ]
+  },
+  {
+   "name": "Strategist v3.7",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "No healing potion that would mostly overheal; route plans start fresh each run",
+   "runs": [
+    {"run": "1790647745", "seed": "JEV7", "result": "lost", "act": 2, "floor": 33, "moves": 488, "tokens": 3946710}
+   ]
+  },
+  {
+   "name": "Strategist v3.8",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield",
+   "runs": [
+    {"run": "1790650601", "seed": "JEV8", "result": "won", "act": 3, "floor": 48, "moves": 615, "tokens": 4439421},
+    {"run": "1790652220", "seed": "JEV9", "result": "lost", "act": 2, "floor": 33, "moves": 373, "tokens": 1988026}
+   ]
+  },
+  {
+   "name": "Strategist v3.9",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Frantic Escape forecast; a forced escape yields when it dies and a block line survives",
+   "runs": [
+    {"run": "1790653522", "seed": "JEV10", "result": "lost", "act": 3, "floor": 42, "moves": 550, "tokens": 3497348}
+   ]
+  },
+  {
+   "name": "Strategist v3.10",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast",
+   "runs": [
+    {"run": "1790657346", "seed": "JEV11", "result": "lost", "act": 1, "floor": 17, "moves": 290, "tokens": 2006300}
+   ]
+  },
+  {
+   "name": "Strategist v3.11",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Potions with effects the forecast can't show stay usable; briefs name a small draw pile",
+   "runs": [
+    {"run": "1790658147", "seed": "JEV12", "result": "lost", "act": 1, "floor": 17, "moves": 215, "tokens": 1227893}
+   ]
+  },
+  {
+   "name": "Strategist v3.12",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Fixes for multi-page events and transform screens; no play that starves a held Beckon",
+   "runs": [
+    {"run": "1790659703", "seed": "JEV13", "result": "lost", "act": 2, "floor": 25, "moves": 350, "tokens": 2226416}
+   ]
+  },
+  {
+   "name": "Strategist v3.13",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "added": "Orichalcum forecast; route facts give the fewest elites before the first rest",
+   "runs": [
+    {"run": "1790663063", "seed": "JEV14", "result": "lost", "act": 1, "floor": 17, "moves": 221, "tokens": 1205027},
+    {"run": "1790663721", "seed": "JEV15", "result": "in progress", "act": 1, "floor": 7, "moves": 68, "tokens": 304928}
    ]
   }
  ],
  "notes": [
-  "Beating the final boss on floor 48 wins the run. Strategist runs use fixed seeds (JEV1 to JEV5) so versions can be compared on the same maps; v3.1 to v3.3 replayed v3's non-combat choices on JEV1, so only their combat play differed.",
+  "Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it); from v3.5 on, every run uses a new seed.",
   "The imported Jev the Spire policy reached the Act 3 boss once, in a Hextech Mayhem run. That modifier changes the game, so the run is not plotted. Runs still in progress are not plotted."
  ],
  "pace": {
@@ -132,7 +206,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 5, "moves": 2586, "median_s": 0.65}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 15, "moves": 5955, "median_s": 0.73}
   ]
  }
 }
