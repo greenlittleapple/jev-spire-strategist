@@ -29,7 +29,7 @@ import { labGit, fileSha256, fetchBridgeVersion, runStartRecord } from '../../..
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { actionsFor, fingerprint, factsFor } from './actions.mjs';
+import { actionsFor, fingerprint, factsFor, counterWait, triggeredCounters } from './actions.mjs';
 import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
 const turnHits = {}, lampMemory = {};
 
@@ -102,6 +102,10 @@ view.adviser=lunaEnabled?'gpt-5.6-luna:max':null;
 // Fixed waits for bridges without a readiness report; a reported "ready" replaces them.
 const SETTLE_MS = Number(process.env.SPIRE_SETTLE_MS ?? 700), COOLDOWN_MS = Number(process.env.SPIRE_COOLDOWN_MS ?? 1200);
 const READY_SETTLE_MS = Number(process.env.SPIRE_READY_SETTLE_MS ?? 60), READY_SCREEN_SETTLE_MS = Number(process.env.SPIRE_READY_SCREEN_SETTLE_MS ?? 250);
+// A relic counter at its trigger value (Happy Flower 3) usually resets to 0 about 0.5 s later, after
+// the bridge already reports ready. Wait up to this long for it, once per relic trigger.
+const COUNTER_SETTLE_MS = Number(process.env.SPIRE_COUNTER_SETTLE_MS ?? 1000);
+let counterMemo = null;
 const TICK_MS = Number(process.env.SPIRE_TICK_MS ?? 150);
 const combatTypes = new Set(['monster','elite','boss']);
 let generation = 0, busy = false, lastExecuted = '', latestState = null, waitingSince = 0, nextDecisionAt = 0;
@@ -299,6 +303,11 @@ async function step(token, preview = false) {
     if (token !== generation) return;
     const settled = await observe();
     if (fingerprint(settled) !== hash || busyNow(settled)) { view.message = 'Waiting for animations to settle…'; return; }
+    // A relic counter at its trigger value is about to reset: re-observe so Jev sees the settled state.
+    // The fingerprint treats the trigger value as 0, so a reset during the settle is checked here too.
+    const counters = counterWait(settled, counterMemo, Date.now(), COUNTER_SETTLE_MS);
+    counterMemo = counters.memo;
+    if (counters.wait || triggeredCounters(s).join() !== counters.ids.join()) { view.message = 'Waiting for relic counters to reset…'; return; }
     if (view.decisions >= MAX_DECISIONS || view.inputTokens >= MAX_INPUT_TOKENS) {
       stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.'); return;
     }

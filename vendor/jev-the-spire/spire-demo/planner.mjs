@@ -646,8 +646,8 @@ export function decisionWarnings(s,c) {
   return notes;
 }
 const isCombat = s => ['monster','elite','boss'].includes(s.state_type);
-export function decisionCandidates(s) {
-  if(!isCombat(s))return actionsFor(s);
+export function decisionCandidates(s, options = {}) {
+  if(!isCombat(s))return actionsFor(s, options);
   const unmodeled=unsupportedRuneRules(s);
   if(unmodeled.length)return actionsFor(s).map(action=>({...action,
     plan:[{label:action.label,command:action.command}],
