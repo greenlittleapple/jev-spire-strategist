@@ -26,6 +26,7 @@ import { readFile, mkdir, appendFile, writeFile, rename, open, unlink } from 'no
 import { readActiveCheckpoint, attachCheckpoint, defaultSaveRoot } from '../../../integration/sts2/save-state.mjs';
 import { characterName } from '../../../integration/sts2/character.mjs';
 import { labGit, fileSha256, fetchBridgeVersion, runStartRecord } from '../../../integration/sts2/run-record.mjs';
+import { pinMismatch } from '../../../integration/sts2/pins.mjs';
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -264,12 +265,19 @@ async function step(token, preview = false) {
     // Once per run, before its first decision: what the run is played under (integration/sts2/run-record.mjs).
     if (s.run?.live_id && view.runStartFor !== s.run.live_id) {
       view.runStartFor = s.run.live_id;
+      // Two retries, so one slow greeting can't fail the pinned build check below.
+      let bridgeInfo = null;
+      for (let i = 0; i < 3 && !bridgeInfo; i++) bridgeInfo = await fetchBridgeVersion(bridge + '/');
       await log(runStartRecord({state: s, git: labGitInfo, policy: currentPolicy(), decisionMode: view.decisionMode, model: JEV_MODEL,
-        bridge: await fetchBridgeVersion(bridge + '/'),
+        bridge: bridgeInfo,
         content: {playbook: await fileSha256(resolve(strategyDir, 'playbook.json')), mechanics: await fileSha256(resolve(strategyDir, 'mechanics.json'))},
         caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS},
         save: checkpoint?.checkpoint?.run_id === s.run.live_id ? checkpoint.data : null}));
       if (token !== generation) return;
+      // A run on another bridge build or game version pauses before its first decision (integration/sts2/pins.mjs);
+      // resuming repeats the check and the run_start record.
+      const pin = pinMismatch(bridgeInfo);
+      if (pin) { view.runStartFor = null; await stop(pin, 'pin_mismatch'); return; }
     }
     // The bridge briefly reports unknown while entering a room or opening a selection.
     // Poll without issuing mutations, but retain a bounded stop for genuinely stuck screens.
