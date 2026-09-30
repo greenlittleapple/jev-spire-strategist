@@ -1,5 +1,29 @@
 import { createHash } from 'node:crypto';
 
+// Relic counters that show their trigger value briefly and then reset to 0, often after the bridge
+// already reports ready (Happy Flower 3, then 0 about 0.5 s later). Derived from the 2026-09-27 run log:
+// the value last seen before each reset to 0. Relics not listed fall back to the number in an
+// "Every N ..." or "Every time you play N ..." description (Tuning Fork 10, Fishing Rod 3).
+export const COUNTER_TRIGGERS = { HAPPY_FLOWER: 3, PENDULUM: 3, ORNAMENTAL_FAN: 3, KUSARIGAMA: 3, LETTER_OPENER: 3, POLLINOUS_CORE: 4, PEN_NIB: 10, NUNCHAKU: 10 };
+export function counterTrigger(relic) {
+  if (Object.hasOwn(COUNTER_TRIGGERS, relic?.id)) return COUNTER_TRIGGERS[relic.id];
+  const n = String(relic?.description ?? '').match(/^Every (?:time you play )?(\d+)(?:st|nd|rd|th)?\b/i)?.[1];
+  return n ? Number(n) : null;
+}
+// Relics whose counter is at its trigger value: the state may change without any action.
+const atTrigger = r => Number.isInteger(r?.counter) && r.counter > 0 && r.counter === counterTrigger(r);
+export const triggeredCounters = s => (s?.player?.relics ?? []).filter(atTrigger).map(r => r.id);
+// Whether to re-observe before asking: at most limitMs per relic trigger (same fight round and
+// relics). A counter that really stays at its value (Kusarigama until the turn ends) then costs
+// one wait, not one per decision. memo carries {key, since} between observations.
+export function counterWait(s, memo, now = Date.now(), limitMs = 1000) {
+  const ids = triggeredCounters(s);
+  if (!ids.length) return { wait: false, memo, ids };
+  const key = [s.run?.live_id, s.run?.floor, s.state_type, s.battle?.round, ...ids].join(':');
+  if (memo?.key !== key) memo = { key, since: now };
+  return { wait: now - memo.since < limitMs, memo, ids };
+}
+
 export function fingerprint(state) {
   // saved_run is re-read from the save file every few seconds; its save time and history
   // change without the live screen changing, so it is not part of the screen's identity.
@@ -7,6 +31,12 @@ export function fingerprint(state) {
   // A transform screen cycles its preview through random possible results, so the preview never
   // settles (JEV12 stalled on New Leaf). The chosen card and the confirm state still count.
   if (content.card_select?.preview_cards) { const { preview_cards, ...rest } = content.card_select; content.card_select = rest; }
+  // A counter at its trigger value equals the 0 it resets to (the effect has fired, the next count
+  // starts over), so the reset alone does not make a decision stale. The runner still waits for it.
+  if (content.player?.relics?.some(atTrigger)) content.player = { ...content.player, relics: content.player.relics.map(r => atTrigger(r) ? { ...r, counter: 0 } : r) };
+  // A treasure chest reports can_proceed false while it opens, then true; with relics listed it
+  // changes no option (proceed is offered only after they are gone), so it is not part of the identity.
+  if (content.treasure?.relics?.length) { const { can_proceed, ...rest } = content.treasure; content.treasure = rest; }
   return createHash('sha256').update(JSON.stringify(content)).digest('hex');
 }
 
@@ -14,7 +44,7 @@ export function fingerprint(state) {
 // chooses an ID; it never supplies arbitrary HTTP endpoints or action arguments.
 // Explicit user exclusion: never acquire Sword of Stone.
 const excludedRelic = x => [x.name,x.relic_name,x.id,x.relic_id].some(v => /^(?:the )?sword(?: of| and the) stone$/i.test(String(v??'').replaceAll('_',' ')));
-export function actionsFor(s) {
+export function actionsFor(s, { potionSwaps = false } = {}) {
   const out = [];
   const add = (action, args = {}, label = action, details = {}) =>
     out.push({ id: `a${out.length}`, command: { action, ...args }, label, details });
@@ -64,8 +94,15 @@ export function actionsFor(s) {
     case 'rewards': {
       const beltFull = (s.player?.potions?.length ?? 0) >= (s.player?.max_potion_slots ?? 3);
       list(s.rewards?.items, 'claim_reward', 'index', x => !excludedRelic(x) && (x.type !== 'potion' || !beltFull));
+      // A full belt can take an offered potion only after a discard. With potionSwaps (strategist
+      // mode, where this screen is owned) each held potion can be discarded for each offered one;
+      // the claim is then offered normally. Leaving the potion stays possible.
+      const offered = beltFull && potionSwaps ? (s.rewards?.items ?? []).filter(x => x.type === 'potion') : [];
+      const claims = out.length;
+      for (const take of offered) for (const held of s.player?.potions ?? [])
+        add('discard_potion', { slot: held.slot }, `Discard ${held.name} (slot ${held.slot}) to make room for ${take.potion_name ?? take.description ?? 'the offered potion'}`, { discard: held, take });
       // Collect rewards before proceeding; choosing a card still allows skipping.
-      if (!out.length) proceed(s.rewards?.can_proceed);
+      if (!claims) proceed(s.rewards?.can_proceed);
       break;
     }
     case 'card_reward':

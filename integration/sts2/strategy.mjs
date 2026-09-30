@@ -12,6 +12,8 @@ export const IMPORTANT_SCREENS = new Set(['card_reward','shop','hextech_rune','r
 // Screens the strategist decides outright: Claude is consulted on every one of them.
 export const OWNED_SCREENS = new Set(['card_reward','shop','fake_merchant','event','rest_site','treasure','hextech_rune','card_select','bundle_select','relic_select','crystal_sphere']);
 // Rewards are owned only when a potion is offered and every slot is full: taking it means a swap.
+// actionsFor(state, {potionSwaps:true}) then offers "discard slot N to make room for X" and, when
+// nothing else is left to claim, leaving; after the discard the claim is offered normally.
 const potionSwap = s => s.state_type==='rewards' && (s.player?.potions?.length??0) >= (s.player?.max_potion_slots??3)
  && (s.rewards?.items??[]).some(i=>i.type==='potion');
 export const isOwnedScreen = s => (OWNED_SCREENS.has(s.state_type) && !(s.state_type==='card_select' && s.battle)) || potionSwap(s);

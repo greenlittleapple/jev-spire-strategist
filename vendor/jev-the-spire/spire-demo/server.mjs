@@ -29,7 +29,7 @@ import { labGit, fileSha256, fetchBridgeVersion, runStartRecord } from '../../..
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { actionsFor, fingerprint, factsFor } from './actions.mjs';
+import { actionsFor, fingerprint, factsFor, counterWait, triggeredCounters } from './actions.mjs';
 import { pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker } from './runner-records.mjs';
 import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
 const turnHits = {}, lampMemory = {};
@@ -103,6 +103,10 @@ view.adviser=lunaEnabled?'gpt-5.6-luna:max':null;
 // Fixed waits for bridges without a readiness report; a reported "ready" replaces them.
 const SETTLE_MS = Number(process.env.SPIRE_SETTLE_MS ?? 700), COOLDOWN_MS = Number(process.env.SPIRE_COOLDOWN_MS ?? 1200);
 const READY_SETTLE_MS = Number(process.env.SPIRE_READY_SETTLE_MS ?? 60), READY_SCREEN_SETTLE_MS = Number(process.env.SPIRE_READY_SCREEN_SETTLE_MS ?? 250);
+// A relic counter at its trigger value (Happy Flower 3) usually resets to 0 about 0.5 s later, after
+// the bridge already reports ready. Wait up to this long for it, once per relic trigger.
+const COUNTER_SETTLE_MS = Number(process.env.SPIRE_COUNTER_SETTLE_MS ?? 1000);
+let counterMemo = null;
 const TICK_MS = Number(process.env.SPIRE_TICK_MS ?? 150);
 const combatTypes = new Set(['monster','elite','boss']);
 let generation = 0, busy = false, lastExecuted = '', latestState = null, waitingSince = 0, nextDecisionAt = 0;
@@ -193,7 +197,7 @@ async function observe(retries = 2) {
   }
   const id = live.run?.live_id;
   if (id && view.runId && id !== view.runId) {
-    stop('A different run was loaded. Check the game and press Autoplay to begin.');
+    stop('A different run was loaded. Check the game and press Autoplay to begin.', 'run_changed');
     view.events = []; lastExecuted = ''; checkpoint = null;
   }
   if (id) view.runId = id;
@@ -280,7 +284,8 @@ async function step(token, preview = false) {
     }
     if(strategist){recordIntents(strategist.movesets,s);if(strategist.fightResults)recordFight(strategist.fightResults,s);}
     const planningState=markLampUsed(lampMemory,markHitsThisTurn(turnHits,facingState(s,view.events)));
-    const actions = decisionCandidates(rewardState(planningState,view.events));
+    // Claude mode owns full-belt potion rewards, so it gets discard-to-swap candidates there.
+    const actions = decisionCandidates(rewardState(planningState,view.events),{potionSwaps:view.decisionMode==='claude'});
     if (!actions.length) {
       waitingSince ||= Date.now();
       if (Date.now() - waitingSince > 45000) await stop('No playable actions for 45 seconds. Check the game screen, then resume.', 'no_actions');
@@ -308,6 +313,11 @@ async function step(token, preview = false) {
     if (token !== generation) return;
     const settled = await observe();
     if (fingerprint(settled) !== hash || busyNow(settled)) { view.message = 'Waiting for animations to settle…'; return; }
+    // A relic counter at its trigger value is about to reset: re-observe so Jev sees the settled state.
+    // The fingerprint treats the trigger value as 0, so a reset during the settle is checked here too.
+    const counters = counterWait(settled, counterMemo, Date.now(), COUNTER_SETTLE_MS);
+    counterMemo = counters.memo;
+    if (counters.wait || triggeredCounters(s).join() !== counters.ids.join()) { view.message = 'Waiting for relic counters to reset…'; return; }
     if (view.decisions >= MAX_DECISIONS || view.inputTokens >= MAX_INPUT_TOKENS) {
       await stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.', 'budget'); return;
     }

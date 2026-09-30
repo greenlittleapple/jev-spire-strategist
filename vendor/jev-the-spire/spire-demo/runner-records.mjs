@@ -4,7 +4,7 @@
 // Pause reasons logged by stop() as {kind:'pause', reason, message}. unspecified covers a stop
 // without a named reason.
 export const PAUSE_REASONS = ['operator', 'shutdown', 'checkpoint_mismatch', 'unknown_screen', 'menu', 'overlay',
-  'no_actions', 'no_change', 'budget', 'unspecified'];
+  'no_actions', 'no_change', 'budget', 'run_changed', 'unspecified'];
 export const pauseRecord = (reason, message, extra = {}) => ({ kind: 'pause', reason, message, ...extra });
 
 // A fetch timeout names the call that timed out ("Game state read timed out", "Jev request timed out"):
