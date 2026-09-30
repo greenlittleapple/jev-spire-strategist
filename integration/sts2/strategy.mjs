@@ -66,8 +66,25 @@ export const screenKey = s => `${s.run?.live_id}:${s.run?.act}:${s.run?.floor}:$
 // Label is included: after a reroll or purchase an index can name a different option.
 // An event option's description is part of its identity: a repeated page ("Linger — Take 4 damage",
 // then 12) is a new choice, not the one already answered (JEV12 lingered nine times, 69 to 25 HP).
+// A reward claim also carries the reward type, so it can be matched after re-indexing (claimKey).
 const optionKey = c => JSON.stringify({command:c.command,label:c.label,
- ...(c.command?.action==='choose_event_option'&&c.details?.description?{description:c.details.description}:{})});
+ ...(c.command?.action==='choose_event_option'&&c.details?.description?{description:c.details.description}:{}),
+ ...(c.command?.action==='claim_reward'&&c.details?.type?{type:c.details.type}:{})});
+// A claim re-indexes the rewards below it: JEV21 f22 listed the gold and then "Add a card to your deck."
+// (index 2), which became index 1 once the gold was taken, so the strategist was asked again; JEV22 f6
+// fell through to its listed discard before the card. A listed claim no longer offered at its index
+// matches the one offered claim with the same reward type and label; identical rewards are not guessed between.
+const claimKey = key => {
+ const o=JSON.parse(key);
+ return o.command?.action==='claim_reward'?JSON.stringify({type:o.type??null,label:o.label}):null;
+};
+const matchKey = (candidates,key) => {
+ const exact=candidates.find(x=>optionKey(x)===key);
+ if(exact)return exact;
+ const loose=claimKey(key);
+ const same=loose?candidates.filter(x=>x.command?.action==='claim_reward'&&claimKey(optionKey(x))===loose):[];
+ return same.length===1?same[0]:null;
+};
 const relicIds = s => (s.player?.relics ?? []).map(r => r.id).sort();
 
 function deckSummary(deck=[]) {
@@ -109,18 +126,30 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
  if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
- if(!combatScreens.has(state.state_type)){
-  brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
-  // Keyword definitions attached to offered cards and relics (Exhaust, Ethereal, Dazed...).
-  const keywords=new Map();
-  for(const c of candidates)for(const k of c.details?.keywords??[])if(k?.name&&k.description&&!keywords.has(k.name))keywords.set(k.name,k.description);
-  if(keywords.size)brief.keywords=Object.fromEntries(keywords);
- }
+ if(!combatScreens.has(state.state_type))brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
+ const keywords=cardKeywords(state,combatScreens.has(state.state_type)?[]:candidates);
+ if(keywords)brief.keywords=keywords;
  // A plan from another run (another seed) is not shown: cross-run knowledge comes from the playbook,
  // the mechanics registry and card stats, and an old plan's combat section was copied into new runs.
  if(previous&&previous.run_id===state.run?.live_id)brief.previous_plan=planFields(previous);
  return brief;
 }
+
+// Keyword definitions for the offered options and the deck and hand card text (Exhaust, Ethereal,
+// Tainted...). A definition that only repeats its own name ("Tainted: Gain 2 Tainted when played.",
+// JEV21 f27, left undefined until an unknown_mechanic request) is replaced by the text of a power
+// with that name visible now, if any; the glossary lookup may replace it later (makeGlossary).
+function cardKeywords(state,candidates) {
+ const p=state.player??{},keywords=new Map();
+ const powers=[...(p.status??[]),...(state.battle?.enemies??[]).flatMap(e=>e.status??[])];
+ for(const c of [...candidates.map(c=>c.details??{}),...(p.deck??[]),...(p.hand??[])])for(const k of c?.keywords??[]){
+  if(!k?.name||!k.description||keywords.has(k.name))continue;
+  const power=selfNamed(k)&&powers.find(x=>x?.name===k.name&&x.description);
+  keywords.set(k.name,power?power.description:k.description);
+ }
+ return keywords.size?Object.fromEntries(keywords):null;
+}
+const selfNamed=k=>String(k.description).toLowerCase().includes(String(k.name).toLowerCase());
 
 // Every description the bridge sends for an option: shop items carry card_, relic_ or
 // potion_description; event options may name a relic with its own description. A reward
@@ -175,7 +204,7 @@ export function routeRisk(state,plan,candidates=[]) {
 
 // The first option in the plan's order that is still offered.
 const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
- for(const key of list??[]){const c=candidates.find(x=>optionKey(x)===key);if(c)return c;}
+ for(const key of list??[]){const c=matchKey(candidates,key);if(c)return c;}
  return null;
 };
 
@@ -528,7 +557,8 @@ export function constrainCandidates(state,candidates,plan,mode='constrained',{fi
   if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1,removed_ids:removedIds(candidates,[first]),remembered:plan.screen!==screenKey(state)}};
  }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){
-  const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
+  const listed=new Set(plan.allowed_options.map(k=>matchKey(candidates,k)).filter(Boolean));
+  const kept=candidates.filter(c=>listed.has(c));
   if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
  const fixed=exhaustConstraint(state,candidates)??restConstraint(state,candidates);

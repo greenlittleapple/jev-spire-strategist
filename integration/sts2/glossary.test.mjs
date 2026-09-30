@@ -58,3 +58,31 @@ test('event briefs carry the event name and page text',()=>{
  const b=strategistBrief(state,[{id:'a0',label:'Gorge',details:{description:'Choose 2 of 8 random Common cards.'}}],'owned_screen',null);
  assert.deepEqual(b.event,{name:'Room Full of Cheese',text:'Cheese everywhere.'});
 });
+
+// JEV21 f27: a Vital Spark fight turned every Defend into "Gain 5 Block. Gain 2 Tainted." and the
+// bridge's keyword only repeated the name; Tainted was undefined until an unknown_mechanic request.
+const tainted={name:'Tainted',description:'Gain 2 Tainted when played.'};
+const defend={name:'Defend',type:'Skill',cost:'1',description:'Gain 5 Block. Gain 2 Tainted.',keywords:[tainted,{name:'Block',description:'Until next turn, prevents damage.'}]};
+test('keywords in deck and hand card text are defined, in combat too',()=>{
+ const state={state_type:'map',run:{live_id:'r',act:2,floor:26},player:{hp:50,max_hp:80,deck:[defend,{name:'Bash',description:'Apply 2 Vulnerable.',keywords:[{name:'Vulnerable',description:'Takes 50% more damage.'}]}],relics:[],potions:[]}};
+ assert.deepEqual(strategistBrief(state,[],'route_plan',null).keywords,{Tainted:tainted.description,Block:'Until next turn, prevents damage.',Vulnerable:'Takes 50% more damage.'});
+ // With the power on you, its text defines a keyword that only repeats its name.
+ const fight={...state,state_type:'elite',player:{...state.player,deck:[],hand:[defend],status:[{name:'Tainted',amount:2,description:'Take 2 additional damage from Attacks this turn.'}]},battle:{round:2,enemies:[]}};
+ assert.equal(strategistBrief(fight,[],'unknown_mechanic',null).keywords.Tainted,'Take 2 additional damage from Attacks this turn.');
+});
+
+test('the glossary defines a keyword that repeats its name from a power seen earlier or the lookup',async()=>{
+ const glossary=makeGlossary(async name=>name==='Vulnerable'?[{name:'Vulnerable',item_type:'card',description:'wrong kind'}]:[]);
+ const later={deck:[],relics:[],keywords:{Tainted:tainted.description,Block:'Until next turn, prevents damage.'}};
+ await glossary({deck:[],relics:[],combat_state:{status:[{name:'Tainted',amount:2,description:'Take 2 additional damage from Attacks this turn.'}]}});
+ await glossary(later);
+ assert.equal(later.keywords.Tainted,'Take 2 additional damage from Attacks this turn.');
+ assert.equal(later.keywords.Block,'Until next turn, prevents damage.','a real definition is kept');
+ const unseen={deck:[],relics:[],keywords:{Dazed:'Dazed. Unplayable.'}};
+ await makeGlossary(async()=>[])(unseen);
+ assert.equal(unseen.keywords.Dazed,'Dazed. Unplayable.','with nothing better the bridge text stays');
+ // Not seen this session: the strategist's saved note for the power defines it.
+ const fresh={deck:[],relics:[],keywords:{Tainted:tainted.description}};
+ await makeGlossary(async()=>[],{notes:{all:async()=>({'player power: Tainted':{name:'Tainted',kind:'player power',note:'Each stack adds 1 damage to every enemy attack hit this turn.'}})}})(fresh);
+ assert.equal(fresh.keywords.Tainted,'Each stack adds 1 damage to every enemy attack hit this turn.');
+});

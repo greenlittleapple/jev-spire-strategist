@@ -10,6 +10,7 @@ const KEYWORDS = new Set(['add','obtain','gain','lose','deal','apply','replace',
  'relic','relics','card','cards','gold','all','the','a','an','at','each','whenever','if','upon','every','this','your','it',
  'enemies','enemy','turn','combat','ethereal','innate','retain','unplayable','neow','random']);
 
+const selfNamed = (name, description) => String(description ?? '').toLowerCase().includes(String(name).toLowerCase());
 const normalize = name => String(name ?? '').trim().toLowerCase().replace(/^the\s+/, '');
 const stripPrice = label => String(label ?? '').replace(/\s+[—-]\s+\d+\s+gold$/i, '').trim();
 
@@ -29,8 +30,12 @@ export function candidateNames(text) {
 }
 
 // lookup(name) resolves to [{name, item_type, description, ...}] search results.
-export function makeGlossary(lookup) {
+// notes: the mechanics registry (fileMechanics), whose saved power notes define such keywords too.
+export function makeGlossary(lookup, {notes = null} = {}) {
  const cache = new Map();
+ // Power texts seen in earlier briefs (yours and enemies'), by name: a keyword that only repeats its
+ // own name ("Tainted: Gain 2 Tainted when played.") is defined by the power's text once it has been seen.
+ const powers = new Map();
  const exact = async name => {
   const key = normalize(name);
   if (!key) return null;
@@ -64,6 +69,14 @@ export function makeGlossary(lookup) {
    }
   }
   if (entries.length) brief.glossary = entries;
+  for (const x of [...(brief.combat_state?.status ?? []), ...(brief.enemies ?? []).flatMap(e => e.status ?? [])])
+   if (x?.name && x.description) powers.set(normalize(x.name), x.description);
+  for (const [name, description] of Object.entries(brief.keywords ?? {})) {
+   if (!selfNamed(name, description)) continue;
+   const note = async () => { try { return Object.values(await notes?.all() ?? {}).find(e => normalize(e?.name) === normalize(name) && /power|any/.test(e.kind ?? ''))?.note; } catch { return null; } };
+   const found = powers.get(normalize(name)) ?? (await exact(name))?.description ?? await note();
+   if (found) brief.keywords[name] = found;
+  }
   return brief;
  };
 }
