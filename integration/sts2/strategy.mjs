@@ -3,7 +3,7 @@
 // every ordinary decision with it.
 import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
-import {nodeKey,minElitesFrom} from './route-facts.mjs';
+import {nodeKey,minElitesFrom,restHeal} from './route-facts.mjs';
 
 export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -258,6 +258,9 @@ const usesBlock=state=>(state.player?.status??[]).some(p=>/juggernaut|barricade|
  ||(state.player?.relics??[]).some(r=>r.id==='CALIPERS')
  ||(state.player?.hand??[]).some(c=>/equal to your Block|double your Block|Block is not removed/i.test(c.description??''));
 
+// The IDs of the options a rule removed, for the decision record.
+const removedIds=(before,after)=>before.filter(c=>!after.includes(c)).map(c=>c.id);
+
 // Single-card exhaust choice: status and curse cards, cards that pay off when exhausted,
 // then plain Strikes and Defends, before anything else.
 export function exhaustConstraint(state,candidates) {
@@ -271,21 +274,22 @@ export function exhaustConstraint(state,candidates) {
   x=>/^(Strike|Defend)$/.test(x.name)&&!x.is_upgraded];
  for(const tier of tiers){
   const kept=candidates.filter(c=>{const x=card(c);return x&&tier(x);});
-  if(kept.length&&kept.length<candidates.length)return {candidates:kept,constraint:{kind:'exhaust_choice',removed:candidates.length-kept.length}};
+  if(kept.length&&kept.length<candidates.length)return {candidates:kept,constraint:{kind:'exhaust_choice',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
   if(kept.length)return null;
  }
  return null;
 }
 
-// Resting that wastes at least half its heal, when Smith is offered.
+// Resting that wastes at least half its heal, when Smith is offered. The heal counts relic
+// bonuses shown on the option ("+15 HP from Regal Pillow").
 export function restConstraint(state,candidates) {
  if(state.state_type!=='rest_site')return null;
  const heal=candidates.find(c=>c.details?.id==='HEAL'),smith=candidates.some(c=>c.details?.id==='SMITH'&&c.details.is_enabled!==false);
- const amount=Number(heal?.details?.description?.match(/\((\d+)\)/)?.[1]),p=state.player??{};
+ const amount=restHeal(heal?.details?.description),p=state.player??{};
  if(!heal||!smith||!Number.isFinite(amount)||!p.max_hp)return null;
  const wasted=amount-(p.max_hp-p.hp);
  if(wasted<amount/2)return null;
- return {candidates:candidates.filter(c=>c!==heal),constraint:{kind:'rest_waste',heal:amount,wasted}};
+ return {candidates:candidates.filter(c=>c!==heal),constraint:{kind:'rest_waste',heal:amount,wasted,removed:1,removed_ids:[heal.id]}};
 }
 
 // Combat rules, applied in order; each keeps at least one option and records what it removed.
@@ -331,9 +335,15 @@ const knownSurvivor=c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives===t
 const diesNow=(forced,kept,countdown)=>!(countdown&&countdown.amount<=1)&&!forced.some(knownSurvivor)&&kept.some(knownSurvivor);
 // fight = the saved plan for the current encounter ({plan, target_priority}) or null.
 export function combatConstraints(state,candidates,plan,fight=null) {
- if(!combatScreens.has(state.state_type))return {candidates,rules:[]};
- let kept=candidates;const rules=[];
- const apply=(kind,next,extra={})=>{if(next.length&&next.length<kept.length){rules.push({kind,removed:kept.length-next.length,...extra});kept=next;}};
+ if(!combatScreens.has(state.state_type))return {candidates,rules:[],lifted:[]};
+ let kept=candidates;const rules=[],lifted=[];
+ // A rule that steps aside, or would remove every option, is recorded in lifted with a reason,
+ // when it would otherwise have removed something (JEV5's reserve and JEV9's forced escape
+ // left no trace in the log). A lift changes nothing about the options.
+ const lift=(kind,reason,next,extra={})=>{if(next.length<kept.length)lifted.push({kind,reason,would_remove:kept.length-next.length,...extra});};
+ const apply=(kind,next,extra={})=>{
+  if(!next.length){lift(kind,'no_option_left',next,extra);return;}
+  if(next.length<kept.length){rules.push({kind,removed:kept.length-next.length,removed_ids:removedIds(kept,next),...extra});kept=next;}};
  if(kept.some(survives))apply('avoid_fatal',kept.filter(c=>!fatal(c)));
  // A healing potion drunk with less HP missing than it heals wastes the heal (Blood Potion at full
  // HP on round 1 of a boss). In every fight type, unless every line without it is forecast to die.
@@ -344,6 +354,7 @@ export function combatConstraints(state,candidates,plan,fight=null) {
  if(missing!=null&&kept.some(wastes)){
   const next=kept.filter(c=>!wastes(c));
   if(next.some(c=>c.forecast?.survives!==false))apply('heal_potion_waste',next,{missing});
+  else lift('heal_potion_waste','others_die',next,{missing});
  }
  const floor=plan?.combat?.hallway_potion_below_hp_percent;
  const hp=pct(state.player);
@@ -359,7 +370,7 @@ export function combatConstraints(state,candidates,plan,fight=null) {
    const dropsBelow=saving&&maxHp&&((state.player.hp-saving.best)/maxHp)*100<floor;
    const savers=dropsBelow?kept.filter(c=>usesPotion(c)&&saves(c,saving)):[];
    apply('hallway_potion',kept.filter(c=>!usesPotion(c)||savers.includes(c)),{hp_percent:hp,floor,...(savers.length?{potion_lines_kept:savers.length}:{})});
-  }
+  } else lift('hallway_potion','others_die',withoutPotion,{hp_percent:hp,floor});
  }
  // Below the floor potions are allowed, but not one that saves no HP this turn (JEV10 threw an
  // Explosive Ampoule on a turn forecast to lose nothing). Healing potions are exempt.
@@ -371,16 +382,19 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const unseen=c=>(c.forecast?.warnings??[]).some(w=>/adds or chooses unknown cards|unknown drawn cards|effect starts later/i.test(w));
   const idle=c=>usesPotion(c)&&!heals(c)&&!unseen(c)&&c.forecast?.quality!=='unknown'&&Number.isFinite(c.forecast?.hpLoss)&&c.forecast.hpLoss>=saving.best;
   if(saving&&withoutPotion.some(c=>c.forecast?.survives!==false))apply('idle_potion',kept.filter(c=>!idle(c)),{hp_percent:hp,floor});
+  else if(saving)lift('idle_potion','others_die',kept.filter(c=>!idle(c)),{hp_percent:hp,floor});
  }
  // Potions kept for the boss: outside boss fights, plays that would leave fewer than the
  // reserve are removed, unless every option that keeps the reserve is forecast to die.
  // Below the plan's hallway potion threshold (when it is a real limit, under 100) HP matters more than the reserve, so it yields.
  const reserve=plan?.combat?.potion_reserve,held=state.player?.potions?.length??0;
  const lowHp=Number.isInteger(floor)&&floor<100&&hp!=null&&hp<floor;
- if(state.state_type!=='boss'&&Number.isInteger(reserve)&&reserve>0&&!lowHp){
+ if(state.state_type!=='boss'&&Number.isInteger(reserve)&&reserve>0){
   const potionCount=c=>(c.plan??[c]).filter(p=>p.command?.action==='use_potion').length;
   const next=kept.filter(c=>held-potionCount(c)>=reserve||!usesPotion(c));
-  if(next.some(c=>c.forecast?.survives!==false))apply('potion_reserve',next,{held,reserve});
+  if(lowHp)lift('potion_reserve','below_hallway_floor',next,{held,reserve,hp_percent:hp,floor});
+  else if(next.some(c=>c.forecast?.survives!==false))apply('potion_reserve',next,{held,reserve});
+  else lift('potion_reserve','others_die',next,{held,reserve});
  }
  // A fully forecast win ends the fight: take it, using as few potions as possible.
  // Runs after the hallway potion rule, so a win that needs a held-back potion is not forced.
@@ -432,7 +446,8 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const extenders=new Set((state.player?.hand??[]).filter(c=>c.can_play!==false&&Number(c.cost)<=(state.player?.energy??0)
    &&new RegExp(`Increase ${countdown.name} by \\d+`,'i').test(c.description??'')).map(c=>c.index));
   const escapes=kept.filter(c=>c.command.action==='play_card'&&extenders.has(c.command.card_index));
-  if(extenders.size&&!diesNow(escapes,kept,countdown))apply('countdown_escape',escapes,{power:countdown.name,amount:countdown.amount});
+  if(extenders.size&&diesNow(escapes,kept,countdown))lift('countdown_escape','forced_line_dies',escapes,{power:countdown.name,amount:countdown.amount});
+  else if(extenders.size)apply('countdown_escape',escapes,{power:countdown.name,amount:countdown.amount});
  }
  // Pure block does nothing when ending the turn now takes no damage and nothing uses block.
  // HP lost from held cards (Beckon) ignores block, so only damage counts; End turn is read from
@@ -453,7 +468,9 @@ export function combatConstraints(state,candidates,plan,fight=null) {
   const margin=Math.max(10,Math.ceil(0.12*(state.player?.max_hp??0)));
   const bf=bestLoss(firstLines),bk=bestLoss(kept);
   const costly=!deathCountdown(state)&&Number.isFinite(bf)&&Number.isFinite(bk)&&bf-bk>=margin;
-  if(idx.size&&!costly&&!diesNow(firstLines,kept,deathCountdown(state)))apply('play_first',firstLines);
+  if(idx.size&&costly)lift('play_first','costly',firstLines,{best_forced_hp_loss:bf,best_hp_loss:bk});
+  else if(idx.size&&diesNow(firstLines,kept,deathCountdown(state)))lift('play_first','forced_line_dies',firstLines);
+  else if(idx.size)apply('play_first',firstLines);
  }
  // Target priority: the first entry that matches a living enemy picks the focus.
  const enemies=alive(state);
@@ -471,29 +488,30 @@ export function combatConstraints(state,candidates,plan,fight=null) {
    return (c.forecast?.defeatedEnemies??[]).some(d=>d.id===target);
   }),{enemy:focus.name});
  }
- return {candidates:kept,rules};
+ return {candidates:kept,rules,lifted};
 }
 
 // Constrained mode: code enforces the parts of the plan that are checkable.
 export function constrainCandidates(state,candidates,plan,mode='constrained',{fight=null,ownScreens=true,screenChoices={}}={}) {
  if(!plan||mode!=='constrained'||plan.run_id!==state.run?.live_id)return {candidates,constraint:null};
  if(combatScreens.has(state.state_type)){
-  const {candidates:kept,rules}=combatConstraints(state,candidates,plan,fight);
-  return {candidates:kept,constraint:rules.length?{kind:'combat',rules,removed:candidates.length-kept.length}:null};
+  const {candidates:kept,rules,lifted}=combatConstraints(state,candidates,plan,fight);
+  return {candidates:kept,constraint:rules.length||lifted.length?{kind:'combat',rules,removed:candidates.length-kept.length,...(lifted.length?{lifted}:{})}:null};
  }
  if(ownScreens&&isOwnedScreen(state)){
   const first=orderedAllowed(candidates,plan,screenChoices[screenKey(state)]);
-  if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1}};
+  // remembered: the answer was given for this screen at an earlier consult, not by the plan in force now.
+  if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1,removed_ids:removedIds(candidates,[first]),remembered:plan.screen!==screenKey(state)}};
  }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){
   const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
-  if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length}};
+  if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
  const fixed=exhaustConstraint(state,candidates)??restConstraint(state,candidates);
  if(fixed)return fixed;
  if(state.state_type==='map'&&plan.route_path?.length&&plan.route_act===state.run.act){
   const kept=routeOptions(candidates,plan);
-  if(kept.length)return {candidates:kept,constraint:{kind:'route',removed:candidates.length-kept.length}};
+  if(kept.length)return {candidates:kept,constraint:{kind:'route',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
  if(state.state_type==='shop'&&plan.shop?.gold_reserve>0){
   const gold=state.player?.gold??0,items=state.shop?.items??[];
@@ -502,7 +520,7 @@ export function constrainCandidates(state,candidates,plan,mode='constrained',{fi
    const price=items.find(i=>i.index===c.command.index)?.price;
    return typeof price!=='number'||gold-price>=plan.shop.gold_reserve;
   });
-  if(kept.length&&kept.length<candidates.length)return {candidates:kept,constraint:{kind:'gold_reserve',reserve:plan.shop.gold_reserve,removed:candidates.length-kept.length}};
+  if(kept.length&&kept.length<candidates.length)return {candidates:kept,constraint:{kind:'gold_reserve',reserve:plan.shop.gold_reserve,removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
  return {candidates,constraint:null};
 }

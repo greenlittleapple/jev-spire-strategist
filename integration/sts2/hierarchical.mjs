@@ -1,6 +1,6 @@
 // Jev decides every move; Claude refreshes a persistent strategy on triggers.
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
-import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
+import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY,STRATEGY_FACTS_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
@@ -35,7 +35,8 @@ export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.
 // strategyEvents in the result lists the same events.
 export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},onEvent=null,strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
- const version=strategist?3:factsVersion,factsPolicy=version>=3?FACTS_V3_POLICY:FACTS_POLICY;
+ // Claude mode keeps the v3.1 facts label; jev-compact-v3.2 (the shop majority rule) is jev_facts_v3 only.
+ const version=strategist?3:factsVersion,factsPolicy=strategist?STRATEGY_FACTS_POLICY:version>=3?FACTS_V3_POLICY:FACTS_POLICY;
  const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
  // v3 also enables the potion and shop resource reviews.
  const resourceReviews=version>=3;
@@ -141,9 +142,11 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // A single option left by a code rule is that rule's move; one left by the strategist's plan is
   // its choice. Neither needs a Jev call.
-  if(constraint&&options.length===1&&RULE_CONSTRAINTS.has(constraint.kind))
+  // A rule that only recorded lifts (removed 0) did not choose; a lone option then stays single_option.
+  const ruleKind=constraint&&RULE_CONSTRAINTS.has(constraint.kind);
+  if(ruleKind&&constraint.removed>0&&options.length===1)
    return direct('rule','Rule',options[0],{constraint,rule:constraint.kind==='combat'?constraint.rules?.at(-1)?.kind??'combat':constraint.kind});
-  if(constraint&&options.length===1){
+  if(constraint&&!ruleKind&&options.length===1){
    const extra={constraint};
    if(constraint.kind==='strategist_choice'){
     const key=screenKey(state),given=status.screenChoices[key]?status.screenChoiceGiven[key]:{request_id:status.plan.request_id??null,floor:status.plan.floor??null};

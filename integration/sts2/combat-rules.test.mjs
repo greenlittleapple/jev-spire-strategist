@@ -146,7 +146,7 @@ test('the boss potion reserve holds potions outside boss fights unless every oth
  const withPotions=(s,n)=>({...s,player:{...s.player,potions:Array.from({length:n},(_,i)=>({name:'P'+i}))}});
  const cands=[cand('strike',{action:'play_card',card_index:0,target:'a'}),cand('potion',{action:'use_potion',slot:0}),cand('end',{action:'end_turn'})];
  const r=combatConstraints(withPotions(fight({type:'elite'}),1),cands,plan({potion_reserve:1}));
- assert.deepEqual(ids(r),['strike','end']);assert.deepEqual(r.rules,[{kind:'potion_reserve',removed:1,held:1,reserve:1}]);
+ assert.deepEqual(ids(r),['strike','end']);assert.deepEqual(r.rules,[{kind:'potion_reserve',removed:1,removed_ids:['potion'],held:1,reserve:1}]);
  assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'elite'}),2),cands,plan({potion_reserve:1}))),['strike','potion','end'],'a spare potion can be used');
  assert.deepEqual(ids(combatConstraints(withPotions(fight({type:'boss'}),1),cands,plan({potion_reserve:1}))),['strike','potion','end'],'the boss uses it');
  const dying=cands.map(c=>c.id==='potion'?c:{...c,forecast:{...c.forecast,survives:false}});

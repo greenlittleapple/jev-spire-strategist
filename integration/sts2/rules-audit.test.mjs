@@ -5,7 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {audit,slim,reviewKind,buildFights} from './rules-audit.mjs';
+import {audit,slim,reviewKind,buildFights,report} from './rules-audit.mjs';
 
 let clock=0;
 const time=()=>new Date(Date.UTC(2026,8,30,0,0,clock++)).toISOString();
@@ -77,4 +77,39 @@ test('a run that reaches The Architect counts as won although it ends at 0 HP',(
   decision({...state('event',{run:'r3',floor:48}),event:{event_id:'THE_ARCHITECT'}},{action:'proceed'}),
   {kind:'run_end',time:time(),state:state('game_over',{run:'r3',floor:48,hp:0})}].map(slim);
  assert.deepEqual([audit(events).rules.route.runs,audit(events).rules.route.runs_died],[1,0]);
+});
+
+test('lifts, removed-option forecasts, review forecasts and overrides are read when the log records them',()=>{
+ const cands=[{id:'a0',forecast:{hpLoss:2,quality:'partial',survives:true}},{id:'a1',forecast:{hpLoss:20,quality:'partial',survives:true}},{id:'a2'}];
+ const withCands=(e,list=cands)=>({...e,candidates:list});
+ const events=[
+  withCands(decision(state('monster',{round:1,hp:60}),{forecast:{hpLoss:20,quality:'partial',survives:true},source:'rule',
+   constraint:{kind:'combat',rules:[{kind:'target_priority',removed:1,removed_ids:['a0']}],removed:1,
+    lifted:[{kind:'potion_reserve',reason:'below_hallway_floor',would_remove:1},{kind:'play_first',reason:'forced_line_dies',would_remove:2}]}})),
+  withCands(decision(state('monster',{round:2,hp:40}),{forecast:{hpLoss:3,quality:'partial',survives:true},
+   deliberation:{reviewReason:'Dangerous turn: ending now loses 30 HP',changed:true,
+    review:{initial:{id:'a1',hp_loss:20,quality:'partial',survives:true},final:{id:'a0',hp_loss:3,quality:'partial',survives:true}}}})),
+  withCands(decision(state('monster',{round:3,hp:37}),{deliberation:{reviewReason:'Card order: this attacks first',changed:false,
+   review:{initial:{id:'a0',hp_loss:2},final:{id:'a0',hp_loss:2}}}})),
+  {kind:'strategy_request',time:time(),state:state('monster',{round:3,hp:37})},
+  decision(state('shop',{floor:8,hp:37}),{action:'shop_purchase',source:'jev',
+   deliberation:{override:{kind:'majority_leave',p_leave:.3,jev_choice:'a9',chosen:'a1',p_chosen:.2,price:50,gold:150}}}),
+ ].map(slim).filter(Boolean);
+ assert.equal(events.length,4,'other record kinds are skipped');
+ const a=audit(events);
+ assert.deepEqual([a.rules.target_priority.with_removed_forecasts,a.rules.target_priority.costly],[1,1]);
+ assert.deepEqual(a.lifts,{'play_first: forced_line_dies':{entries:1,runs:1},'potion_reserve: below_hallway_floor':{entries:1,runs:1}});
+ assert.deepEqual(a.reviews['review:danger'].changed_with_forecasts,{n:1,initial_mean_hp_loss:20,final_mean_hp_loss:3,lower:1,same:0,higher:0});
+ assert.equal(a.reviews['review:card_order'].changed_with_forecasts.n,0);
+ assert.deepEqual(a.overrides,{majority_leave:{decisions:1,gold_spent:50}});
+ const text=report(a);
+ for(const m of [/Lifts: a rule stepped aside/,/Changed picks with recorded forecasts/,/majority_leave\s+1\s+50/,/target_priority\s+1 costly\s+1/])assert.match(text,m);
+});
+
+test('logs without the new records keep the earlier report',()=>{
+ const a=audit([decision(state('monster'),{constraint:{kind:'combat',rules:[{kind:'hallway_potion',removed:1}],removed:1}}),
+  decision(state('monster'),{deliberation:{reviewReason:'Dangerous turn: x',changed:true}})].map(slim));
+ assert.equal('lifts' in a||'overrides' in a,false);
+ assert.equal('costly' in a.rules.hallway_potion||'changed_with_forecasts' in a.reviews['review:danger'],false);
+ assert.doesNotMatch(report(a),/Lifts|Changed picks with recorded|Overrides|Removed options/);
 });

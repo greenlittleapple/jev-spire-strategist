@@ -113,3 +113,16 @@ test('a relic bought from the strategist list does not trigger new_relic; anothe
  await assert.rejects(hierarchicalDeliberate({state:other,candidates:decisionCandidates(other),strategist:{channel,status},cancelled:()=>true,ask:()=>assert.fail('no Jev call')}),/cancelled/);
  assert.equal((await channel.current()).stamp.reason,'new_relic');
 }));
+
+test('a combat rule that only records a lift does not claim a lone option; it stays single_option with the lift kept',async()=>{
+ const state={state_type:'elite',run:run(6),player:{character:'Ironclad',hp:20,max_hp:80,energy:3,max_energy:3,block:0,gold:50,deck:[],relics:[relic],
+  potions:[{slot:0,id:'FIRE',name:'Fire Potion',description:'Deal 20 damage.',can_use_in_combat:true}],status:[],hand:[]},
+  battle:{round:2,turn:'player',is_play_phase:true,enemies:[{entity_id:'e',name:'Slime',hp:20,max_hp:20,block:0,status:[],intents:[]}]}};
+ const candidates=[{id:'potion',label:'Fire Potion',command:{action:'use_potion',slot:0},forecast:{quality:'partial',survives:true,defeatedEnemies:[]}}];
+ const status=newStrategyStatus({waitMs:5000});
+ status.plan=stampPlan(plan({combat:{...plan().combat,potion_reserve:1,hallway_potion_below_hp_percent:40}}),requestStamp(state,candidates,'run_start'));
+ const channel={current:async()=>null,take:async()=>null,post:async()=>assert.fail('no consult')};
+ const result=await hierarchicalDeliberate({state,candidates,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ assert.equal(result.decisionSource,'single_option');
+ assert.equal(result.constraint?.removed,0);assert.equal(result.constraint?.lifted?.[0]?.reason,'below_hallway_floor');
+});

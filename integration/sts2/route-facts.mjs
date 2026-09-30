@@ -1,7 +1,16 @@
 // Exact counts over the visible act map and live resources. These are facts for
 // Jev and the strategist; they never remove options.
 export const FACTS_POLICY = 'jev-compact-v2';
-export const FACTS_V3_POLICY = 'jev-compact-v3.1';
+// jev_facts_v3 mode's label. v3.2 adds the majority rule for leaving a shop (efficient-decisions.mjs).
+export const FACTS_V3_POLICY = 'jev-compact-v3.2';
+// The v3 facts inside claude strategy mode keep their earlier label; the shop rule does not apply there.
+export const STRATEGY_FACTS_POLICY = 'jev-compact-v3.1';
+// A rest option's heal: the base "(N)" plus relic bonuses written as "+N HP from Regal Pillow".
+export const restHeal = description => {
+ const text = String(description ?? ''), base = Number(text.match(/\((\d+)\)/)?.[1]);
+ if (!Number.isFinite(base)) return null;
+ return base + [...text.matchAll(/\+(\d+) HP from /gi)].reduce((n, m) => n + Number(m[1]), 0);
+};
 const ROOM = {Monster:'M',Elite:'E',RestSite:'R',Shop:'$',Treasure:'T',Unknown:'?',Ancient:'A',Boss:'B'};
 const TRACK = {Elite:'elites',RestSite:'rests',Shop:'shops',Unknown:'unknowns',Monster:'monsters',Treasure:'treasures'};
 const combatScreens = new Set(['monster','elite','boss']);
@@ -216,7 +225,8 @@ export function computedFacts(state, candidates, mapMemory, {version=2}={}) {
  const ahead = state.state_type === 'map' ? remainingRoute(map, position) : facts.route_ahead;
  if (state.state_type === 'rest_site') {
   const rest = (state.rest_site?.options ?? []).find(o => o.id === 'HEAL');
-  const heal = Number(rest?.description?.match(/\((\d+)\)/)?.[1]);
+  // v2 keeps its original reading (base heal only) as a historical baseline.
+  const heal = version >= 3 ? restHeal(rest?.description) : Number(rest?.description?.match(/\((\d+)\)/)?.[1]);
   if (rest && Number.isFinite(heal) && p.max_hp) {
    const missing = p.max_hp - p.hp;
    facts.rest = {missing_hp: missing, rest_heals: heal, heal_wasted: Math.max(0, heal - missing)};

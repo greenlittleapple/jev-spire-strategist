@@ -3,7 +3,7 @@ import {decisionQuestion} from '../../vendor/jev-the-spire/spire-demo/planner.mj
 import {compactRequest} from '../../vendor/jev-the-spire/spire-demo/compact-request.mjs';
 import {includeHextechRules} from './runes.mjs';
 import {includePileKnowledge} from './piles.mjs';
-import {FACTS_POLICY} from './route-facts.mjs';
+import {FACTS_POLICY,FACTS_V3_POLICY} from './route-facts.mjs';
 
 export const EFFICIENT_POLICY = 'jev-compact-v1';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -162,6 +162,29 @@ export function reviewReason(state,candidates,chosen,{resourceReviews=false,stra
  return null;
 }
 
+// Majority rule for leaving a shop (jev-compact-v3.2): Jev's answer to leave stands only with at
+// least 0.5 of its probability. Otherwise the most probable affordable purchase is taken
+// ({choice, record}); null when the answer stands. Jev-only logs had 19 plurality leaves at
+// p 0.26-0.41, and every Jev-only loss died with unspent gold (mean 228).
+export function majorityLeave(state,candidates,answer,threshold=0.5) {
+ if(state.state_type!=='shop')return null;
+ const picked=candidates.find(c=>c.id===answer?.choice);
+ if(picked?.command.action!=='proceed')return null;
+ const p=answer.probabilities??{},pLeave=p[picked.id];
+ if(!Number.isFinite(pLeave)||pLeave>=threshold)return null;
+ const pl=state.player??{},gold=pl.gold??0,slotsFull=(pl.potions?.length??0)>=(pl.max_potion_slots??3);
+ // Affordable and in stock; a potion only with a free slot.
+ const buys=candidates.filter(c=>c.command.action==='shop_purchase'&&Number.isFinite(p[c.id])&&p[c.id]>0
+  &&Number.isFinite(c.details?.price)&&c.details.price<=gold&&c.details.is_stocked!==false&&c.details.can_afford!==false
+  &&!(c.details.category==='potion'&&slotsFull));
+ if(!buys.length)return null;
+ const best=buys.reduce((a,c)=>p[c.id]>p[a.id]?c:a);
+ return {choice:best.id,record:{kind:'majority_leave',p_leave:pLeave,jev_choice:picked.id,chosen:best.id,p_chosen:p[best.id],price:best.details.price,gold}};
+}
+// The forecast fields a review record keeps for one option: HP lost this turn and quality.
+const forecastOf=c=>c?{id:c.id,label:c.label,hp_loss:Number.isFinite(c.forecast?.hpLoss)?c.forecast.hpLoss:null,
+ quality:c.forecast?.quality??null,survives:c.forecast?.survives??null}:null;
+
 export async function efficientDeliberate({state,candidates,ask,recent={},strategy=null,facts=null,factsPolicy=FACTS_POLICY,resourceReviews=false,onStage=()=>{}}) {
  if(!candidates.length)throw Error('No legal candidates');
  if(isForcedChoice(state,candidates))return {
@@ -192,7 +215,15 @@ export async function efficientDeliberate({state,candidates,ask,recent={},strate
   review.questions.move.instructions+=' Review the proposed action against this specific concern. The initial answer is a fallible same-model hypothesis, not independent evidence. All original choices remain available.';
   final=await evaluate(review,'Jev is checking a risky choice');
  }
- return {...final,decisionSource:'jev',usage: calls.reduce((sum,c)=>({input_tokens:sum.input_tokens+c.input_tokens,output_tokens:sum.output_tokens+c.output_tokens}),{input_tokens:0,output_tokens:0}),
+ // The review record: Jev's first pick and its forecast next to the final pick, so the audit can
+ // tell whether a changed pick lowered the forecast loss.
+ const reviewRecord=reason?{initial:forecastOf(selected),final:forecastOf(candidates.find(c=>c.id===final.answers.move.choice))}:null;
+ // jev_facts_v3 only (its label); applied after the shop review, to Jev's final answer.
+ const override=factsPolicy===FACTS_V3_POLICY&&facts&&!strategy?majorityLeave(state,candidates,final.answers.move):null;
+ // The executed choice becomes the purchase; the answer keeps Jev's pick as jev_choice and its probabilities.
+ const answers=override?{...final.answers,move:{...final.answers.move,choice:override.choice,jev_choice:final.answers.move.choice}}:final.answers;
+ return {...final,answers,decisionSource:'jev',usage: calls.reduce((sum,c)=>({input_tokens:sum.input_tokens+c.input_tokens,output_tokens:sum.output_tokens+c.output_tokens}),{input_tokens:0,output_tokens:0}),
   deliberation:{version:facts?factsPolicy:EFFICIENT_POLICY,focus:'selective',calls:calls.length,request_usage:calls,reviewReason:reason,
-   initial:first.answers.move,assessments:{move:first.answers.move},changed:final.answers.move.choice!==first.answers.move.choice}};
+   initial:first.answers.move,assessments:{move:first.answers.move},changed:final.answers.move.choice!==first.answers.move.choice,
+   ...(reviewRecord?{review:reviewRecord}:{}),...(override?{override:override.record}:{})}};
 }
