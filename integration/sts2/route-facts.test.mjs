@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {optionRoutes,remainingRoute,distinctRoutes,computedFacts} from './route-facts.mjs';
-import {efficientQuestion} from './efficient-decisions.mjs';
-import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan} from './strategy.mjs';
+import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys} from './route-facts.mjs';
+import {efficientQuestion,isForcedChoice} from './efficient-decisions.mjs';
+import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,screenKey,ELITE_CHAIN_MARGIN,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
@@ -200,4 +200,94 @@ test('a consult without routes keeps the route already chosen for this act',asyn
   assert.equal(status.plan.route_act,run.act);
   assert.notEqual(replanReason(mapState(),status.plan,candidates),'route_plan','no new route request');
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+// JEV22 (Strategist v3.17), floor 8 at the rest site on row 7: an elite on row 8 (floor 9) leads
+// through a treasure to a second elite on row 10 (floor 11) with no rest site between them.
+const jev22Map=(between='Treasure')=>({current_position:{col:4,row:7,type:'RestSite'},boss:{col:3,row:13,name:'Boss'},
+ nodes:[node(4,7,'RestSite',[[4,8],[5,8]]),node(4,8,'Elite',between==='fork'?[[4,9],[3,9]]:[[4,9]]),node(5,8,'Unknown',[[5,9]]),
+  node(4,9,'Treasure',[[3,10]]),node(3,9,'RestSite',[[3,10]]),node(5,9,'Monster',[[5,10]]),node(3,10,'Elite',[[3,11]]),node(5,10,'Monster',[[5,11]]),
+  node(3,11,'Monster',[[3,12]]),node(5,11,'Monster',[[3,12]]),node(3,12,'RestSite',[[3,13]]),node(3,13,'Boss')],
+ next_options:[{index:0,col:4,row:8,type:'Elite'},{index:1,col:5,row:8,type:'Unknown'}]});
+const jev22Options=[
+ {id:'a0',label:'Travel to Elite (column 4)',command:{action:'choose_map_node',index:0},details:{index:0,col:4,row:8,type:'Elite'}},
+ {id:'a1',label:'Travel to Unknown (column 5)',command:{action:'choose_map_node',index:1},details:{index:1,col:5,row:8,type:'Unknown'}}];
+const jev22Path=['4,8','4,9','3,10','3,11','3,12'];
+const jev22State=(hp,m=jev22Map())=>({...mapState(hp),map:m,run:{...run,floor:8}});
+const jev22Plan=(extra={})=>({...stampPlan(plan({route_path:jev22Path}),requestStamp({...jev22State(80),run:{...run,floor:1}},jev22Options,'route_plan',mapNodeKeys(jev22Map()))),elite_min_hp_percent:55,...extra});
+
+test('strategist routes list elite chains by floor, with floor = map row + the act offset',()=>{
+ const routes=withEliteChains(distinctRoutes(jev22Map(),{col:4,row:7}),8);
+ assert.equal(routes.floor_offset,1,'Act 1: Neow is floor 1 on row 0, so row 8 is floor 9');
+ const chained=routes.routes.find(r=>r.rooms.startsWith('ETE'));
+ assert.deepEqual(chained.elite_chains,[[9,11]]);
+ assert.equal(routes.routes.find(r=>r.rooms.startsWith('?')).elite_chains,undefined,'routes without a chain carry no field');
+ assert.match(routes.elite_chain_note,/no rest site between/);
+ // Act 2 starts at floor 18 on row 0: the same rows are floors 26 and 28.
+ assert.deepEqual(withEliteChains(distinctRoutes(jev22Map(),{col:4,row:7}),25).routes.find(r=>r.rooms.startsWith('ETE')).elite_chains,[[26,28]]);
+ // A rest site between the elites breaks the chain; three elites in a row are two chains.
+ const m={current_position:{col:0,row:0},nodes:[node(0,0,'Ancient',[[0,1]]),node(0,1,'Elite',[[0,2]]),node(0,2,'RestSite',[[0,3]]),node(0,3,'Elite',[[0,4]]),
+  node(0,4,'Elite',[[0,5]]),node(0,5,'Shop',[[0,6]]),node(0,6,'Elite',[[0,7]]),node(0,7,'Boss')]};
+ assert.deepEqual(withEliteChains(distinctRoutes(m,m.current_position),1).routes[0].elite_chains,[[4,5],[5,7]]);
+ assert.equal(withEliteChains(null,1),null);
+});
+
+test('route_risk asks at a branch that commits to an elite chain unless HP covers one elite fight more',()=>{
+ const p=jev22Plan();
+ // JEV22: 61/80 (76%) with elite_min_hp_percent 55; the old check needed HP below 55.
+ assert.equal(replanReason(jev22State(61),p,jev22Options),'route_risk');
+ const risk=routeRisk(jev22State(61),p,jev22Options);
+ assert.equal(risk.kind,'elite_chain');assert.equal(risk.needs_hp_percent,55+ELITE_CHAIN_MARGIN);
+ assert.deepEqual(risk.elite_chain,{floors:[9,11],nodes:['4,8','3,10'],rooms_between:'T'});
+ assert.deepEqual(risk.next,[{option:'a0',node:'4,8',type:'Elite',floor:9}]);
+ assert.equal(replanReason(jev22State(66),p,jev22Options),null,'83% is at least 55 + 26');
+ assert.equal(replanReason(jev22State(61),{...p,elite_min_hp_percent:0},jev22Options),null,'0 turns it off');
+ assert.equal(replanReason(jev22State(61),{...p,elite_min_hp_percent:40},jev22Options),null,'a lowered minimum keeps the route');
+ assert.equal(replanReason(jev22State(61),{...p,route_path:['5,8','5,9','5,10']},jev22Options),null,'the route avoids the chain');
+ // A rest site reachable between the elites: the branch does not commit to the chain.
+ assert.equal(replanReason(jev22State(61,jev22Map('fork')),p,jev22Options),null);
+ // Below the minimum the elite check applies and still reports the chain.
+ const low=routeRisk(jev22State(40),p,jev22Options);
+ assert.equal(low.kind,'elite');assert.deepEqual(low.elite_chain.floors,[9,11]);
+ // The answer's own screen does not ask again.
+ assert.equal(replanReason(jev22State(61),{...p,screen:screenKey(jev22State(61))},jev22Options),null);
+});
+
+test('route_risk never fires on a single-option map move',()=>{
+ // After the floor-9 elite JEV22 had one option on each move (treasure, then the elite) at 45% HP.
+ const p=jev22Plan(),m=jev22Map();
+ const one={...jev22State(36,{...m,current_position:{col:4,row:9,type:'Treasure'},next_options:[{index:0,col:3,row:10,type:'Elite'}]}),run:{...run,floor:10}};
+ const only=[{id:'a0',label:'Travel to Elite (column 3)',command:{action:'choose_map_node',index:0},details:{index:0,col:3,row:10,type:'Elite'}}];
+ assert.equal(routeRisk(one,p,only),null);assert.equal(replanReason(one,p,only),null);
+ assert.equal(replanReason(jev22State(61),p,[jev22Options[0]]),null,'a branch point needs two map options');
+ assert.equal(isForcedChoice(one,only),true,'the runner does not evaluate triggers for it at all');
+});
+
+test('route_risk briefs carry the chain; Jev-only requests are unchanged',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'jev-route-'));
+ try{
+  const channel=fileChannel(dir),status=newStrategyStatus({enabled:true,waitMs:5000});
+  status.plan=jev22Plan();
+  const answer=(async()=>{for(;;){const r=await channel.current();if(r){await channel.answer(r.id,plan({route_path:['5,8','5,9','5,10'],elite_min_hp_percent:55}));return r;}await new Promise(x=>setTimeout(x,50));}})();
+  await hierarchicalDeliberate({state:jev22State(61),candidates:jev22Options,strategist:{channel,status},ask:()=>assert.fail('the route leaves one option')});
+  const seen=await answer;
+  assert.equal(seen.brief.trigger,'route_risk');
+  assert.deepEqual(seen.brief.route_risk.elite_chain.floors,[9,11]);
+  assert.deepEqual(seen.brief.routes.routes.find(r=>r.rooms.startsWith('ETE')).elite_chains,[[9,11]]);
+ }finally{await rm(dir,{recursive:true,force:true});}
+ // Jev modes: the same map screen sends the facts the unchanged fact builders give, with no chain fields.
+ for(const factsVersion of [2,3]){
+  let request;
+  await hierarchicalDeliberate({state:jev22State(61),candidates:jev22Options,factsVersion,
+   ask:async q=>{request=q;return {model:'t',answers:{move:{type:'choice',choice:'a1',confidence:.9,probabilities:{a1:.9}}},usage:{input_tokens:1,output_tokens:1}};}});
+  assert.deepEqual(request.state.computed_facts,computedFacts(jev22State(61),jev22Options,null,{version:factsVersion}));
+  assert.deepEqual(request.state.computed_facts.route_options,factsVersion===3?orderedOptionRoutes(jev22Map(),jev22Options):optionRoutes(jev22Map(),jev22Options));
+  assert.doesNotMatch(JSON.stringify(request),/elite_chain|floor_offset/);
+ }
+});
+
+test('the route instructions give the elite chain evidence and the route_risk margin',()=>{
+ const route=STRATEGIST_INSTRUCTIONS.split(/\r?\n/).find(l=>l.startsWith('- route:'));
+ assert.match(route,/elite_chains/);assert.match(route,/JEV22/);assert.match(route,/2 of 69 logged elite fights/);
+ assert.ok(route.includes(`elite_min_hp_percent + ${ELITE_CHAIN_MARGIN}`));
 });

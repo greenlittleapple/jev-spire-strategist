@@ -3,7 +3,7 @@
 // every ordinary decision with it.
 import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
-import {nodeKey,minElitesFrom,restHeal} from './route-facts.mjs';
+import {nodeKey,minElitesFrom,restHeal,committedEliteChain,floorOffset,withEliteChains} from './route-facts.mjs';
 
 export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -53,7 +53,7 @@ Fields:
 - fight: when the trigger is a fight start (new_encounter, review_encounter, elite_start, boss_start), a plan for this encounter from the visible enemies, intents and powers: plan (targeting, what to avoid, when to block, potion use) and target_priority (enemy names or the selectors lowest_hp, biggest_attack, can_kill, most important first, or [] for none). It is saved for this encounter and reused whenever the same enemies appear again, in this run and later runs, so write it for the encounter, not for today's HP. target_priority is enforced: while two or more enemies are alive, single-target plays aimed at anyone except the highest-priority enemy still alive are removed unless they kill their target; area attacks are unaffected. Use a priority only when you are sure. Each enemy may carry seen_pattern: the intents it showed round by round in recent fights; plan around the turns it repeats. encounter_results shows how this encounter went before (HP start→end, rounds, won; after_plan marks fights played with the saved plan). review_encounter means the saved plan did badly: write a better one. A power on an enemy that counts down to your death ("In N turns, you will be eaten and die") must be pushed back with the cards that name it; the combat rules force those at 3 or less (countdown_escape), and the fight plan should say to play them. A plan that tells Jev not to kill an enemy, or to hold back in any way, must say when to stop (for example "kill it once block covers the eruption damage"); check draw_cards for what next turn can hold. JEV11 told Jev not to kill the Waterfall Giant with no exit, stalled while Steam Eruption grew to 63, and missed a kill it would have survived. Trigger death_countdown asks once per fight when such a power appears: rewrite the fight plan around it. fight.play_first (optional, card names) is enforced and saved with the fight plan: while a listed card is affordable in hand, other card plays and ending the turn are removed (potions stay). It yields when the best forced line loses at least max(10, 12% of max HP) more than the best surviving line (not under a death countdown), or when no forced line is forecast to survive and another is. Use it for cards that must be played (an escape from a death countdown). Trigger unknown_mechanic lists powers, relics or cards the forecast does not model (brief.unknown_mechanics with their text): answer mechanics with one entry per item, {name, note}, a one-line explanation of what it does and what to do about it; notes are saved and shown to Jev whenever the item is present. On other triggers during a fight (low_hp, unknown_mechanic) a non-empty fight plan replaces the saved plan for the current encounter, so write one only to improve it; otherwise use {"plan":"","target_priority":[]} and the saved fight plans are unaffected. brief.glossary and brief.keywords explain names and keywords the options mention; combat_state is your hand, energy, block and powers. Card options may carry past_runs from earlier logged runs (different seeds and policies): times offered and picked, plays per fight after picking, and the floor those runs reached; treat it as a rough signal.
 - card_reward: the kinds of cards the deck needs, what to avoid, and when to skip. In Act 1 the deck needs damage for the boss: take the best offered card unless it hurts the deck (JEV12 and JEV14 skipped 3-4 of 7-8 Act 1 rewards and lost at the Act 1 boss).
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
-- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows. Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18; JEV18 took an optional elite at 75% six floors out and entered at 65%): in all four the only rest site after the last elite was the one right before the boss. rests_before_boss_rest in the route facts leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the R rooms after the elite except the last): with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine; runs with no Act 1 elite lost by the end of Act 2 (JEV5, 6, 9, 19).
+- route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows. Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18; JEV18 took an optional elite at 75% six floors out and entered at 65%): in all four the only rest site after the last elite was the one right before the boss. rests_before_boss_rest in the route facts leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the R rooms after the elite except the last): with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine; runs with no Act 1 elite lost by the end of Act 2 (JEV5, 6, 9, 19). Two elites with no rest site between them (a route's elite_chains, given as floors) take two fights' HP with no heal: 2 of 69 logged elite fights were the second of such a pair and both runs died in it (JEV19 at 18/80; JEV22 entered its floor 9 elite at 76% and died in the floor 11 elite at 36/80, only a treasure between). route_risk asks at a branch that commits to one unless HP is at least elite_min_hp_percent + 26.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
 - elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer.
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact. Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
@@ -104,7 +104,8 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   ...(Array.isArray(p.draw_pile)&&p.draw_pile.length&&p.draw_pile.length<=10?{draw_cards:p.draw_pile.map(c=>c.name).sort()}:{})};
  if(state.battle)brief.enemies=state.battle.enemies.map(({name,hp,max_hp,block,status,intents})=>({name,hp,max_hp,block,
   status:(status??[]).map(({name,amount,description})=>({name,amount,description})),intents:(intents??[]).map(({title,label,description})=>({title,label,description}))}));
- if(routes)brief.routes=routes;
+ if(routes)brief.routes=withEliteChains(routes,state.run?.floor);
+ if(reason==='route_risk'){const risk=routeRisk(state,previous,candidates);if(risk)brief.route_risk=risk;}
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
  if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
@@ -148,6 +149,29 @@ const commitsToElite=(map,candidates,next)=>{
  const all=count(mapOptions(candidates)),mine=count(next);
  return all.length>0&&mine.length>0&&Math.min(...mine)>Math.min(...all);
 };
+// An elite chain (two elites with no rest site between) needs HP for both fights. The margin is
+// the HP one elite fight costs: in 42 logged Act 1 elite fights that were survived, the upper
+// quartile of HP lost was 26% of max HP (median 19%). JEV22 took an elite at 76% HP with a plan
+// minimum of 55 and a second elite two floors later, and died in it at 45%.
+export const ELITE_CHAIN_MARGIN=26;
+// route_risk: the details of why it fires, or null. Only at a branch point (two or more map
+// options): a single option moves without a request.
+export function routeRisk(state,plan,candidates=[]) {
+ const hp=pct(state.player),min=plan?.elite_min_hp_percent??0,options=mapOptions(candidates);
+ if(hp==null||!(min>0)||options.length<2||!plan.route_path?.length)return null;
+ const next=routeOptions(candidates,plan);
+ if(!next.length)return null;
+ const offset=floorOffset(state.run?.floor,state.map?.current_position),floor=key=>offset==null?null:Number(key.split(',')[1])+offset;
+ const node=c=>({option:c.id,node:nodeKey(c.details),type:c.details.type,floor:floor(nodeKey(c.details))});
+ if(hp>=min+ELITE_CHAIN_MARGIN)return null;
+ let chain=null;
+ for(const c of next){const at=plan.route_path.indexOf(nodeKey(c.details)),found=committedEliteChain(state.map,plan.route_path.slice(at));if(found){chain={option:c,...found};break;}}
+ const detail=kind=>({kind,hp_percent:hp,elite_min_hp_percent:min,next:(chain&&kind==='elite_chain'?[chain.option]:next).map(node),
+  ...(chain?{elite_chain:{floors:chain.nodes.map(floor),nodes:chain.nodes,rooms_between:chain.rooms_between},needs_hp_percent:min+ELITE_CHAIN_MARGIN,
+   note:`The route takes two elites with no rest site between them; route_risk asks below elite_min_hp_percent + ${ELITE_CHAIN_MARGIN} (one elite fight's HP).`}:{})});
+ if(hp<min&&(next.some(c=>c.details.type==='Elite')||commitsToElite(state.map,candidates,next)))return detail('elite');
+ return chain?detail('elite_chain'):null;
+}
 
 // The first option in the plan's order that is still offered.
 const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
@@ -178,7 +202,7 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true,screenCho
   if(plan.route_path?.length){
    const next=routeOptions(candidates,plan);
    if(!next.length)return 'route_off';
-   if(hp!=null&&hp<(plan.elite_min_hp_percent??0)&&(next.some(c=>c.details.type==='Elite')||commitsToElite(state.map,candidates,next)))return 'route_risk';
+   if(routeRisk(state,plan,candidates))return 'route_risk';
   }
  }
  // Relic/rune pickups can change the plan: consult at the first screen outside combat after one.
