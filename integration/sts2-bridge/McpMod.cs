@@ -19,7 +19,8 @@ namespace STS2_MCP;
 [ModInitializer("Initialize")]
 public static partial class McpMod
 {
-    public const string Version = "0.4.0";
+    // Upstream STS2MCP 0.4.0 plus this lab's changes; bump the jev number with every bridge change.
+    public const string Version = "0.4.0-jev.1";
     public const int DefaultPort = 15526;
     private const string ConfigFileName = "STS2_MCP.conf";
 
@@ -84,6 +85,7 @@ public static partial class McpMod
         {
             // Optional settings UI patches should not block the HTTP bridge itself.
             TryApplyHarmonyPatches();
+            ReadGameVersion();
 
             // Connect to main thread process frame for action execution
             var tree = (SceneTree)Engine.GetMainLoop();
@@ -103,7 +105,7 @@ public static partial class McpMod
             };
             _serverThread.Start();
 
-            GD.Print($"[STS2 MCP] v{Version} server started on http://localhost:{port}/");
+            GD.Print($"[STS2 MCP] v{Version} (build {BuildCommit ?? "unknown"}, game {_gameVersion ?? "unknown"}) server started on http://localhost:{port}/");
         }
         catch (Exception ex)
         {
@@ -212,7 +214,7 @@ public static partial class McpMod
 
             if (path == "/")
             {
-                SendJson(response, new { message = $"Hello from STS2 MCP v{Version}", status = "ok" });
+                SendJson(response, Greeting());
             }
             else if (path == "/api/v1/singleplayer")
             {

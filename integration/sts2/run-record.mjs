@@ -21,10 +21,18 @@ export async function fileSha256(path) {
  try { return createHash('sha256').update(await readFile(path)).digest('hex'); } catch { return null; }
 }
 
-// The bridge's root endpoint answers "Hello from STS2 MCP v0.4.0".
-export const bridgeVersion = message => String(message ?? '').match(/\bv(\d+(?:\.\d+)+)\b/)?.[1] ?? null;
+// The bridge's root endpoint. Since 0.4.0-jev.1 it answers {message, status, version, build, game}:
+// the lab's bridge version, the source commit the DLL was built from, and the game's release version.
+// Older builds answer only "Hello from STS2 MCP v0.4.0", so version comes from the message and
+// build and game are null.
+export const bridgeVersion = message => String(message ?? '').match(/\bv(\d+(?:\.\d+)+(?:-[0-9A-Za-z.]+)?)(?![0-9A-Za-z.-])/)?.[1] ?? null;
+const text = value => typeof value === 'string' && value ? value : null;
+export function bridgeIdentity(greeting) {
+ const version = text(greeting?.version) ?? bridgeVersion(greeting?.message);
+ return version ? {version, build: text(greeting?.build), game: text(greeting?.game)} : null;
+}
 export async function fetchBridgeVersion(url, timeoutMs = 1500) {
- try { return bridgeVersion((await (await fetch(url, {signal: AbortSignal.timeout(timeoutMs)})).json()).message); } catch { return null; }
+ try { return bridgeIdentity(await (await fetch(url, {signal: AbortSignal.timeout(timeoutMs)})).json()); } catch { return null; }
 }
 
 // Game setup from the live state and the raw save. The character comes from the save's
