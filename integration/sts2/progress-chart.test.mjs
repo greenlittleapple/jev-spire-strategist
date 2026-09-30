@@ -59,3 +59,52 @@ test('the README summary counts wins, final-boss runs and token ranges from the 
   + 'Of the 1 finished strategist run, 1 reached the final boss on floor 48. Jev alone got no further than floor 17 in 1 run.');
  assert.match(cost, /^Jev used 1\.5 to 1\.5 million input tokens per Jev-only run and 3\.0 to 3\.0 million with the strategist, about \$0\.06 to \$0\.13 per run/);
 });
+
+const theme = {surface: '#fff', text: '#000', secondary: '#333', muted: '#888', grid: '#eee', axis: '#ccc', track: 0.35, series: ['#00f', '#f80'], good: '#0a0', goodText: '#060'};
+const withIssues = () => {
+ const d = structuredClone(data);
+ d.issues = [{id: 'parse', label: 'Intents were not parsed.', fixed: 'abc1234'}, {id: 'crash', label: 'The game crashed.', fixed: '-'}, {id: 'unused', label: 'Unused.', fixed: '-'}];
+ d.versions[0].runs[0].issues = ['parse'];
+ d.versions[1].runs[0].issues = ['parse', 'crash'];
+ return d;
+};
+
+test('the README table marks runs with known issues and explains the letters used under it', () => {
+ const lines = progressTable(withIssues()).split('\n');
+ assert.equal(lines[2], '| Jev v1 (`jev-compact-v1`) | 17<sup>a</sup> | One question |');
+ assert.equal(lines[3], '| Strategist v3 (`claude-strategy-v3`) | **JEV1: won (floor 48)** (replay)<sup>a,b</sup>, JEV2: in progress (floor 30) | Owned screens |');
+ assert.deepEqual(lines.slice(4), ['', '- <sup>a</sup> Intents were not parsed. Fixed in abc1234.', '- <sup>b</sup> The game crashed.']);
+ assert.equal(progressTable(data).split('\n').length, 4);
+});
+
+test('an unknown issue ID stops the render', () => {
+ const d = withIssues(); d.versions[0].runs[0].issues = ['gpu'];
+ assert.throws(() => progressTable(d), /unknown issue gpu/);
+ assert.throws(() => progressSvg(d, theme), /unknown issue gpu/);
+});
+
+test('the chart draws runs with known issues as hollow dots in the group colour and says so', () => {
+ const svg = progressSvg(withIssues(), theme);
+ assert.match(svg, /Hollow dots: runs affected by a known issue/);
+ assert.equal(svg.match(/<circle [^>]*r="3.5" fill="#fff" stroke="#00f"/g).length, 1);
+ assert.equal(svg.match(/<circle [^>]*r="5.5" fill="#fff" stroke="#0a0"/g).length, 1);
+ assert.doesNotMatch(progressSvg(data, theme), /Hollow dots/);
+});
+
+test('a row with enough comparable finished runs shows its win rate in the table and the chart', () => {
+ const d = structuredClone(data);
+ d.versions[0].mode = 'jev';
+ d.versions[0].runs = [17, 17, 28, 48, 14].map((floor, i) => ({run: String(i), seed: null, result: floor === 48 ? 'won' : 'lost', floor}));
+ assert.match(progressTable(d).split('\n')[2], /^\| Jev v1 \(`jev-compact-v1`\) \| \*\*1 of 5 won, median floor 17\*\*: 17, 17, 28, \*\*won \(floor 48\)\*\*, 14 \|/);
+ assert.match(progressSvg(d, theme), /> · 1 of 5 won, median floor 17<\/tspan>/);
+ d.versions[0].runs.pop();
+ assert.match(progressTable(d).split('\n')[2], /^\| Jev v1 \(`jev-compact-v1`\) \| 17, 17, 28/);
+});
+
+test('compact JSON keeps a run with issues on one line', () => {
+ const d = withIssues(), text = compactJson(d);
+ assert.deepEqual(JSON.parse(text), d);
+ assert.match(text, /\n {4}\{"run": "1", "seed": null, "result": "lost", "floor": 17, "issues": \["parse"\]\},?\n/);
+ assert.match(text, /\n {2}\{"id": "crash", "label": "The game crashed.", "fixed": "-"\},?\n/);
+ assert.match(text, /"notes": \[\n {2}"No run has won yet."\n \]/);
+});
