@@ -184,6 +184,56 @@ export function orderedOptionRoutes(map, candidates, {maxPaths=2000}={}) {
  return out;
 }
 
+// Elite chains, for the strategist only (claude mode; Jev's facts do not use them): two elites on
+// one path with no rest site between them. JEV22 took elites on floors 9 and 11 with only a
+// treasure between and died in the second at 36/80 HP.
+const rowOf = key => Number(String(key).split(',')[1]);
+// Map rows count from the act's first node (row 0); run.floor is the floor of the current node,
+// so floor = row + (run.floor - current row). In Act 1 Neow is floor 1 at row 0: row 8 is floor 9.
+export const floorOffset = (floor, position) => floor != null && position?.row != null ? floor - position.row : null;
+// [first, second] indexes of consecutive elites with no rest site between them, from room letters.
+function chainPairs(rooms) {
+ const out = [];
+ let last = null;
+ [...rooms].forEach((r, i) => { if (r === 'R') last = null; else if (r === 'E') { if (last != null) out.push([last, i]); last = i; } });
+ return out;
+}
+export const ELITE_CHAIN_NOTE = 'elite_chains: floors of two elites on the route with no rest site between them (Floor = map row + floor_offset).';
+// brief.routes with each route's elite chains as floors; floor is the current floor (state.run.floor).
+export function withEliteChains(routes, floor) {
+ const offset = routes ? floorOffset(floor, {row: rowOf(routes.from)}) : null;
+ if (offset == null || !Number.isFinite(offset)) return routes;
+ return {...routes, floor_offset: offset, elite_chain_note: ELITE_CHAIN_NOTE, routes: routes.routes.map(r => {
+  const chains = chainPairs(r.rooms).map(pair => pair.map(i => rowOf(r.nodes[i]) + offset));
+  return chains.length ? {...r, elite_chains: chains} : r;
+ })};
+}
+
+// The first elite chain on a planned path (node keys starting at an offered node) that the node
+// commits to: no path from that node to the chain's second elite passes a rest site after the
+// first elite's row, so no rest can come between them. Null when there is none.
+export function committedEliteChain(map, path) {
+ if (!map?.nodes?.length || !path?.length) return null;
+ const {nodes} = graph(map), from = path[0];
+ const rooms = path.map(k => ROOM[nodes.get(k)?.type] ?? '?').join('');
+ for (const [a, b] of chainPairs(rooms)) {
+  const first = path[a], second = path[b], r1 = rowOf(first), r2 = rowOf(second), memo = new Map();
+  const restReaches = (key, rested) => {
+   if (key === second) return rested;
+   const node = nodes.get(key);
+   if (!node || node.row >= r2) return false;
+   const id = `${key}:${rested}`;
+   if (memo.has(id)) return memo.get(id);
+   const now = rested || (node.type === 'RestSite' && node.row > r1);
+   const found = (node.children ?? []).some(([c, r]) => restReaches(`${c},${r}`, now));
+   memo.set(id, found);
+   return found;
+  };
+  if (!restReaches(from, false)) return {nodes: [first, second], rooms_between: rooms.slice(a + 1, b)};
+ }
+ return null;
+}
+
 export function mapNodeKeys(map) { return (map?.nodes ?? []).map(nodeKey); }
 
 // mapMemory = {runId, act, map, position}: the act map from the last map screen.
