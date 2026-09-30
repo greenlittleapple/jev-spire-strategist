@@ -4,7 +4,8 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {decisionCandidates} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
-import {encounterKey,currentEncounter,filePlaybook} from './playbook.mjs';
+import {encounterKey,currentEncounter,filePlaybook,planForRun} from './playbook.mjs';
+import {cleanPlaybook,report} from './playbook-clean.mjs';
 import {replayTable,replayChoice} from './replay.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
@@ -157,4 +158,68 @@ test('a saved fight plan keeps play_first, which the combat rules read from the 
   await book.set('Bowlbug x1',{plan:'hit',target_priority:[]});
   assert.equal('play_first' in await book.get('Bowlbug x1'),false);
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+const pick=q=>jev(Object.keys(q.questions.move.criteria)[0]);
+test('a fight plan from a mid-fight consult applies to that fight only and is not saved',()=>withDir(async dir=>{
+ const channel=fileChannel(dir),playbook=filePlaybook(dir),status=newStrategyStatus({waitMs:5000}),seen=[],events=[];
+ await playbook.set('Leader + Minion',{plan:'Kill the Leader.',target_priority:['Leader']},{source:'new_encounter',run:'run-1',floor:3});
+ status.plan=stampPlan(plan(),requestStamp(fightState(),[],'new_encounter'));
+ session(channel,()=>plan({fight:{plan:'Block everything this turn.',target_priority:[],play_first:['Strike']}}),seen);
+ const s=fightState(2);s.player.hp=10;
+ const asked=[];
+ await hierarchicalDeliberate({state:s,candidates:decisionCandidates(s),onEvent:e=>events.push(e),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
+ assert.equal(seen[0].stamp.reason,'low_hp');
+ assert.equal(asked[0].state.run_strategy.fight_plan.plan,'Block everything this turn.','Jev gets the mid-fight plan now');
+ assert.equal(events.find(e=>e.kind==='strategy_adopted').fight_scope,'this_fight');
+ const saved=await playbook.get('Leader + Minion');
+ assert.equal(saved.plan,'Kill the Leader.');assert.equal(saved.source,'new_encounter');assert.equal('play_first' in saved,false);
+ assert.deepEqual(status.fightPlan.play_first,['Strike']);
+ // Later in the same fight the plan still applies, with its play_first enforced.
+ const next=fightState(3);next.player.hp=10;const again=[];
+ const r=await hierarchicalDeliberate({state:next,candidates:decisionCandidates(next),strategist:{channel,status,playbook},ask:async q=>{again.push(q);return pick(q);}});
+ assert.equal(seen.length,1,'no new consult');
+ assert.equal(again[0].state.run_strategy.fight_plan.plan,'Block everything this turn.');
+ assert.ok(r.constraint.rules.some(x=>x.kind==='play_first'));
+ // The next fight with the same enemies gets the saved plan.
+ const later=fightState(1,9),third=[];
+ await hierarchicalDeliberate({state:later,candidates:decisionCandidates(later),strategist:{channel,status,playbook},ask:async q=>{third.push(q);return pick(q);}});
+ assert.equal(third[0].state.run_strategy.fight_plan.plan,'Kill the Leader.');
+}));
+
+test('play_first carries only within the run that saved it; a fight-start answer saves and ends a mid-fight plan',()=>withDir(async dir=>{
+ const channel=fileChannel(dir),playbook=filePlaybook(dir),status=newStrategyStatus({waitMs:5000}),seen=[];
+ await playbook.set('Leader + Minion',{plan:'Kill the Leader.',target_priority:[],play_first:['Strike']},{source:'elite_start',run:'run-0',floor:6});
+ assert.equal(planForRun(await playbook.get('Leader + Minion'),'run-0').play_first[0],'Strike');
+ assert.equal('play_first' in planForRun(await playbook.get('Leader + Minion'),'run-1'),false);
+ status.plan=stampPlan(plan(),requestStamp({...fightState(),state_type:'event'},[],'run_start'));
+ // A normal fight in another run: plan text only, play_first is not enforced.
+ const s=fightState(),asked=[];
+ const r=await hierarchicalDeliberate({state:s,candidates:decisionCandidates(s),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
+ assert.equal(asked[0].state.run_strategy.fight_plan.plan,'Kill the Leader.');
+ assert.ok(!r.constraint?.rules?.some(x=>x.kind==='play_first'));
+ // An elite start is shown the saved plan without play_first and answers with its own, which is saved for this run.
+ status.fightPlan={fight_id:'run-1:1:7',encounter:'Leader + Minion',plan:'stale',target_priority:[],source:'low_hp'};
+ session(channel,()=>plan({fight:{plan:'Strike the Leader first.',target_priority:['Leader'],play_first:['Strike']}}),seen);
+ const e=fightState(1,7,'elite'),second=[];
+ const r2=await hierarchicalDeliberate({state:e,candidates:decisionCandidates(e),strategist:{channel,status,playbook},ask:async q=>{second.push(q);return pick(q);}});
+ assert.equal(seen[0].stamp.reason,'elite_start');
+ assert.equal(seen[0].brief.saved_fight_plan.plan,'Kill the Leader.');assert.equal('play_first' in seen[0].brief.saved_fight_plan,false);
+ assert.equal(seen[0].brief.current_fight_plan.plan,'stale','a mid-fight plan of this fight is shown');
+ assert.equal(status.fightPlan,null);
+ const saved=await playbook.get('Leader + Minion');
+ assert.equal(saved.run,'run-1');assert.deepEqual(saved.play_first,['Strike']);
+ assert.equal(second[0].state.run_strategy.fight_plan.plan,'Strike the Leader first.');
+ assert.ok(r2.constraint.rules.some(x=>x.kind==='play_first'));
+}));
+
+test('playbook-clean removes entries saved by mid-fight consults and keeps the rest',()=>{
+ const book={entries:{A:{plan:'a',source:'new_encounter'},B:{plan:'b',source:'low_hp',play_first:['Strike'],floor:15},C:{plan:'c',source:'unknown_mechanic'},
+  D:{plan:'d',source:'death_countdown'},E:{plan:'e',source:'post_run_review'},F:{plan:'f',source:'boss_start',play_first:['Bash']}}};
+ const r=cleanPlaybook(book);
+ assert.deepEqual(r.removed.map(x=>x.key),['B','C','D']);
+ assert.deepEqual(Object.keys(r.book.entries),['A','E','F']);
+ assert.deepEqual(r.other,[{key:'E',source:'post_run_review'}]);
+ assert.equal(Object.keys(book.entries).length,6,'the input is not changed');
+ assert.match(report(r,{path:'playbook.json',write:false}),/6 entries, 3 saved by a mid-fight consult would be removed[\s\S]*- B \(low_hp, floor 15, play_first Strike\): b/);
 });

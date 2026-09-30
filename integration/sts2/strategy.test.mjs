@@ -248,6 +248,8 @@ test('the strategist instructions name every plan field and the enforced combat 
  assert.match(STRATEGIST_INSTRUCTIONS,/- summary: the run plan in one or two sentences/);
  for(const rule of ['heal_potion_waste','idle_potion','countdown_escape'])assert.ok(STRATEGIST_INSTRUCTIONS.includes(rule),rule);
  assert.match(STRATEGIST_INSTRUCTIONS,/play_first[^\n]*saved with the fight plan[^\n]*It yields when/);
+ assert.match(STRATEGIST_INSTRUCTIONS,/\(low_hp, unknown_mechanic, death_countdown\)[^\n]*for the rest of this fight only and is not saved/);
+ assert.match(STRATEGIST_INSTRUCTIONS,/saved with the fight plan for this run only/);
  assert.match(STRATEGIST_INSTRUCTIONS,/not to kill an enemy, or to hold back in any way, must say when to stop/);
  // The late Act 1 elite rule names rests_before_boss_rest by its value in the four losses (0).
  assert.match(STRATEGIST_INSTRUCTIONS,/rests_before_boss_rest[^\n]*with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine/);

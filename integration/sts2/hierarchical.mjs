@@ -5,7 +5,7 @@ import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationRea
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
-import {currentEncounter,fightId} from './playbook.mjs';
+import {currentEncounter,fightId,FIGHT_START_REASONS,planForRun,activeFightPlan} from './playbook.mjs';
 import {encounterResults,planNeedsReview} from './fight-results.mjs';
 import {unmodeledNames,mechanicText,presentNames,mechanicKey} from './mechanics.mjs';
 import {replayChoice} from './replay.mjs';
@@ -88,9 +88,23 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const answered=new Set((answer.plan.mechanics??[]).map(m=>m.name));
    for(const m of request.brief?.unknown_mechanics??[])if(!answered.has(m.name))await mechanics.set(m.name,'No special handling noted.',meta,m.kind??'any');
   }
-  if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
-   await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
-  await emit({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,requestCreatedAt:request.createdAt??null,answeredAt:answer.answeredAt??null,plan:status.plan});
+  // A fight-start answer saves the encounter's plan; one from a consult during the fight applies to
+  // that fight until it ends (status.fightPlan) and is not saved.
+  const {stamp}=request,fight=answer.plan.fight,startsFight=FIGHT_START_REASONS.has(stamp.reason);
+  let fightScope=null;
+  if(stamp.encounter_key&&fight?.plan){
+   const id=`${stamp.run_id}:${stamp.act}:${stamp.floor}`;
+   if(startsFight){
+    if(status.fightPlan?.fight_id===id)status.fightPlan=null;
+    if(playbook){await playbook.set(stamp.encounter_key,fight,{source:stamp.reason,run:stamp.run_id,floor:stamp.floor});fightScope='encounter';}
+   }else{
+    status.fightPlan={fight_id:id,encounter:stamp.encounter_key,plan:fight.plan,target_priority:fight.target_priority??[],
+     ...(fight.play_first?.length?{play_first:fight.play_first}:{}),source:stamp.reason,request_id:request.id,floor:stamp.floor};
+    fightScope='this_fight';
+   }
+  }
+  await emit({kind:'strategy_adopted',reason:stamp.reason,request_id:request.id,requestCreatedAt:request.createdAt??null,answeredAt:answer.answeredAt??null,
+   ...(fightScope?{fight_scope:fightScope}:{}),plan:status.plan});
   return true;
  };
  const consult=async reason=>{
@@ -101,8 +115,12 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    // (the act's opening event) must not count as having seen this act's routes.
    const routes=distinctRoutes(map,position);
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
-   if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=fight;
-    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=similar;}
+   const runId=state.run?.live_id;
+   if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=planForRun(fight,runId);
+    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=planForRun(similar,runId);}
+    // A plan given earlier in this fight by a mid-fight consult.
+    const own=status.fightPlan?.fight_id===fightId(state)?status.fightPlan:null;
+    if(own)brief.current_fight_plan={plan:own.plan,target_priority:own.target_priority,...(own.play_first?{play_first:own.play_first}:{}),source:own.source};
     // How this encounter went before (HP, rounds, win), marking fights played since the saved plan.
     const results=fightResults()&&encounterResults(fightResults(),encounter,fight?.updatedAt??null);if(results)brief.encounter_results=results;}
    // Intents each enemy showed round by round in recent fights (this one included).
@@ -138,7 +156,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   // True forced choices (isForcedChoice) returned above; one candidate left here comes from the
   // runner's own filters (actionsFor), and the game may allow other actions.
   if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('filtered',null,candidates[0]);
-  const fight=playbook&&encounter?await playbook.get(encounter):null;
+  // The plan from a consult during this fight, else the saved plan (play_first only from this run).
+  const fight=encounter?activeFightPlan(state,status,playbook?await playbook.get(encounter):null):null;
   const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // A single option left by a code rule is that rule's move; one left by the strategist's plan is
   // its choice. Neither needs a Jev call.
