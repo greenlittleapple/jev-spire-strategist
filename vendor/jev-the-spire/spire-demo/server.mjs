@@ -79,7 +79,7 @@ const strategyAvailable=process.env.CLAUDE_STRATEGIST!=='off'&&!lunaEnabled&&!pl
 const strategyDir=process.env.STRATEGY_DIR??resolve(logDir,'../strategy');
 // Replay mode: .private/sts2/replay.json {source_run, target_run} (written by start-run --replay-from).
 const replaySource=replayer({configPath:resolve(logDir,'../replay.json'),runsDir:logDir});
-const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),mechanics:fileMechanics(strategyDir),glossary:makeGlossary(bridgeLookup(bridge)),movesets:{},
+const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),mechanics:fileMechanics(strategyDir),glossary:makeGlossary(bridgeLookup(bridge),{notes:fileMechanics(strategyDir)}),movesets:{},
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;

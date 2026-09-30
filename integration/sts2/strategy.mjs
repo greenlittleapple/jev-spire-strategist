@@ -125,18 +125,30 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
  if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
- if(!combatScreens.has(state.state_type)){
-  brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
-  // Keyword definitions attached to offered cards and relics (Exhaust, Ethereal, Dazed...).
-  const keywords=new Map();
-  for(const c of candidates)for(const k of c.details?.keywords??[])if(k?.name&&k.description&&!keywords.has(k.name))keywords.set(k.name,k.description);
-  if(keywords.size)brief.keywords=Object.fromEntries(keywords);
- }
+ if(!combatScreens.has(state.state_type))brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
+ const keywords=cardKeywords(state,combatScreens.has(state.state_type)?[]:candidates);
+ if(keywords)brief.keywords=keywords;
  // A plan from another run (another seed) is not shown: cross-run knowledge comes from the playbook,
  // the mechanics registry and card stats, and an old plan's combat section was copied into new runs.
  if(previous&&previous.run_id===state.run?.live_id)brief.previous_plan=planFields(previous);
  return brief;
 }
+
+// Keyword definitions for the offered options and the deck and hand card text (Exhaust, Ethereal,
+// Tainted...). A definition that only repeats its own name ("Tainted: Gain 2 Tainted when played.",
+// JEV21 f27, left undefined until an unknown_mechanic request) is replaced by the text of a power
+// with that name visible now, if any; the glossary lookup may replace it later (makeGlossary).
+function cardKeywords(state,candidates) {
+ const p=state.player??{},keywords=new Map();
+ const powers=[...(p.status??[]),...(state.battle?.enemies??[]).flatMap(e=>e.status??[])];
+ for(const c of [...candidates.map(c=>c.details??{}),...(p.deck??[]),...(p.hand??[])])for(const k of c?.keywords??[]){
+  if(!k?.name||!k.description||keywords.has(k.name))continue;
+  const power=selfNamed(k)&&powers.find(x=>x?.name===k.name&&x.description);
+  keywords.set(k.name,power?power.description:k.description);
+ }
+ return keywords.size?Object.fromEntries(keywords):null;
+}
+const selfNamed=k=>String(k.description).toLowerCase().includes(String(k.name).toLowerCase());
 
 // Every description the bridge sends for an option: shop items carry card_, relic_ or
 // potion_description; event options may name a relic with its own description. A reward
