@@ -76,7 +76,7 @@ Marcus approved these suggestions and all future runs on 2026-09-30.
    - The arms run in blocks, not alternating: STS2 is turn-based and the runner waits for the game to be ready, so machine load (a BTD6 series ran at the same time) doesn't change decisions.
    - After each run: `npm run sts2:progress -- --add`, then commit.
 4. **After the series:** `npm run sts2:rules-audit` and the scorecard; compare wins, floors and boss HP removed per arm; check the review records (first against final pick) and `play_first`; record the results and decisions here.
-5. **Ascension ladder** (decided 2026-09-30): A0, then A5, then A10. A frozen strategist version moves up a level once it wins at least 2 of 5 unseen seeds at its current level. Before the first step: `npm run sts2:start` and `--add` accept only Ascension 0 today, and setting the custom run's ascension through the bridge needs checking.
+5. **Ascension ladder** (revised 2026-09-30 at Marcus's question: the goal is a player that almost always wins, not one that sometimes does): A0, then A5, then A10. A frozen strategist version moves up a level once it wins at least 9 of 10 unseen seeds at its current level: this series' five seeds, then five more on the same version. After a second loss it can't reach 9, so the test stops there and the losses go into the next version. Chance of passing, by true win rate: 95% passes 91% of the time, 90% passes 74%, 80% passes 38%, 70% passes 15% (the earlier bar of 2 of 5 let a 20% player through 26% of the time). Before the first step: `npm run sts2:start` and `--add` accept only Ascension 0 today, and setting the custom run's ascension through the bridge needs checking.
 
 ## Open items
 
@@ -89,4 +89,4 @@ Marcus approved these suggestions and all future runs on 2026-09-30.
 
 ## Decisions made
 
-On 2026-09-30 Marcus approved all future runs and these suggestions: install the new bridge and restart the runner, abandon JEV20, run the comparison series, and the ascension ladder above. Runs affected by a known issue keep counting toward win rates, marked in the table and chart.
+On 2026-09-30 Marcus approved all future runs and these suggestions: install the new bridge and restart the runner, abandon JEV20, run the comparison series, and an ascension ladder, whose bar Marcus questioned and which now asks for 9 of 10 wins at a level. Runs affected by a known issue keep counting toward win rates, marked in the table and chart.
