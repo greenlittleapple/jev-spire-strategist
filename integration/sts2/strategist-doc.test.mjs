@@ -98,6 +98,13 @@ test('the strategist doc describes every plan field',()=>{
  for(const f of fields)assert.ok(described.has(f),`${f} is not in the field table`);
 });
 
+test('the strategist doc shows the one-line answer failures the CLI prints',()=>{
+ const table=doc.slice(doc.indexOf('What `answer` prints'),doc.indexOf('## Request reasons'));
+ for(const text of ['No strategy request is pending.','was replaced by <new id>; read it with "show" and answer that one.','is not valid JSON:','Cannot read <file>:'])
+  assert.ok(table.includes(text),text);
+ assert.doesNotMatch(table,/stack|SyntaxError/);
+});
+
 for(const name of Object.keys(requests))test(`strategist doc example ${name} passes the schema and the CLI's request checks`,async()=>{
  const plan=examples[name];
  assert.ok(plan,`example ${name} is missing`);

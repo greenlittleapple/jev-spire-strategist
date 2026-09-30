@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {decisionCandidates} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
-import {replanReason,escalationReason,constrainCandidates,validatePlan,requestStamp,stampPlan,strategistBrief,strategyContext} from './strategy.mjs';
+import {replanReason,escalationReason,constrainCandidates,validatePlan,requestStamp,stampPlan,strategistBrief,strategyContext,STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
@@ -228,4 +228,28 @@ test('an answered event option does not carry to a later page whose same-named o
  const later=constrainCandidates(page(12),cands(12),stamped);
  assert.notEqual(later.constraint?.kind,'strategist_choice','Linger at 12 damage is a new choice');
  assert.equal(replanReason(page(12),stamped,cands(12)),'owned_screen');
+});
+
+test('the CLI reports a replaced request, no pending request and invalid JSON in one line',()=>withChannel(async (channel,dir)=>{
+ const cli=(...args)=>promisify(execFile)(process.execPath,[resolve(here,'strategy-cli.mjs'),...args],{env:{...process.env,STRATEGY_DIR:dir}});
+ const failure=args=>cli(...args).then(()=>assert.fail('expected exit 1'),e=>{assert.equal(e.code,1);return e.stderr.trim();});
+ const file=join(dir,'plan.json');
+ await writeFile(file,JSON.stringify(plan()));
+ assert.equal(await failure(['answer','r1',file]),'No strategy request is pending.');
+ const s=shop(),request=await channel.post({key:'k',brief:{},stamp:requestStamp(s,decisionCandidates(s),'owned_screen')});
+ assert.equal(await failure(['answer','old-id',file]),`Request old-id was replaced by ${request.id}; read it with "show" and answer that one.`);
+ await writeFile(file,'{"archetype":');
+ assert.match(await failure(['answer',request.id,file]),/^\S*plan\.json is not valid JSON: [^\n]+$/);
+ assert.equal(await failure(['answer',request.id,join(dir,'missing.json')]),`Cannot read ${join(dir,'missing.json')}: ENOENT`);
+}));
+
+test('the strategist instructions name every plan field and the enforced combat rules',()=>{
+ for(const field of Object.keys(PLAN_SCHEMA.properties))assert.match(STRATEGIST_INSTRUCTIONS,new RegExp(`\\b${field}\\b`,'i'),field);
+ assert.match(STRATEGIST_INSTRUCTIONS,/- summary: the run plan in one or two sentences/);
+ for(const rule of ['heal_potion_waste','idle_potion','countdown_escape'])assert.ok(STRATEGIST_INSTRUCTIONS.includes(rule),rule);
+ assert.match(STRATEGIST_INSTRUCTIONS,/play_first[^\n]*saved with the fight plan[^\n]*It yields when/);
+ assert.match(STRATEGIST_INSTRUCTIONS,/not to kill an enemy, or to hold back in any way, must say when to stop/);
+ // The late Act 1 elite rule names rests_before_boss_rest by its value in the four losses (0).
+ assert.match(STRATEGIST_INSTRUCTIONS,/rests_before_boss_rest[^\n]*with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine/);
+ assert.doesNotMatch(STRATEGIST_INSTRUCTIONS,/jev_uncertain/,'jev_uncertain never fires in combat');
 });
