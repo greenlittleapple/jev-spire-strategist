@@ -115,6 +115,7 @@ Forced transitions never trigger a request. Replaying the recorded 640-move A0 r
 2. `npm run sts2:strategy -- show` prints the instructions, schema and brief (compact deck, relics, runes, HP, gold, history summary, enemies or current options, previous plan).
 3. Write the plan JSON to a scratch file and deliver it with `npm run sts2:strategy -- answer <id> <file>`. The CLI rejects schema errors, invalid option IDs, and a request that has since been replaced.
 4. Restart the watcher.
+5. The full strategist brief, self-contained for a `general-medium` agent that runs this loop, is [docs/STS2-STRATEGIST.md](STS2-STRATEGIST.md): request reasons, brief fields, each plan field and how code enforces it, CLI errors, and example answers the test suite checks.
 
 Claude usage counts against the subscription, not TypeSafe tokens. Requests and plans are logged in the run's `.jsonl` as `strategy_request`, `strategy_adopted` and `replay_diverged` events.
 
