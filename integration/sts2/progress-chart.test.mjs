@@ -75,6 +75,9 @@ test('the README table marks runs with known issues and explains the letters use
  assert.equal(lines[3], '| Strategist v3 (`claude-strategy-v3`) | **JEV1: won (floor 48)** (replay)<sup>a,b</sup>, JEV2: in progress (floor 30) | Owned screens |');
  assert.deepEqual(lines.slice(4), ['', '- <sup>a</sup> Intents were not parsed. Fixed in abc1234.', '- <sup>b</sup> The game crashed.']);
  assert.equal(progressTable(data).split('\n').length, 4);
+ // A fix made outside the code, such as a settings change, reads as a phrase.
+ const d = withIssues(); d.issues[1].fixed = 'mods disabled on 2026-09-30';
+ assert.equal(progressTable(d).split('\n').at(-1), '- <sup>b</sup> The game crashed. Fixed: mods disabled on 2026-09-30.');
 });
 
 test('an unknown issue ID stops the render', () => {
