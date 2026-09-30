@@ -35,9 +35,10 @@ What `answer` prints and what to do:
 | Lines such as `plan.combat.potion_reserve is required`, `plan.combat.focus_enemy is not allowed`, `plan.replan_below_hp_percent must be 10-60`, exit status 1 | Schema or range error | Fix those fields and answer again |
 | `allowed_option_ids: a7 is not an option on this screen` | An ID that is not in `brief.current_options` (every ID fails in combat, where the list must be `[]`) | Use only IDs from `current_options`, and answer again |
 | `route_path: 4,9 is not a node on this act's map` | A node that is not on the current act's map | Copy node IDs from `brief.routes`, and answer again |
-| An error stack ending `Request <id> was replaced by <new id>; read it with "show" and answer that one.` | The runner posted a newer request (after a pause and resume, or a restart) | Run `show` and answer the new request; the old one needs no answer |
-| An error stack ending `No strategy request is pending.` | Nothing to answer (already answered or consumed) | Back to `wait` |
-| A `SyntaxError` stack | The file is not valid JSON | Fix the JSON and answer again |
+| `Request <id> was replaced by <new id>; read it with "show" and answer that one.`, exit status 1 | The runner posted a newer request (after a pause and resume, or a restart) | Run `show` and answer the new request; the old one needs no answer |
+| `No strategy request is pending.`, exit status 1 | Nothing to answer (already answered or consumed) | Back to `wait` |
+| `<file> is not valid JSON: <parser message>` (`Standard input` for `-`), exit status 1 | The plan is not valid JSON | Fix the JSON and answer again |
+| `Cannot read <file>: ENOENT`, exit status 1 | The plan file does not exist at that path | Check the path and answer again |
 
 Running this loop doesn't authorize starting Autoplay, the runner or a new run.
 
@@ -130,7 +131,7 @@ The runner runs in constrained mode by default (`CLAUDE_PLAN_MODE=constrained`);
 | Field | Meaning | How code uses it |
 |---|---|---|
 | `archetype` | The deck's direction in one sentence: what it builds toward and how it wins. Rewrite it in every answer as the deck changes | The dashboard shows it as the current plan, so a bare tag such as "strength block" is not enough. Jev sees it with every decision |
-| `summary` | One sentence on how the run goes from here | Jev sees it with every decision, so write the run plan, not a note about the last screen (that is `option_note`); rewrite it in every answer |
+| `summary` | The run plan in one or two sentences: what the deck still needs, which fights and rooms to take, how to reach the boss. Rewrite it in every answer | Jev sees it with every decision, so it is not a log of screens ("JEV20 f2 reward: Shrug It Off." belongs in `option_note`, if anywhere) |
 | `priorities` | At most 5, most important first | Shown to Jev |
 | `combat.risk_tolerance` | `low`, `medium` or `high` | Shown to Jev |
 | `combat.potion_policy`, `combat.focus` | Run-level potion use and general combat focus (a single fight goes in `fight`) | Shown to Jev |
@@ -157,20 +158,25 @@ When a choice opens another choice (a shop removal opens "Choose a card to Remov
 
 Code applies these in combat before Jev chooses, in constrained mode. You don't configure them, but your fight plan should not fight them:
 
-- Take a play forecast to win the fight when one is fully forecast, with as few potions as possible.
-- Remove plays forecast to be fatal when another play is forecast to survive.
-- Remove healing potions that would heal more than the HP missing.
-- Remove ending the turn while an affordable card that costs HP when held (Beckon) is in hand, and plays that leave too little energy for it.
-- While every enemy is Intangible, keep only the plays that lose the least HP.
-- When an enemy shows a death countdown ("In N turns, you will be eaten and die") at 3 or less, force an affordable card that names it ("Increase Sandpit by 1").
-- Remove pure block cards when ending the turn would lose no HP and nothing uses block.
+The names in parentheses are the rule names the logs and the instructions use.
+
+- Take a play forecast to win the fight when one is fully forecast, with as few potions as possible (`take_lethal`).
+- Remove plays forecast to be fatal when another play is forecast to survive (`avoid_fatal`).
+- Remove healing potions that would heal more than the HP missing, unless every line without one is forecast to die (`heal_potion_waste`).
+- The potion limits from `combat` (`hallway_potion`, `potion_reserve`; see the field table). In normal fights below `hallway_potion_below_hp_percent`, remove a potion that saves no HP this turn, except healing potions and potions whose effect the forecast cannot see (`idle_potion`).
+- Remove ending the turn while an affordable card that costs HP when held (Beckon) is in hand, and plays that leave too little energy for it (`play_hp_loss_cards`).
+- While every enemy is Intangible, keep only the plays that lose the least HP (`intangible_defense`).
+- When an enemy shows a death countdown ("In N turns, you will be eaten and die") at 3 or less, force an affordable card that names it ("Increase Sandpit by 1") (`countdown_escape`). It yields when no escape is forecast to survive and another line is, unless the countdown is at 1.
+- Remove pure block cards when ending the turn would lose no HP and nothing uses block (`block_not_needed`).
+- Your fight plan's `play_first` and `target_priority` (same names), as the field table describes; `play_first` yields when forcing it costs too much HP or is forecast to die.
 - A single-card exhaust choice (a hand selection such as True Grit+) is limited to status, curse, exhaust-payoff or plain Strike and Defend cards when those exist.
 
 ### Rules for strings
 
 - Use only the brief's information. Do not invent hidden information: future card offers, unrevealed rooms, enemy moves not shown.
 - Use names exactly as the brief shows them: option IDs from `current_options`, node IDs from `routes`, card names from the deck or hand for `play_first`, enemy names from `enemies` or the three selectors for `target_priority`.
-- Keep every string short and concrete: `archetype`, `summary` and `option_note` one plain sentence each, a fight plan a few sentences. No slogans.
+- Keep every string short and concrete: `archetype` and `option_note` one plain sentence each, `summary` one or two, a fight plan a few sentences. No slogans.
+- A fight plan that tells Jev not to kill an enemy, or to hold back in any way, says when to stop.
 - Write fight plans for the encounter, not for today's HP, since they are reused in later runs.
 - Carry fields you are not changing over from `previous_plan`; every answer replaces the whole plan.
 
@@ -179,16 +185,17 @@ Code applies these in combat before Jev chooses, in constrained mode. You don't 
 These come from lost runs and are in the instructions `show` prints (JEV numbers are run labels):
 
 - The archetype is a one-sentence deck direction, rewritten every answer, since the dashboard shows it as the current plan.
+- The summary is the run plan in one or two sentences, rewritten every answer; a note about the current screen goes in `option_note` (the JEV20 plans had used it as a per-screen log).
 - In Act 1 the deck needs damage for the boss: take the best offered card unless it hurts the deck. JEV12 and JEV14 skipped 3-4 of 7-8 Act 1 rewards and lost at the Act 1 boss.
 - Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323).
 - Elites give the relics a deck needs by Act 2: take one or two while HP allows. Runs with no Act 1 elite (JEV5, 6, 9, 19) lost by the end of Act 2.
-- Late Act 1 elite limit: Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less, and all four losses had exactly one rest site between their last elite and the boss. So take an optional Act 1 elite only near full HP when just one rest site remains before the boss (`rests_before_boss_rest` in the route facts). With two or more rests after it, the elite is fine.
+- Late Act 1 elite limit: Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18), and in all four the only rest site after the last elite was the one right before the boss. `rests_before_boss_rest` leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the `R` rooms after the elite except the last). With 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine. Each of those four elites showed `rests_before_boss_rest` 0 on its map option; JEV19 skipped an elite at 80% HP whose planned route had one more rest besides the pre-boss one (1).
 - Routes that committed to an elite at 33-39% HP while an elite-free path was offered lost (JEV13, JEV14); `elite_min_hp_percent` exists for this.
 - Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
 - A death countdown must be pushed back with the cards that name it; the fight plan should say to play them, and `play_first` can force an escape card.
+- A plan that tells Jev not to kill or to hold back must state its exit condition. In JEV11 the fight plan told Jev not to kill the Waterfall Giant (its Steam Eruption would have killed the player) with no condition for when to kill it after all; Jev stalled while the eruption grew to 63 and missed a kill it would have survived. Say when to take the kill (for example "kill once block covers the eruption damage"), and check `draw_cards` for what next turn can hold.
+- The instructions list the code-enforced combat rules by name, including `heal_potion_waste`, `idle_potion`, `countdown_escape` and when `play_first` yields.
 - Set `potion_reserve` (usually 1) when the boss is near and potions matter there, 0 otherwise.
-
-One lesson from the run notes is not in the instructions: a no-kill instruction needs an explicit exit condition. In JEV11 the fight plan told Jev not to kill the Waterfall Giant (its Steam Eruption would have killed the player) with no condition for when to kill it after all; Jev stalled while the eruption grew and missed a surviving kill later. When a plan says to hold off a kill, say when to take it (for example "kill once block covers the eruption damage"), and check `draw_cards` for what next turn can hold.
 
 ## More examples
 
