@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
-import {labGit, fileSha256, bridgeVersion, fetchBridgeVersion, runSetup, runStartRecord} from './run-record.mjs';
+import {labGit, fileSha256, bridgeVersion, bridgeIdentity, fetchBridgeVersion, runSetup, runStartRecord} from './run-record.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -30,15 +30,33 @@ test('content hashes are SHA-256 of the file, null when absent', async () => {
   } finally { await rm(dir, {recursive: true, force: true}); }
 });
 
-test('bridge version is read from the root greeting, null on failure', async () => {
+const withGreeting = async (body, fn) => {
+  const server = createServer((req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try { return await fn(`http://127.0.0.1:${server.address().port}/`); } finally { await new Promise(r => server.close(r)); }
+};
+
+test('bridge version is read from the root greeting message', () => {
   assert.equal(bridgeVersion('Hello from STS2 MCP v0.4.0'), '0.4.0');
+  assert.equal(bridgeVersion('Hello from STS2 MCP v0.4.0-jev.1'), '0.4.0-jev.1');
   assert.equal(bridgeVersion(undefined), null);
   assert.equal(bridgeVersion('Hello'), null);
-  const server = createServer((req, res) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({message: 'Hello from STS2 MCP v0.4.0', status: 'ok'})); });
-  await new Promise(r => server.listen(0, '127.0.0.1', r));
-  try {
-    assert.equal(await fetchBridgeVersion(`http://127.0.0.1:${server.address().port}/`), '0.4.0');
-  } finally { await new Promise(r => server.close(r)); }
+});
+
+test('bridge identity: version, build and game from the new greeting', async () => {
+  const build = '0123456789abcdef0123456789abcdef01234567';
+  const greeting = {message: 'Hello from STS2 MCP v0.4.0-jev.1', status: 'ok', version: '0.4.0-jev.1', build, game: 'v0.111.0'};
+  assert.deepEqual(await withGreeting(greeting, fetchBridgeVersion), {version: '0.4.0-jev.1', build, game: 'v0.111.0'});
+  // A build without git information or a game without release_info.json sends explicit nulls.
+  assert.deepEqual(await withGreeting({...greeting, build: null, game: null}, fetchBridgeVersion), {version: '0.4.0-jev.1', build: null, game: null});
+  assert.deepEqual(bridgeIdentity({version: '0.4.0-jev.2', message: 'Hello from STS2 MCP v0.4.0-jev.1'}), {version: '0.4.0-jev.2', build: null, game: null});
+});
+
+test('bridge identity: the old greeting gives its version with null build and game; failures give null', async () => {
+  assert.deepEqual(await withGreeting({message: 'Hello from STS2 MCP v0.4.0', status: 'ok'}, fetchBridgeVersion), {version: '0.4.0', build: null, game: null});
+  assert.equal(await withGreeting({status: 'ok'}, fetchBridgeVersion), null);
+  assert.equal(await withGreeting([], fetchBridgeVersion), null);
+  assert.equal(bridgeIdentity(null), null);
   // A closed port answers at once; nothing listens on port 1.
   assert.equal(await fetchBridgeVersion('http://127.0.0.1:1/', 500), null);
 });
@@ -49,10 +67,10 @@ test('run_start carries the commit, content, policy, caps and setup under fixed 
     saved_run: {ascension: 0, game_mode: 'custom', modifiers: [{id: 'MOD.X'}]}};
   const save = {players: [{character_id: 'CHARACTER.IRONCLAD'}], rng: {seed: 'ABC123'}, game_mode: 'custom'};
   const record = runStartRecord({state, git: {lab_commit: 'f'.repeat(40), lab_dirty: false}, policy: 'claude-strategy-v3',
-    decisionMode: 'claude', model: 'jev-1.13.0', bridge: '0.4.0', content: {playbook: 'aa', mechanics: null},
+    decisionMode: 'claude', model: 'jev-1.13.0', bridge: {version: '0.4.0-jev.1', build: null, game: 'v0.111.0'}, content: {playbook: 'aa', mechanics: null},
     caps: {maxDecisions: 2000, maxInputTokens: 30000000}, save});
   assert.deepEqual(record, {kind: 'run_start', run: 'r1', lab_commit: 'f'.repeat(40), lab_dirty: false,
-    policy: 'claude-strategy-v3', decision_mode: 'claude', model: 'jev-1.13.0', bridge: '0.4.0',
+    policy: 'claude-strategy-v3', decision_mode: 'claude', model: 'jev-1.13.0', bridge: {version: '0.4.0-jev.1', build: null, game: 'v0.111.0'},
     content: {playbook: 'aa', mechanics: null}, caps: {max_decisions: 2000, max_input_tokens: 30000000},
     setup: {character: 'Ironclad', ascension: 0, modifiers: ['MOD.X'], game_mode: 'custom', seed: 'ABC123'},
     act: 1, floor: 1});
