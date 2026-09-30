@@ -14,8 +14,21 @@ const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? f
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
 export const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang","frantic escape"]);
 export const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
-const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','one-two punch','smoggy','disintegration','constrict','colossus']);
-const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit','paper cuts']);
+// Powers the forecast covers. Anything else on the player or an enemy is flagged "Unmodeled ... power"
+// in warnings and listed in notModeled (see unmodeledMechanics), so the forecast is marked partial.
+// Modeled in the arithmetic, or already included in the live hand text, status, energy or intents
+// (Shrink and Vigor are in displayed card damage; Setup Strike, Flex Potion and Speed Potion are
+// already in live Strength or Dexterity; Ringing and Sloth stop plans at a play-limit boundary;
+// Surrounded is handled by the facing projection).
+const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulnerable','rage','plating','metallicize','free attack','vicious','feel no pain','cruelty','juggernaut','crimson mantle','rupture','unmovable','juggling','stampede','aggression','regen','buffer','barricade','mayhem','duplicator','duplication','one-two punch','smoggy','disintegration','constrict','colossus',
+  'no draw','no energy gain','ringing','sloth','shrink','tender','vigor','setup strike','flex potion','speed potion','surrounded',
+  // No effect before the enemy attacks this turn: start-of-turn or next-turn effects, and replies to enemy attacks.
+  'pyre','demon form','radiance','waste away','clarity','mind rot','prep time','retain hand','toric toughness','self-forming clay','block next turn','thorns','flame barrier']);
+const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit','paper cuts',
+  'slow','flutter','back attack',
+  // No effect on this turn's damage, block or displayed incoming: they act at the end of a turn,
+  // on later turns, or on gold and discard piles.
+  'ritual','territorial','high voltage','nemesis','demise','hatch','escape artist','thievery','rampart','plating','dexterity','painful stabs']);
 const knownRelics = new Set(['ORICHALCUM','BURNING_BLOOD','VAJRA','GORGET','ORNAMENTAL_FAN','ANCHOR','STRAWBERRY','PEAR','MANGO','BAG_OF_PREPARATION','POTION_BELT','ARCANE_SCROLL','TUNING_FORK',
   'CLOAK_CLASP','CHARONS_ASHES','UNSETTLING_LAMP','FORGOTTEN_SOUL','LETTER_OPENER',
   // No effect within a player turn, or the effect is already in live status, energy or card text
@@ -32,21 +45,28 @@ const hasRelic=(s,id)=>(s.player.relics??[]).some(r=>r.id===id);
 export const pickupOnly=r=>{const d=String(r?.description??'');
  return /^(Upon pickup,|Choose \d+ [^.]* in your Deck\.)/i.test(d)&&!/\b(combat|turns?|whenever|at the (start|end)|rest site|shop)\b/i.test(d);};
 function letterProgress(s){const r=(s.player.relics??[]).find(r=>r.id==='LETTER_OPENER');return r&&Number.isInteger(r.counter)?r.counter:null;}
-function initial(s) {
-  const warnings = [];
-  const runes = modeledRunes(s);
-  for (const p of s.player.status ?? []) if (!knownPlayerPowers.has(p.name.toLowerCase())) warnings.push(`Unmodeled player power: ${p.name}`);
-  for (const e of s.battle.enemies) for (const p of e.status ?? []) if (!knownEnemyPowers.has(p.name.toLowerCase()) && retaliationRule(p)?.damage==null) warnings.push(`Unmodeled enemy power: ${p.name}`);
-  for (const r of s.player.relics ?? []) if (!knownRelics.has(r.id) && !pickupOnly(r)
+// The one place that decides which visible powers and relics the forecast does not cover.
+// Each is warned as "Unmodeled <kind>: <name>" and listed in notModeled as "<kind>: <name>".
+export function unmodeledMechanics(s, runes = modeledRunes(s)) {
+  const items = [], add = (kind, name) => { if (!items.some(x => x.kind === kind && x.name === name)) items.push({kind, name}); };
+  for (const p of s.player?.status ?? []) if (!knownPlayerPowers.has(p.name.toLowerCase())) add('player power', p.name);
+  for (const e of s.battle?.enemies ?? []) for (const p of e.status ?? []) if (!knownEnemyPowers.has(p.name.toLowerCase()) && retaliationRule(p)?.damage==null) add('enemy power', p.name);
+  for (const r of s.player?.relics ?? []) if (!knownRelics.has(r.id) && !pickupOnly(r)
     && !(r.id === 'GROUNDED_RUNE' && runes.grounded)
-    && !(r.id === 'FLYING_KICK_RUNE' && runes.flyingKick)) warnings.push(`Unmodeled relic: ${r.name}`);
+    && !(r.id === 'FLYING_KICK_RUNE' && runes.flyingKick)) add('relic', r.name);
+  return items;
+}
+function initial(s) {
+  const runes = modeledRunes(s);
+  const unmodeled = unmodeledMechanics(s, runes);
+  const warnings = unmodeled.map(x => `Unmodeled ${x.kind}: ${x.name}`);
   const fan = (s.player.relics ?? []).find(r => r.id === 'ORNAMENTAL_FAN');
   const fanProgress = Number.isInteger(fan?.counter) ? fan.counter : null;
   if (hasRelic(s,'UNSETTLING_LAMP') && typeof s.player.lamp_used !== 'boolean') warnings.push('Unsettling Lamp: whether it was used this combat is unknown; debuffs are not doubled.');
   if (hasRelic(s,'LETTER_OPENER') && letterProgress(s) === null) warnings.push('Letter Opener counter unavailable: forecast omits its damage.');
   if (fan && fanProgress === null) warnings.push('Ornamental Fan counter unavailable: forecast omits its extra block.');
   return {
-    runes, runeEvents: [], unsupportedRunes: unsupportedRuneRules(s),
+    runes, runeEvents: [], unsupportedRunes: unsupportedRuneRules(s), unmodeled,
     retaliationEvents:[],
     retaliationModifiers:(s.player.status??[]).some(p=>!['strength','dexterity','weak','frail','no energy gain','no draw','free attack'].includes(p.name.toLowerCase())),
     // Colossus active at the start: displayed intents of already Vulnerable enemies include its reduction.
@@ -65,7 +85,12 @@ function initial(s) {
     juggernaut:amount(s.player.status,'Juggernaut'),
     buffer:amount(s.player.status,'Buffer'),
     // Extra plays granted by Duplicator (next card) and One-Two Punch (next Attack).
-    extraNextCard:amount(s.player.status,'Duplicator'), extraNextAttack:amount(s.player.status,'One-Two Punch'),
+    // The Duplicator potion's power is named Duplication in the game.
+    extraNextCard:amount(s.player.status,'Duplicator')+amount(s.player.status,'Duplication'), extraNextAttack:amount(s.player.status,'One-Two Punch'),
+    // Tender: each card played lowers Strength and Dexterity for the rest of the turn (the live status already has earlier plays).
+    tender:(s.player.status??[]).filter(p=>p.name==='Tender').reduce((n,p)=>n+number(p.description??'',/lose (\d+) Strength/i,1),0),
+    // Vigor: the live hand text includes it for every Attack, but only the next Attack gets it.
+    vigor:amount(s.player.status,'Vigor'), vigorSpent:false,
     vicious:amount(s.player.status,'Vicious'),
     // Cruelty: extra percent damage against Vulnerable enemies (status amount is the percent).
     cruelty:amount(s.player.status,'Cruelty'),
@@ -108,7 +133,19 @@ function available(m, rootState) {
 function hit(m, enemy, value, attack) {
   if (enemy.hp <= 0) return;
   let damage = Math.max(0, value);
-  if (attack && amount(enemy.status,'Vulnerable') > 0) damage = Math.floor(damage * (1.5 + (m.cruelty ?? 0) / 100));
+  if (attack) {
+    // Attack multipliers combine before one rounding down (logged: Iron Wave 5 on a Vulnerable
+    // Bygone Effigy with Slow 20 dealt 9 = floor(5 x 1.5 x 1.2)). Percentages keep the arithmetic exact.
+    let num = 1, den = 1;
+    if (amount(enemy.status,'Vulnerable') > 0) { num *= 150 + (m.cruelty ?? 0); den *= 100; }
+    // Slow: its amount is the percent from cards already played this turn; the attack itself is not counted.
+    const slow = amount(enemy.status,'Slow');
+    if (slow > 0) { num *= 100 + slow; den *= 100; }
+    // Flutter: less damage from Attacks while it has charges; each attack hit removes one.
+    const flutter = (enemy.status ?? []).find(p => p.name === 'Flutter' && p.amount > 0);
+    if (flutter) { num *= 100 - number(flutter.description ?? '', /Receives (\d+)% less damage from Attacks/i, 50); den *= 100; }
+    damage = Math.floor(damage * num / den);
+  }
   for(const power of enemy.status??[]) {
     const cap=(power.description??'').match(/Reduce all damage taken and HP (?:loss|lost)(?:\s+.*?)?\s+to (\d+)/i);
     if(cap)damage=Math.min(damage,Number(cap[1]));
@@ -126,6 +163,11 @@ function hit(m, enemy, value, attack) {
     if (!Number.isInteger(capPower.amount)) m.warnings.push(`${enemy.name} has a per-turn HP-loss cap; HP lost earlier this turn is not observed.`);
   }
   const lost = Math.min(enemy.hp, damage); enemy.hp -= lost; m.cardDamage += lost;
+  const flutter = attack && (enemy.status ?? []).find(p => p.name === 'Flutter' && p.amount > 0);
+  if (flutter && --flutter.amount === 0 && enemy.hp > 0) {
+    m.boundary ??= 'enemy_stunned';
+    m.warnings.push(`${enemy.name} loses its last Flutter charge and is stunned: re-observe its intent and damage taken.`);
+  }
   enemy.lostThisTurn = (enemy.lostThisTurn ?? 0) + lost;
   if (attack && enemy.hp > 0 && !enemy.hit_this_turn) {
     const skittish = (enemy.status ?? []).find(p => p.name?.toLowerCase() === 'skittish');
@@ -159,6 +201,12 @@ function hit(m, enemy, value, attack) {
     m.stunned.push(enemy.entity_id);
     enemy.status=enemy.status.filter(p=>!['plow','strength'].includes(p.name.toLowerCase()));
   }
+}
+
+// Slow grows by its percent for every card played this turn; Tender lowers Strength and Dexterity.
+function afterCardPlayed(m) {
+  for (const e of m.enemies) for (const p of e.status ?? []) if (p.name === 'Slow') p.amount = Number(p.amount ?? 0) + number(p.description ?? '', /receives (\d+)% more damage/i, 10);
+  if (m.tender) { m.strengthDelta -= m.tender; m.dexterityDelta -= m.tender; }
 }
 
 function applyPower(enemy, name, n) {
@@ -274,6 +322,9 @@ function apply(m0, a) {
       // Hand descriptions already include the player's current Strength/Weak.
       // Add only the change from simulated setup actions, never Strength twice.
       dmg += Math.floor(m.strengthDelta * m.weakFactor);
+      // Vigor is shown on every Attack but only the first one gets it.
+      if (m.vigor && m.vigorSpent) dmg = Math.max(0, dmg - Math.floor(m.vigor * m.weakFactor));
+      else if (m.vigor && (name === 'whirlwind' || /twice|times/i.test(text))) m.warnings.push('Vigor on a multi-hit Attack: whether every hit gets it is not modeled.');
       if (m.weakFactor !== 1 && (m.strengthDelta || targets.some(e => amount(e.status,'Vulnerable')))) {
         m.warnings.push('Weak/Vulnerable rounding may differ by 1 damage per hit.');
       }
@@ -287,6 +338,7 @@ function apply(m0, a) {
     }
   }
   if(isAttack){
+    if(m.vigor)m.vigorSpent=true;
     applyRetaliation(m,targets,item,retaliationHits);
     if(m.unsupported||m.hp<=0)return true;
   }
@@ -310,7 +362,14 @@ function apply(m0, a) {
   // Frantic Escape ("Increase Sandpit by 1") pushes back a death countdown on the enemy; it has no effect this turn.
   if(name==='frantic escape'){const [,power,n]=text.match(/Increase (.+?) by (\d+)/i)??[];
    for(const e of m.enemies.filter(e=>e.hp>0))for(const p of e.status??[])if(power&&p.name.toLowerCase()===power.toLowerCase())p.amount=Number(p.amount)+Number(n);}
-  if(name==='expect a fight'){if(!m.noEnergyGain)m.energy+=m.hand.filter(c=>c.type==='Attack').length;m.noEnergyGain=true;}
+  // Expect a Fight: the older text gave energy per Attack in hand. The current text is block only
+  // (15 + 5 per Strength, handled with other block below); a Sown copy shows "Gain [energy]." until its
+  // first play in combat (logged: 3 energy, cost 3, left 1 with the sentence and 0 without it).
+  if(name==='expect a fight'){
+    if(/for each Attack in your Hand/i.test(text)){if(!m.noEnergyGain)m.energy+=m.hand.filter(c=>c.type==='Attack').length;}
+    else if(!m.noEnergyGain)m.energy+=[...text.matchAll(/(?:^|\.\s+)Gain ((?:\[[^\]]*energy_icon[^\]]*\])+)(?=\.|$)/gi)].reduce((n,x)=>n+x[1].match(/energy_icon/g).length,0);
+    if(/cannot gain additional/i.test(text))m.noEnergyGain=true;
+  }
   if(name==='unrelenting')m.freeAttack=true;
   // Rage's text describes block on subsequent attacks, not block on cast.
   if(name==='pyre')m.warnings.push('Pyre grants energy at the start of future turns, not when played; no immediate energy or protection is forecast.');
@@ -323,7 +382,9 @@ function apply(m0, a) {
   else if (name === 'rage') m.rage += number(text,/gain (\d+) Block/i);
   else {
     const baseBlock=number(text,/Gain (\d+) Block/i);
-    if(baseBlock) gainBlock(m, baseBlock + (!potion ? Math.floor(m.dexterityDelta*m.frailFactor) : 0));
+    // The shown block includes current Strength; add only Strength changed in this plan.
+    const perStrength=number(text,/Gains? (\d+) additional Block for each Strength/i)*m.strengthDelta;
+    if(baseBlock) gainBlock(m, Math.max(0, baseBlock + perStrength + (!potion ? Math.floor(m.dexterityDelta*m.frailFactor) : 0)));
     if(name==='evil eye') {
       if(m.exhaustedThisTurn) gainBlock(m, number(text,/Gain another (\d+) Block/i) + Math.floor(m.dexterityDelta*m.frailFactor));
       else m.warnings.push('Evil Eye bonus counts only exhausts in this plan; an exhaust earlier this turn may add more block.');
@@ -399,6 +460,9 @@ function apply(m0, a) {
     if (replay && (m.hp <= 0 || m.enemies.every(e => e.hp <= 0) || m.unsupported || (m.boundary && m.boundary !== 'draw'))) break;
     if (replay) m.warnings.push(`${item.name} is played again (Replay or an extra-play effect).`);
     if (resolve(replay)) return m;
+    // "Whenever you play a card" effects fire after each play, extra plays included (logged: Tender
+    // lowered the second One-Two Punch play of Molten Fist from 10 to 9).
+    if (!potion) afterCardPlayed(m);
   }
   // A departure is not a kill: do not trigger the minion's on-death effects.
   const minionRule=e=>(e.status??[]).some(p=>/^Minions abandon combat without their leader\.?$/i.test((p.description??'').trim()));
@@ -527,7 +591,7 @@ function forecast(m, s) {
     energyLeft:m.unsupported || m.unsupportedRunes.length ? null : m.energy, slipperyRemoved:m.removedCharges, strengthGained:m.extraStrength,
     // Powers keep working after this turn; the numbers above cover this turn only.
     lastingEffects:m.steps.filter(x=>x.command.action==='play_card'&&x.details?.type==='Power').map(x=>`${x.details.name}: ${x.details.description}`),
-    notModeled:m.unsupported&&m.steps.length?[m.steps.at(-1).details?.name??m.steps.at(-1).label]:[],
+    notModeled:[...(m.unsupported&&m.steps.length?[m.steps.at(-1).details?.name??m.steps.at(-1).label]:[]),...m.unmodeled.map(x=>`${x.kind}: ${x.name}`)],
     quality:uncertain?'unknown':warnings.length?'partial':'calculated',
     boundary:m.boundary, warnings,
     assumption:'Forecast if this prefix is followed by ending the turn. Known-effects estimate; unmodeled interactions are omitted when marked partial. Displayed damage intents and explicit end-of-turn damage from remaining hand; no prediction of hidden draws or future turns. Extra block from an unavailable Fan counter is omitted.',
