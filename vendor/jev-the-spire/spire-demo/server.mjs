@@ -30,6 +30,7 @@ import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { actionsFor, fingerprint, factsFor } from './actions.mjs';
+import { pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker } from './runner-records.mjs';
 import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
 const turnHits = {}, lampMemory = {};
 
@@ -144,17 +145,25 @@ async function flushSnapshot() {
   await writeSnapshot();
 }
 async function gameRequest(path = '/api/v1/singleplayer', command) {
-  const response = await fetch(bridge + path, {
-    method: command ? 'POST' : 'GET',
-    headers: command ? { 'Content-Type': 'application/json' } : {},
-    body: command ? JSON.stringify(command) : undefined,
-    signal: AbortSignal.timeout(10000),
-  });
-  const data = await response.json();
+  let response, data;
+  try {
+    response = await fetch(bridge + path, {
+      method: command ? 'POST' : 'GET',
+      headers: command ? { 'Content-Type': 'application/json' } : {},
+      body: command ? JSON.stringify(command) : undefined,
+      signal: AbortSignal.timeout(10000),
+    });
+    data = await response.json();
+  } catch (error) { throw timeoutMessage(error, command ? 'Game command timed out' : 'Game state read timed out'); }
   if (!response.ok || data.error || data.status === 'error') throw new Error(data.error ?? data.message ?? `Game HTTP ${response.status}`);
   return data;
 }
-function stop(message) { generation++; view.mode = 'paused'; view.message = message; }
+// Every pause is logged with its reason; reason null skips the record where another record already
+// says why (an error, a run end, a reconciliation, a single step).
+function stop(message, reason = 'unspecified', extra = {}) {
+  generation++; view.mode = 'paused'; view.message = message;
+  return reason === null ? Promise.resolve() : log(pauseRecord(reason, message, extra)).catch(error => console.error('Pause record failed:', error.message));
+}
 function sidecarView(source = view) {
   const decisions = source.events.filter(e => e.kind === 'decision' && ['executed', 'preview'].includes(e.outcome));
   const compact = e => {
@@ -163,7 +172,7 @@ function sidecarView(source = view) {
       decisionSource:e.decisionSource??'jev', memory:e.memory??null, encounter:encounterBrief(e.state), deliberation:e.deliberation ?? null, time: e.time, label: e.chosen.plan?.[0]?.label ?? e.chosen.label, plan: e.chosen.plan ?? null, forecast: e.chosen.forecast ?? null, policy: e.policy ?? "jev-actions-v1", description: e.chosen.details?.description ?? e.chosen.details?.card_description ?? '',
       action: e.chosen.command.action, confidence: e.answer.confidence, latencyMs: e.latencyMs,
       outcome: e.outcome, floor: e.state.run?.floor, facts: factsFor(e.state),
-      options: (['forced','single_option'].includes(e.decisionSource)?candidates.map(c=>[c.id,null]):Object.entries(e.answer.probabilities ?? {})).map(([id, probability]) => ({
+      options: (['forced','filtered','single_option'].includes(e.decisionSource)?candidates.map(c=>[c.id,null]):Object.entries(e.answer.probabilities ?? {})).map(([id, probability]) => ({
         id, probability, label: candidates.find(a => a.id === id)?.label ?? id, plan: candidates.find(a => a.id === id)?.plan ?? null, forecast: candidates.find(a => a.id === id)?.forecast ?? null, chosen: id === e.answer.choice,
       })).sort((a,b) => b.probability - a.probability),
     };
@@ -238,14 +247,14 @@ async function step(token, preview = false) {
       if(strategist?.fightResults)recordFight(strategist.fightResults,s);
       // The Architect event follows the final boss; the run then ends at 0 HP although it was won.
       const result = lastEventId === 'THE_ARCHITECT' ? 'victory' : s.player?.hp <= 0 ? 'defeat' : 'unknown';
-      stop(result === 'unknown' ? 'Run ended. Verify the result in the game.' : `Run ended in ${result}.`);
+      stop(result === 'unknown' ? 'Run ended. Verify the result in the game.' : `Run ended in ${result}.`, null);
       await log({ kind: 'run_end', result, state: s }); return;
     }
     if (s.hextech?.available === false) throw Error('Hextech active rules could not be read: '+s.hextech.error);
     if (s.run && !s.saved_run) {
       waitingSince ||= Date.now();
       view.message = 'Waiting for the saved checkpoint to match the live run: ' + (view.save?.reason ?? 'unavailable');
-      if (Date.now() - waitingSince > 45000) stop(view.message);
+      if (Date.now() - waitingSince > 45000) await stop(view.message, 'checkpoint_mismatch');
       return;
     }
     // Once per run, before its first decision: what the run is played under (integration/sts2/run-record.mjs).
@@ -262,26 +271,26 @@ async function step(token, preview = false) {
     // Poll without issuing mutations, but retain a bounded stop for genuinely stuck screens.
     if (s.state_type === 'unknown') {
       waitingSince ||= Date.now();
-      if (Date.now() - waitingSince > 45000) stop('Unknown screen persisted for 45 seconds. Check the game, then resume.');
+      if (Date.now() - waitingSince > 45000) await stop('Unknown screen persisted for 45 seconds. Check the game, then resume.', 'unknown_screen');
       else view.message = 'Waiting for the room transition to finish…';
       return;
     }
     if (['menu', 'overlay'].includes(s.state_type)) {
-      stop(`Waiting at ${s.state_type}. Resolve this screen in the game, then resume.`); return;
+      await stop(`Waiting at ${s.state_type}. Resolve this screen in the game, then resume.`, s.state_type); return;
     }
     if(strategist){recordIntents(strategist.movesets,s);if(strategist.fightResults)recordFight(strategist.fightResults,s);}
     const planningState=markLampUsed(lampMemory,markHitsThisTurn(turnHits,facingState(s,view.events)));
     const actions = decisionCandidates(rewardState(planningState,view.events));
     if (!actions.length) {
       waitingSince ||= Date.now();
-      if (Date.now() - waitingSince > 45000) stop('No playable actions for 45 seconds. Check the game screen, then resume.');
+      if (Date.now() - waitingSince > 45000) await stop('No playable actions for 45 seconds. Check the game screen, then resume.', 'no_actions');
       else view.message = 'Waiting for the next playable state…';
       return;
     }
     const hash = fingerprint(s);
     if (hash === lastExecuted && !repeatableDialogue(s, actions, view.events)) {
       waitingSince ||= Date.now();
-      if (Date.now() - waitingSince > 45000) stop('The game did not change after the last action. Check the screen before resuming.');
+      if (Date.now() - waitingSince > 45000) await stop('The game did not change after the last action. Check the screen before resuming.', 'no_change');
       else view.message = 'Waiting for the game to finish the last action…';
       return;
     }
@@ -300,7 +309,7 @@ async function step(token, preview = false) {
     const settled = await observe();
     if (fingerprint(settled) !== hash || busyNow(settled)) { view.message = 'Waiting for animations to settle…'; return; }
     if (view.decisions >= MAX_DECISIONS || view.inputTokens >= MAX_INPUT_TOKENS) {
-      stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.'); return;
+      await stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.', 'budget'); return;
     }
     if (!apiKey) throw new Error('Missing TYPESAFE_API_KEY or private TypeSafe configuration.');
     view.message = 'Jev is choosing…';
@@ -308,7 +317,10 @@ async function step(token, preview = false) {
     const start = performance.now();
     const memory=encounterMemory(s,view.events);
     if(planBenefitEnabled)memory.persistentPlan=persistentPlan(s,view.events);
-    const result = await (lunaEnabled?assistedDeliberate:planBenefitEnabled?planBenefitDeliberate:hierarchicalDeliberate)({state:planningState,candidates:actions,
+    // Strategy events are logged when they happen (a request when it is posted), not after the decision.
+    const logged = new Set();
+    const onEvent = async strategyEvent => { logged.add(strategyEvent); await log(strategyEvent); addToHistory(view.strategyHistory, strategyEvent); };
+    const result = await (lunaEnabled?assistedDeliberate:planBenefitEnabled?planBenefitDeliberate:hierarchicalDeliberate)({state:planningState,candidates:actions,onEvent,
       recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,replay:await replaySource.forState(planningState),cancelled:()=>token!==generation,
       onStage:stage=>{view.message=stage;view.pending.stage=stage;},
       ask:async payload=>{
@@ -318,7 +330,7 @@ async function step(token, preview = false) {
         const response=await fetch('https://api.typesafe.ai/v1/systemone',{
           method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${apiKey}`},
           body:JSON.stringify({...payload,model:JEV_MODEL}),signal:AbortSignal.timeout(30000),
-        });
+        }).catch(error=>{throw timeoutMessage(error,'Jev request timed out');});
         if(!response.ok){
           // Report a bounded error code only, never a provider echo of request data.
           const errorBody=await response.json().catch(()=>null);
@@ -326,17 +338,17 @@ async function step(token, preview = false) {
           const reason=typeof code==='string'&&/^[a-z_]{1,80}$/.test(code)?` (${code})`:'';
           throw Error(`TypeSafe HTTP ${response.status}${reason}; paused.`);
         }
-        const result=await response.json();
+        const result=await response.json().catch(error=>{throw timeoutMessage(error,'Jev request timed out');});
         view.decisions++;view.inputTokens+=result.usage?.input_tokens??0;
         return result;
       }});
     view.latencyMs = Math.round(performance.now() - start);
-    for (const strategyEvent of result.strategyEvents ?? []) { await log(strategyEvent); addToHistory(view.strategyHistory, strategyEvent); }
+    for (const strategyEvent of result.strategyEvents ?? []) if (!logged.has(strategyEvent)) await onEvent(strategyEvent);
     view.model = result.model ?? 'Rules · sole legal action';
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
+    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, rule:result.rule??null, screenChoice:result.screenChoice??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();
@@ -344,8 +356,8 @@ async function step(token, preview = false) {
     if (token !== generation) return;
     // Never retry a mutating request automatically: a timeout can still mean it executed.
     let outcome;
-    view.uncertainAction = { command: chosen.command, stateHash: hash, time: new Date().toISOString() };
-    await log({ kind: 'dispatch', outcome: 'pending', ...view.uncertainAction });
+    // If the marker cannot be written, the command is not sent and nothing is uncertain (not_sent).
+    await writeDispatchMarker(log, view, { command: chosen.command, stateHash: hash, time: new Date().toISOString() });
     if (token !== generation) { view.uncertainAction = null; await log({kind:'dispatch',outcome:'cancelled_before_send'}); return; }
     try { outcome = await gameRequest('/api/v1/singleplayer', chosen.command); }
     catch (error) {
@@ -369,7 +381,10 @@ async function step(token, preview = false) {
     await log({ ...event, outcome: 'executed', result: outcome });
     noteDebuffCard(lampMemory, s, chosen);
   } catch (error) {
-    stop(error.message === 'fetch failed' ? 'Game bridge unavailable. Launch Slay the Spire 2 with STS2_MCP enabled.' : error.message);
+    // An operator pause during a decision (a strategist wait or a Jev call) cancels it. The pause
+    // record from /api/pause (or shutdown) names the stage that was in flight; it is not an error.
+    if (operatorCancel(error, token !== generation)) return;
+    stop(error.message === 'fetch failed' ? 'Game bridge unavailable. Launch Slay the Spire 2 with STS2_MCP enabled.' : error.message, null);
     await log({ kind: 'error', message: view.message });
   } finally {
     busy = false; view.pending = null;
@@ -411,8 +426,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST') {
       if (req.headers['x-spire-control'] !== '1') return json(403, { error: 'Missing control header' });
       if (req.url === '/api/pause') {
-        stop(busy ? 'Pausing. A decision or move is still in flight; wait before taking over.'
-          : 'Paused. No further moves will be sent; wait for any game animation before taking over.');
+        // Logged when it stops play; stage names what was in flight (a strategist wait, a Jev call).
+        const active = view.mode === 'running' || busy;
+        await stop(busy ? 'Pausing. A decision or move is still in flight; wait before taking over.'
+          : 'Paused. No further moves will be sent; wait for any game animation before taking over.', active ? 'operator' : null, { in_flight: busy, stage: view.pending?.stage ?? null });
         return json(200, { ok: true, pending: busy });
       }
       if (req.url.startsWith('/api/mode/')) {
@@ -430,7 +447,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.url === '/api/reconcile') {
         if (busy) return json(409, {error:'Wait for the current action to finish'});
-        stop('Previous action acknowledged. Observe the game before resuming.');
+        stop('Previous action acknowledged. Observe the game before resuming.', null);
         view.uncertainAction = null; lastExecuted = '';
         await log({kind:'reconciled_by_operator'}); return json(200,{ok:true});
       }
@@ -443,7 +460,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.url === '/api/step' || req.url === '/api/preview') {
         if (busy) return json(409, { error: 'Wait for the current decision to finish' });
-        stop('Single decision'); const token = generation;
+        stop('Single decision', null); const token = generation;
         void step(token, req.url === '/api/preview'); return json(200, { ok: true });
       }
     }
@@ -458,7 +475,7 @@ server.listen(port, '127.0.0.1', () => console.log(`Jev plays the Spire: http://
 let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
-  shuttingDown = true; stop('Stopped'); server.close();
+  shuttingDown = true; await stop('Stopped', 'shutdown'); server.close();
   // Pending dispatch was persisted before sending; retain that marker on interruption,
   // and write the latest snapshot (counters, strategist status) before exiting.
   await flushSnapshot().catch(() => {});
