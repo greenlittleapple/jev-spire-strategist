@@ -15,6 +15,23 @@ export const encounterKey=enemies=>{
 // The key used before counts were added; its plans stay available as a similar encounter.
 export const legacyKey=key=>String(key??'').replace(/ x\d+/g,'');
 export const fightId=s=>`${s.run?.live_id}:${s.run?.act}:${s.run?.floor}`;
+// Only a consult at the start of a fight writes the encounter's saved plan. A fight plan from a
+// consult during the fight (low_hp, unknown_mechanic, death_countdown) answered that turn's HP and
+// hand, so it applies to the rest of that fight only (19 of 83 saved plans had been replaced that way).
+export const FIGHT_START_REASONS=new Set(['new_encounter','review_encounter','elite_start','boss_start']);
+// play_first names cards from the deck of the run that wrote it, so a saved plan from another run
+// keeps its plan text and target_priority but not play_first.
+export function planForRun(entry,runId){
+ if(!entry?.play_first||(entry.run!=null&&entry.run===runId))return entry??null;
+ const {play_first,...rest}=entry;return rest;
+}
+// The fight plan in force: one given during this fight (status.fightPlan, keyed by fight id), else
+// the saved encounter plan as it applies to this run.
+export function activeFightPlan(state,status,saved){
+ const own=status?.fightPlan;
+ if(own&&own.fight_id===fightId(state))return own;
+ return planForRun(saved,state.run?.live_id);
+}
 
 // The encounter key of the current fight, fixed at the first combat observation.
 export function currentEncounter(state,fights) {
