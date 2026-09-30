@@ -20,7 +20,12 @@ export function unmodeledNames(candidates) {
   }
   // notModeled names the card a line stopped on; a supported card there stopped for another reason
   // (an enemy power already flagged above), so only unsupported cards count.
-  for(const n of c.forecast?.notModeled??[]){const name=String(n??'').replace(/\+$/,'');if(name&&!supportedCards.has(name.toLowerCase())&&!supportedPotions.has(name.toLowerCase()))names.set(name,'card');}
+  // Uncovered powers and relics are listed as "<kind>: <name>" (planner.mjs unmodeledMechanics); cards by name.
+  for(const n of c.forecast?.notModeled??[]){
+   const m=String(n??'').match(/^(enemy power|player power|relic): (.+)$/);
+   if(m){const name=m[2].trim();if(!(m[1]!=='relic'&&supportedPotions.has(name.toLowerCase())))names.set(name,m[1]);continue;}
+   const name=String(n??'').replace(/\+$/,'');if(name&&!supportedCards.has(name.toLowerCase())&&!supportedPotions.has(name.toLowerCase()))names.set(name,'card');
+  }
  }
  return names;
 }

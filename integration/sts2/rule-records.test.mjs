@@ -129,7 +129,7 @@ const shopState=items=>({state_type:'shop',run:{live_id:'r',act:1,floor:5,ascens
 const card={index:0,category:'card',price:60,is_stocked:true,can_afford:true,card_name:'Cleave',card_description:'Deal 8 to ALL.'};
 const removal={index:1,category:'card_removal',price:75,is_stocked:true,can_afford:true};
 
-test('only jev_facts_v3 (jev-compact-v3.2) applies the majority rule, after the shop review',async()=>{
+test('only jev_facts_v3 (jev-compact-v3.2 on) applies the majority rule, after the shop review',async()=>{
  const s=shopState([card,removal]),cands=decisionCandidates(s);
  const id=pred=>cands.find(pred).id,buy=id(c=>c.details?.category==='card'),rem=id(c=>c.details?.category==='card_removal'),out=id(c=>c.command.action==='proceed');
  const p={[buy]:.4,[rem]:.25,[out]:.35};
@@ -139,7 +139,7 @@ test('only jev_facts_v3 (jev-compact-v3.2) applies the majority rule, after the 
  assert.equal(calls,2,'the shop review runs first');
  assert.equal(r.answers.move.choice,buy);assert.equal(r.answers.move.jev_choice,out);assert.deepEqual(r.answers.move.probabilities,p);
  assert.deepEqual(r.deliberation.override,{kind:'majority_leave',p_leave:.35,jev_choice:out,chosen:buy,p_chosen:.4,price:60,gold:150});
- assert.equal(r.deliberation.version,'jev-compact-v3.2');assert.equal(r.deliberation.changed,false);
+ assert.equal(r.deliberation.version,'jev-compact-v3.3');assert.equal(r.deliberation.changed,false);
  for(const opts of [{factsPolicy:STRATEGY_FACTS_POLICY},{factsPolicy:FACTS_POLICY,resourceReviews:false},{factsPolicy:FACTS_V3_POLICY,strategy:{summary:'x'}},{facts:null,resourceReviews:false}]){
   const {r}=await run(opts);
   assert.equal(r.answers.move.choice,out,JSON.stringify(opts));assert.equal(r.deliberation.override,undefined);

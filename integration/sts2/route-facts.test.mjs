@@ -165,7 +165,7 @@ test('v2 facts are unchanged; v3 is used only when requested and labels its poli
  let request;
  await hierarchicalDeliberate({state:s,candidates,factsVersion:3,
   ask:async q=>{request=q;return {model:'t',answers:{move:{type:'choice',choice:'a1',confidence:.9,probabilities:{a1:.9}}},usage:{input_tokens:1,output_tokens:1}};}});
- assert.equal(request.state.policy,'jev-compact-v3.2');assert.ok(request.state.computed_facts.route_options.a0.example_routes);
+ assert.equal(request.state.policy,'jev-compact-v3.3');assert.ok(request.state.computed_facts.route_options.a0.example_routes);
 });
 
 test('a consult off the map does not count as having seen the act routes',async()=>{

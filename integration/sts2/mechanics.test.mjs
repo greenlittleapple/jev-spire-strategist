@@ -9,6 +9,8 @@ test('unmodeled names come from forecast warnings and unmodeled cards',()=>{
  const n=unmodeledNames([{forecast:{warnings:['Unmodeled enemy power: Ravenous','Stops before unknown drawn cards; re-observe.'],notModeled:['Cascade+']}},{forecast:{warnings:['Unmodeled relic: Razor Tooth']}}]);
  assert.deepEqual([...n],[['Ravenous','enemy power'],['Cascade','card'],['Razor Tooth','relic']]);
  assert.equal(unmodeledNames([{forecast:{warnings:[],notModeled:['Strike','Bash+']}}]).size,0,'supported cards are not unknown');
+ const typed=unmodeledNames([{forecast:{warnings:[],notModeled:['enemy power: Ravenous','relic: Pendulum','enemy power: Shackling Potion','Cascade+']}}]);
+ assert.deepEqual([...typed],[['Ravenous','enemy power'],['Pendulum','relic'],['Cascade','card']],"typed notModeled entries keep their kind; a modelled potion's own effect is left out");
 });
 
 test('text and presence are read from the state; notes persist across instances',async()=>{

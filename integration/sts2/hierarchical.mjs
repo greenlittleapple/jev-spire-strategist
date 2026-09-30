@@ -35,7 +35,7 @@ export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.
 // strategyEvents in the result lists the same events.
 export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},onEvent=null,strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
- // Claude mode keeps the v3.1 facts label; jev-compact-v3.2 (the shop majority rule) is jev_facts_v3 only.
+ // Claude mode keeps the v3.1 facts label; jev-compact-v3.2 and later (the shop majority rule) are jev_facts_v3 only.
  const version=strategist?3:factsVersion,factsPolicy=strategist?STRATEGY_FACTS_POLICY:version>=3?FACTS_V3_POLICY:FACTS_POLICY;
  const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
  // v3 also enables the potion and shop resource reviews.

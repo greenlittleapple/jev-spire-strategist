@@ -162,7 +162,7 @@ export function reviewReason(state,candidates,chosen,{resourceReviews=false,stra
  return null;
 }
 
-// Majority rule for leaving a shop (jev-compact-v3.2): Jev's answer to leave stands only with at
+// Majority rule for leaving a shop (jev-compact-v3.2 on): Jev's answer to leave stands only with at
 // least 0.5 of its probability. Otherwise the most probable affordable purchase is taken
 // ({choice, record}); null when the answer stands. Jev-only logs had 19 plurality leaves at
 // p 0.26-0.41, and every Jev-only loss died with unspent gold (mean 228).

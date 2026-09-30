@@ -34,7 +34,7 @@ export async function readLogs({logDir, seriesFile} = logPaths()) {
 
 // The decision mode a policy runs under, for runs logged before decisions recorded their mode.
 // jev_facts_v3 has logged jev-compact-v3, v3.1 and (with the shop majority rule) v3.2.
-const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3'};
+const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3'};
 const policyMode = p => POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null);
 
 // Scored runs keyed by short run ID, with the fields the progress data needs: the decision mode (run_start,
