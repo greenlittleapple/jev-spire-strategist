@@ -71,9 +71,9 @@ test('a two-seed series starts each run after the previous one ends and logs one
   w.game = {...menu, options:['continue']}; // a saved run at first: the series waits
   const started = [];
   const start = starter(w, {onStart: run => started.push(run)});
-  const waitThenClear = setTimeout(() => { w.game = {...menu}; }, 40);
+  // The saved run goes away once the series has reported waiting for it (no timing assumption).
+  w.options.print = line => { w.lines.push(line); if (/saved run exists/.test(line)) w.game = {...menu}; };
   const {results, stopped} = await runSeries({...w.options, seeds:['JEV21','JEV22'], arms:['jev_facts_v3'], label:'test series', startRun:async a => start(a)});
-  clearTimeout(waitThenClear);
   assert.equal(stopped, false);
   assert.deepEqual(results.map(r => [r.seed, r.mode, r.run, r.result, r.act, r.floor]), [['JEV21','jev_facts_v3','r1','defeat',1,17], ['JEV22','jev_facts_v3','r2','defeat',1,17]]);
   const log = (await readFile(join(w.options.root, '.private/sts2/series-runs.log'), 'utf8')).trim().split('\n');
