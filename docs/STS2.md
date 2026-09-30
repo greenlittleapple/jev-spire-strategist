@@ -12,6 +12,18 @@ The runner restores paused. A changed run identity clears prior-run decision mem
 
 Only one runner should control the game. The operator lock is `.private/sts2/runs/operator.lock`. If an unclean shutdown leaves it behind, verify its recorded process is no longer running before removing that lock. Do not launch a second agent or manually play while Autoplay is active.
 
+## Series
+
+`npm run sts2:series -- --seeds JEV21,JEV22 --mode jev_facts_v3 [--label text]` plays seeded runs one after another without an operator at the keyboard. With `--arms jev_facts_v3,claude` in place of `--mode`, every seed is played once per arm and the first arm alternates per seed (JEV21: A then B, JEV22: B then A), so both arms see the same games in balanced order.
+
+For each run the series waits until start-run's preconditions hold (runner paused with nothing pending, game at the main or game-over menu, no saved run), then runs `integration/sts2/start-run.mjs` with the same mode, seed and label, which adds its record to `.private/sts2/series.jsonl` as before. It then waits for that run's `run_end` record and writes one line (time, seed, mode, run ID, result, act, floor) to `.private/sts2/series-runs.log` and the terminal.
+
+The series never presses Autoplay itself. If the runner pauses on its own (unknown screen, uncertain action, budget reached, error), the series prints the runner's message and waits for the operator to deal with it. It never abandons a run or touches the save; if a run leaves the game without a `run_end` record, it logs the run and stops. A saved run at the main menu is also left for the operator.
+
+`touch .private/sts2/stop-series` stops the series after the current run; the file is removed when honored. A stop file present at launch stops the series before the first run. Ctrl+C ends the series only; a run in progress continues under the runner. Only one series runs at a time (`.private/sts2/series.lock` holds its pid); a lock left by a process that is gone is reported and removed only with `--clear-stale-lock`.
+
+In `claude` mode a strategist session must be answering requests (`npm run sts2:strategy -- wait | show | answer`, see [Claude strategy layer](#claude-strategy-layer)); the series prints a reminder and does not start one. After a series, add the results to the progress data and run the rules audit.
+
 ## State sources
 
 The bridge exposes current player, full permanent deck, combat piles, hand, energy, block, enemies, powers, intents, relic descriptions, potion slots, map, rewards, events and shop state. Jev chooses among code-generated actions and short combat plans; only the first action is executed, followed by a new observation.
