@@ -66,30 +66,27 @@ Checked and not carried over: a forecast tie-break for near ties (Jev picked the
 
 ## Next steps, in order
 
-1. **Before the next run** (needs Marcus's go-ahead for runs):
-   - Restart the runner so it loads the new code; it restores paused. Remove `.private/sts2/runs/operator.lock` only if its recorded process is gone.
-   - With the game closed, back up `<game dir>/mods/STS2_MCP.dll` and install `.private/bridge-builds/0.4.0-jev.1/` (SHA-256 `cdc155e1...`); launch through Steam and check that `GET /` reports version `0.4.0-jev.1`, a build commit and the game version.
-   - First live checks in the next run: a `run_start` record with lab commit and setup; `strategy_request` records written when posted; pause records; a counter settle on a relic trigger; a potion swap offered in claude mode; `jev-compact-v3.2` in `jev_facts_v3`.
-   - Auto-resume rule for Autoplay checks: resume by itself only on "Jev request timed out" or "Game state read timed out", with no pending or uncertain action, at most 3 times. Never on "Game command timed out".
-2. **JEV20**: Marcus decides whether to finish it on v3.16 (its pending card-reward request is in `.private/sts2/strategy/request.json`) or abandon it (he does Save & Quit, then the bridge's `abandon_run`).
-3. **Comparison series.** Freeze the code. Strategist arm `claude` with the updated instructions (a new version, Strategist v3.17) and the Jev-only arm `jev_facts_v3` (`jev-compact-v3.2`) on the same 5 unseen seeds, for example `npm run sts2:series -- --seeds JEV21,JEV22,JEV23,JEV24,JEV25 --arms jev_facts_v3,claude --label "Strategist v3.17 / Jev v3.2"`. A `general-medium` agent answers from `docs/STS2-STRATEGIST.md` during the `claude` runs; check Marcus's usage first. Add the version entries to `docs/progress/data.json` before `--add`.
-4. **After the series:** `npm run sts2:rules-audit`, the scorecard and `progress --add`; compare wins, floors and boss HP removed per arm; check the review records and `play_first`; record the results and decisions here.
-5. **Ascension step:** once a frozen strategist version has a win rate on unseen seeds, run the same version at a higher ascension (Marcus's decision; see below).
+Marcus approved these suggestions and all future runs on 2026-09-30.
+
+1. **Done 2026-09-30 22:20 UTC:** bridge `0.4.0-jev.1` installed (backup of `ca70db78...` in `.private/backups/2026-09-30-before-bridge-jev.1/`); its greeting reports build `e5edbc2` and game `v0.111.0`. The runner restarted on the new code. Checked live on the first run: the `run_start` record (commit, setup with the seed from the save, bridge, content hashes, caps), the pinned build check, and the `run_changed` pause record.
+2. **Done:** JEV20 abandoned from the main menu (finishing it on new code would have mixed two versions in one run); left out through `excluded` in the progress data. Its stale strategist request is archived as `.private/sts2/strategy/request.JEV20-abandoned.json`.
+3. **Running: comparison series** on seeds JEV21 to JEV25 with the code frozen:
+   - arm 1, `Jev v3.2` (`jev_facts_v3`, `jev-compact-v3.2`), started 22:24 UTC: `npm run sts2:series -- --seeds JEV21,JEV22,JEV23,JEV24,JEV25 --mode jev_facts_v3 --label "Jev v3.2"`;
+   - arm 2, `Strategist v3.17` (`claude`), the same seeds with `--mode claude --label "Strategist v3.17"`, with a fresh `general-medium` strategist agent for each run, answering from `docs/STS2-STRATEGIST.md`.
+   - The arms run in blocks, not alternating: STS2 is turn-based and the runner waits for the game to be ready, so machine load (a BTD6 series ran at the same time) doesn't change decisions.
+   - After each run: `npm run sts2:progress -- --add`, then commit.
+4. **After the series:** `npm run sts2:rules-audit` and the scorecard; compare wins, floors and boss HP removed per arm; check the review records (first against final pick) and `play_first`; record the results and decisions here.
+5. **Ascension ladder** (decided 2026-09-30): A0, then A5, then A10. A frozen strategist version moves up a level once it wins at least 2 of 5 unseen seeds at its current level. Before the first step: `npm run sts2:start` and `--add` accept only Ascension 0 today, and setting the custom run's ascension through the bridge needs checking.
 
 ## Open items
 
-- Unchecked live (no run since these changes): `run_start` and pause records, strategy requests logged when posted, the relic counter settle, potion swaps, the shop majority rule, the series runner, bridge `0.4.0-jev.1`.
+- Unchecked live so far: strategy requests logged when posted, the relic counter settle, potion swaps, the shop majority rule, and a whole series run by `npm run sts2:series` (the first series is running). Checked live on 2026-09-30: the `run_start` record, the pinned build check, pause records and bridge `0.4.0-jev.1`.
 - Still unchecked from before: a top-deck (`known_draw_top`) combat cycle and a golden-active Hextech reroll.
-- The runner doesn't yet pause when the loaded bridge or game version differs from the pinned one, as the BTD6 runner does for its mod loader.
 - Issue-affected runs count toward a row's win rate (Jev v1 shows "0 of 6 won", all six carrying the multi-hit intent issue).
 - `shop.gold_reserve` is never set (0 in 1,183 plans) and has no effect while the strategist owns shops.
 - Hextech rune options never carried the `revision` the code expects (Hextech runs only).
 - `jev_uncertain`, `rich_shop` and the shop-leaving review can't fire in claude v3, where the strategist owns those screens.
 
-## Decisions for Marcus
+## Decisions made
 
-1. Start the comparison series (runs, strategist usage, caps).
-2. JEV20: finish it or abandon it.
-3. Install bridge `0.4.0-jev.1` at the next session.
-4. When to step up in ascension: suggested, once a frozen strategist version wins at least 2 of 5 unseen seeds at Ascension 0.
-5. Whether runs affected by a known issue should count toward win rates (they do now).
+On 2026-09-30 Marcus approved all future runs and these suggestions: install the new bridge and restart the runner, abandon JEV20, run the comparison series, and the ascension ladder above. Runs affected by a known issue keep counting toward win rates, marked in the table and chart.
