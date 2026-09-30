@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, writeFile, rm, readFile} from 'node:fs/promises';
+import {mkdtemp, writeFile, rm, readFile, mkdir, utimes} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'node:http';
-import {labGit, fileSha256, bridgeVersion, bridgeIdentity, fetchBridgeVersion, runSetup, runStartRecord} from './run-record.mjs';
+import {labGit, fileSha256, bridgeVersion, bridgeIdentity, fetchBridgeVersion, runSetup, runStartRecord, enabledMods} from './run-record.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -68,16 +68,47 @@ test('run_start carries the commit, content, policy, caps and setup under fixed 
   const save = {players: [{character_id: 'CHARACTER.IRONCLAD'}], rng: {seed: 'ABC123'}, game_mode: 'custom'};
   const record = runStartRecord({state, git: {lab_commit: 'f'.repeat(40), lab_dirty: false}, policy: 'claude-strategy-v3',
     decisionMode: 'claude', model: 'jev-1.13.0', bridge: {version: '0.4.0-jev.1', build: null, game: 'v0.111.0'}, content: {playbook: 'aa', mechanics: null},
-    caps: {maxDecisions: 2000, maxInputTokens: 30000000}, save});
+    caps: {maxDecisions: 2000, maxInputTokens: 30000000}, save, mods: {mods: ['BaseLib'], mods_hash: 'abc'}});
   assert.deepEqual(record, {kind: 'run_start', run: 'r1', lab_commit: 'f'.repeat(40), lab_dirty: false,
     policy: 'claude-strategy-v3', decision_mode: 'claude', model: 'jev-1.13.0', bridge: {version: '0.4.0-jev.1', build: null, game: 'v0.111.0'},
     content: {playbook: 'aa', mechanics: null}, caps: {max_decisions: 2000, max_input_tokens: 30000000},
     setup: {character: 'Ironclad', ascension: 0, modifiers: ['MOD.X'], game_mode: 'custom', seed: 'ABC123'},
-    act: 1, floor: 1});
+    mods: ['BaseLib'], mods_hash: 'abc', act: 1, floor: 1});
   // Without a save the setup falls back to the live run where it can, never to the displayed title.
   const bare = runStartRecord({state: {run: {live_id: 'r2', ascension: 0}}, git: {lab_commit: null, lab_dirty: null}});
   assert.deepEqual(bare.setup, {character: null, ascension: 0, modifiers: null, game_mode: null, seed: null});
+  assert.equal(bare.mods, null);
   assert.deepEqual(runSetup(null, null), {character: null, ascension: null, modifiers: null, game_mode: null, seed: null});
+});
+
+test('enabled mods come from the newest profile settings.save, sorted, with no profile folder name; failures give null', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'run-record-mods-'));
+  const profile = async (name, list, time) => {
+    await mkdir(join(base, name));
+    await writeFile(join(base, name, 'settings.save'), typeof list === 'string' ? list : JSON.stringify({mod_settings: {mod_list: list}}));
+    await utimes(join(base, name, 'settings.save'), time, time);
+  };
+  try {
+    assert.equal(await enabledMods(base), null);
+    await profile('11111111111111111', [{id: 'Old', is_enabled: true}], 1000);
+    await profile('22222222222222222', [{id: 'Zeta', is_enabled: true, source: 'steam_workshop'}, {id: 'HornetMod', is_enabled: false},
+      {id: 'BaseLib', is_enabled: true}, {id: 'BaseLib', is_enabled: true, source: 'local'}, {is_enabled: true}], 2000);
+    const mods = await enabledMods(base);
+    assert.deepEqual(mods.mods, ['BaseLib', 'Zeta']);
+    assert.match(mods.mods_hash, /^[0-9a-f]{12}$/);
+    assert.doesNotMatch(JSON.stringify(mods), /2222|1111/);
+    // The hash changes with the mod set and not with the order the file lists it in.
+    await profile('33333333333333333', [{id: 'Zeta', is_enabled: true}, {id: 'BaseLib', is_enabled: true}], 3000);
+    assert.equal((await enabledMods(base)).mods_hash, mods.mods_hash);
+    await profile('44444444444444444', [{id: 'BaseLib', is_enabled: true}], 4000);
+    assert.notEqual((await enabledMods(base)).mods_hash, mods.mods_hash);
+    await profile('55555555555555555', '{not json', 5000);
+    assert.equal(await enabledMods(base), null);
+    await profile('66666666666666666', '﻿' + JSON.stringify({mod_settings: {mod_list: [{id: 'A', is_enabled: true}]}}), 6000);
+    assert.deepEqual((await enabledMods(base)).mods, ['A']);
+    assert.equal(await enabledMods(join(base, 'missing')), null);
+    assert.equal(await enabledMods(null), null);
+  } finally { await rm(base, {recursive: true, force: true}); }
 });
 
 test('the runner logs run_start once per run before its first decision, and start-run records the commit', async () => {
