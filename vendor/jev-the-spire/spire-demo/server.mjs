@@ -82,7 +82,9 @@ const replaySource=replayer({configPath:resolve(logDir,'../replay.json'),runsDir
 const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),mechanics:fileMechanics(strategyDir),glossary:makeGlossary(bridgeLookup(bridge)),movesets:{},
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
-   plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0}}:null;
+   plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0,
+   // A mid-fight plan survives a restart during its fight; its fight_id keeps it out of any other fight.
+   fightPlan:view.strategy?.fightPlan??null}}:null;
 view.strategy=strategist?.status??null;
 // Claude's recent strategy answers for the dashboard, rebuilt from the run log at startup.
 view.strategyHistory=Array.isArray(view.strategyHistory)?view.strategyHistory:[];
