@@ -70,7 +70,17 @@
     {"run": "1790808437", "seed": "JEV25", "result": "lost", "act": 1, "floor": 8, "moves": 125, "tokens": 976892, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
    ]
   },
-  {"name": "Jev v3.3", "policy": "jev-compact-v3.3", "group": "jev", "mode": "jev_facts_v3", "added": "The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle", "runs": []},
+  {
+   "name": "Jev v3.3",
+   "policy": "jev-compact-v3.3",
+   "group": "jev",
+   "mode": "jev_facts_v3",
+   "added": "The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle",
+   "runs": [
+    {"run": "1790812197", "seed": "JEV21", "result": "lost", "act": 1, "floor": 17, "moves": 230, "tokens": 1780731, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
+    {"run": "1790812390", "seed": "JEV22", "result": "in progress", "act": 1, "floor": 12, "moves": 100, "tokens": 615688, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"}
+   ]
+  },
   {
    "name": "Strategist v2",
    "policy": "claude-strategy-v2",
@@ -294,7 +304,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 27, "moves": 9578, "median_s": 0.76}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 29, "moves": 9908, "median_s": 0.76}
   ]
  }
 }
