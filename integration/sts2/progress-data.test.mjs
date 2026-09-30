@@ -112,3 +112,12 @@ test(`a win rate needs ${WIN_RATE_MIN} finished runs of one version and mode tha
  const modes = runs(5); modes[0].mode = 'jev';
  assert.equal(winRate(row(modes)), null);
 });
+
+test('--add leaves out runs listed in data.excluded and reports them', () => {
+ const data = {...dataOf(), excluded: [{run: '31', reason: 'abandoned at floor 3 when the code changed'}]};
+ const out = addRuns(data, new Map([['31', scoredRun('31', {label: 'Strategist v3.16', seed: 'JEV20', result: 'in progress', floor: 3})],
+  ['30', scoredRun('30', {label: 'Strategist v3.16', seed: 'JEV19', floor: 30})]]));
+ assert.deepEqual(out.added.map(a => a.run), ['30']);
+ assert.deepEqual(out.excluded, [{run: '31', reason: 'abandoned at floor 3 when the code changed'}]);
+ assert.deepEqual(data.versions[2].runs.map(r => r.run), ['30']);
+});

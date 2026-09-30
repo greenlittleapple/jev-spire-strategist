@@ -216,6 +216,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (report) {
    for (const a of report.added) console.log(`Added ${a.run}${a.seed ? ` (${a.seed})` : ''} to ${a.version}: ${a.result}, floor ${a.floor}`);
    for (const u of report.unmatched) console.log(`Left out ${u.run}${u.label ? ` ("${u.label}")` : ''}: ${u.reason}`);
+   for (const x of report.excluded) console.log(`Excluded on purpose ${x.run}: ${x.reason}`);
    if (report.skipped.length) console.log(`Skipped (the runner made no move): ${report.skipped.join(', ')}`);
    if (!report.added.length) console.log('No new runs to add.');
   }

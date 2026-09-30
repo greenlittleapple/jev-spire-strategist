@@ -84,13 +84,16 @@ export function refreshRun(v, r, s) {
 }
 
 // npm run sts2:progress -- --add: every scored run not yet in data, under its version, in start order.
-// Runs where the runner made no move are skipped; runs with a run modifier or above Ascension 0, and runs
-// whose version can't be determined, are reported and left out. Mutates data.
+// Runs where the runner made no move are skipped; runs listed in data.excluded ({run, reason}: left out on
+// purpose, such as a run abandoned when the code changed), runs with a run modifier or above Ascension 0,
+// and runs whose version can't be determined, are reported and left out. Mutates data.
 export function addRuns(data, scored) {
  const listed = new Set(data.versions.flatMap(v => v.runs.map(r => r.run)));
- const out = {added: [], skipped: [], unmatched: []};
+ const excluded = new Map((data.excluded ?? []).map(x => [x.run, x.reason]));
+ const out = {added: [], skipped: [], excluded: [], unmatched: []};
  for (const s of [...scored.values()].sort((a, b) => String(a.started).localeCompare(String(b.started)))) {
   if (listed.has(s.id)) continue;
+  if (excluded.has(s.id)) { out.excluded.push({run: s.id, reason: excluded.get(s.id)}); continue; }
   if (!s.moves) { out.skipped.push(s.id); continue; }
   if (s.modifiers && s.modifiers !== 'standard') { out.unmatched.push({run: s.id, label: s.label, reason: `run modifiers: ${s.modifiers}`}); continue; }
   if (s.ascension != null && s.ascension !== 0) { out.unmatched.push({run: s.id, label: s.label, reason: `Ascension ${s.ascension}`}); continue; }
