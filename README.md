@@ -12,6 +12,23 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 <!-- results:end -->
 
+## Versions and modes
+
+A **version** is the decision-maker's code at a given change: its policy plus the rules, forecasts and strategist instructions of that change. A code change that can alter play starts a new version, such as "Strategist v3.16", even when the policy label in the logs stays the same. From v3 on, every strategist version logs the policy `claude-strategy-v3`; each run's entry in the run series file names the version in its label, and newer entries also record the lab commit.
+
+The **decision mode** is chosen on the dashboard (details in [docs/STS2.md](docs/STS2.md#claude-strategy-layer)):
+
+| Mode | Policies | What decides |
+|---|---|---|
+| `jev` | `jev-compact-v1` | Jev alone, one compact question per screen |
+| `jev_facts` | `jev-compact-v2` | Jev alone, with route and resource facts computed in code |
+| `jev_facts_v3` | `jev-compact-v3` | Jev alone, with ordered route facts and second looks at potion and shop choices |
+| `claude` | `claude-strategy-v2`, `claude-strategy-v2.1`, `claude-strategy-v3` | Jev for each move, within Claude's plan and the enforced rules; from v3, Claude also decides card rewards, shops, events and rest sites |
+
+Every charted run has the same setup: a standard Ascension 0 Ironclad run with no run modifiers, on the same modded install (see Limits). Strategist runs from JEV1 on are seeded custom runs; the Jev-only runs used unseeded maps.
+
+Each row of the chart and the table is one version, named after it ("Strategist v3.16"). Runs of a version played in another decision mode would get a row of their own, "<version> (<mode>)"; there are none so far. A row shows a win rate ("2 of 5 won, median floor 33") only once it has at least 5 finished runs of one version and mode, and no two of those runs record different lab commits (runs from before commits were recorded count). Below that, the row lists each run. `npm run sts2:progress -- --refresh` warns when a row mixes recorded commits. Runs affected by a known issue still count; they are marked with a letter in the table, explained under it, and drawn as hollow dots in the chart.
+
 ## Progress by version
 
 <picture>
@@ -26,32 +43,36 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 | Version | Final floor of each run | What it added |
 |---|---|---|
-| Jev v1 (`jev-compact-v1`) | 17, 17, 17, 17, 17, 17 | One compact question per screen, no call for forced moves, reviews on risky end turns |
-| Jev v2 (`jev-compact-v2`) | 14, 28 | Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead |
-| Jev v3 (`jev-compact-v3`) | 15, 7, 23 | Ordered route facts; second looks at hallway potion use and leaving a shop with gold |
-| Strategist v2 (`claude-strategy-v2`) | JEV1: 33, JEV2: 48 | Claude writes the run plan at key moments; map moves follow its chosen act route |
-| Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17, JEV2: 48 | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
-| Strategist v3 (`claude-strategy-v3`) | JEV1: 17 | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
-| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay) | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
-| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay) | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
-| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay) | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
+| Jev v1 (`jev-compact-v1`) | **0 of 6 won, median floor 17**: 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup> | One compact question per screen, no call for forced moves, reviews on risky end turns |
+| Jev v2 (`jev-compact-v2`) | 14<sup>a</sup>, 28<sup>a</sup> | Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead |
+| Jev v3 (`jev-compact-v3`) | 15<sup>a</sup>, 7, 23<sup>a</sup> | Ordered route facts; second looks at hallway potion use and leaving a shop with gold |
+| Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a</sup>, JEV2: 48<sup>a</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
+| Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a</sup>, JEV2: 48<sup>a</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
+| Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
+| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a</sup> | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
+| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a</sup> | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
+| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay)<sup>a</sup> | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
 | Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48 | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
-| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, **JEV4: won (floor 48)**, JEV5: 17 | A second look when Jev's line loses far more HP than the best surviving line |
+| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, **JEV4: won (floor 48)**, JEV5: 17<sup>b</sup> | A second look when Jev's line loses far more HP than the best surviving line |
 | Strategist v3.6 (`claude-strategy-v3`) | JEV6: 17 | Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP |
 | Strategist v3.7 (`claude-strategy-v3`) | JEV7: 33 | No healing potion that would mostly overheal; route plans start fresh each run |
 | Strategist v3.8 (`claude-strategy-v3`) | **JEV8: won (floor 48)**, JEV9: 33 | Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield |
 | Strategist v3.9 (`claude-strategy-v3`) | JEV10: 42 | Frantic Escape forecast; a forced escape yields when it dies and a block line survives |
 | Strategist v3.10 (`claude-strategy-v3`) | JEV11: 17 | Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast |
-| Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17 | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
+| Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17<sup>c,d</sup> | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
 | Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25 | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
 | Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, **JEV15: won (floor 48)** | Orichalcum forecast; route facts give the fewest elites before the first rest |
 | Strategist v3.14 (`claude-strategy-v3`) | JEV16: 17 | Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting |
-| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
-| Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30 | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
+| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27<sup>e</sup>, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
+| Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30, JEV20: in progress (floor 3) | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
+
+- <sup>a</sup> Multi-hit attack intents such as "3x7 (21)" were not parsed, so incoming damage and survival forecasts were unknown on those turns. Fixed in 8db3d55.
+- <sup>b</sup> The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP. Fixed in 470cf3c.
+- <sup>c</sup> The runner stalled for 12 minutes on a card transform screen whose preview kept changing; the run then continued where it stopped. Fixed in b04c7ae.
+- <sup>d</sup> An event answer carried over to the event's later pages: at Abyssal Baths the runner chose Linger eight times, from 69 to 25 HP. Fixed in d658e6f.
+- <sup>e</sup> The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.
 
 <!-- progress-table:end -->
-
-Strategist versions from v3 onward share the `claude-strategy-v3` policy label in the logs; the run series file tells the point releases apart.
 </details>
 
 ## Speed
@@ -94,7 +115,7 @@ Why split it this way: in the five-run Jev-only baseline, Jev never took an opti
 
 ## Limits
 
-- The samples are small. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it); from v3.5 on, every run uses a new seed. The Jev-only runs used unseeded maps. The wins so far are not a win rate, and the comparison is indicative, not a controlled measurement.
+- The samples are small. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it); from v3.5 on, every run uses a new seed. The Jev-only runs used unseeded maps. Most versions have one to three runs, too few for a win rate (see "Versions and modes"), and the comparison is indicative, not a controlled measurement.
 - Ascension 0 only, Ironclad only. Stronger play at higher ascensions has not been shown.
 - Runs were played on a modded install: mostly cosmetic and interface mods, plus Hextech Runes, which changes the game only when its run modifier is selected. Standard runs don't select it.
 - Built and tested on Windows only.
@@ -120,7 +141,7 @@ You need Slay the Spire 2 on Steam (tested on v0.111.0), the .NET 9 SDK, Node.js
 4. From the game's main menu, start a seeded run and hand it to the runner: `npm run sts2:start -- --mode claude --seed JEV1`.
 5. For strategist mode, open this folder in Claude Code and ask it to act as the strategist. `AGENTS.md` points it to the request loop.
 
-`npm run sts2:scorecard` summarizes every logged run, and `npm run sts2:progress -- --refresh` rebuilds the charts above from the local logs. Logs, saves and the key stay in the ignored `.private/` folder and `.env`. Setup details, controls and recovery steps are in [docs/STS2.md](docs/STS2.md); verification evidence is in [docs/STS2-VERIFICATION.md](docs/STS2-VERIFICATION.md).
+`npm run sts2:scorecard` summarizes every logged run. `npm run sts2:progress -- --add` adds logged runs that the chart data lacks under their version (from the run's series label, or its policy when only one version has it) and rebuilds the charts above from the local logs; `-- --refresh` only updates the runs already listed. Logs, saves and the key stay in the ignored `.private/` folder and `.env`. Setup details, controls and recovery steps are in [docs/STS2.md](docs/STS2.md); verification evidence is in [docs/STS2-VERIFICATION.md](docs/STS2-VERIFICATION.md).
 
 ## Porting to another game
 
