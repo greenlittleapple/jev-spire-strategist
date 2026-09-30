@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="1680" viewBox="0 0 960 1680" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Jev v3.2: best floor 14; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 48; Strategist v3.14: best floor 17; Strategist v3.15: best floor 27; Strategist v3.16: best floor 30; Strategist v3.17: best floor 0</desc>
+<title id="t">How far each version got</title><desc id="d">Jev v1: best floor 17; Jev v2: best floor 28; Jev v3: best floor 23; Jev v3.2: best floor 17; Strategist v2: best floor 48; Strategist v2.1: best floor 48; Strategist v3: best floor 17; Strategist v3.1: best floor 17; Strategist v3.2: best floor 17; Strategist v3.3: best floor 33; Strategist v3.4: best floor 48; Strategist v3.5: best floor 48; Strategist v3.6: best floor 17; Strategist v3.7: best floor 33; Strategist v3.8: best floor 48; Strategist v3.9: best floor 42; Strategist v3.10: best floor 17; Strategist v3.11: best floor 17; Strategist v3.12: best floor 25; Strategist v3.13: best floor 48; Strategist v3.14: best floor 17; Strategist v3.15: best floor 27; Strategist v3.16: best floor 30; Strategist v3.17: best floor 0</desc>
 <rect width="960" height="1680" rx="12" fill="#fcfcfb"/>
 <text x="24" y="40" font-size="20" font-weight="600" fill="#0b0b0b" text-anchor="start">How far each version got</text>
 <text x="24" y="64" font-size="14" font-weight="400" fill="#52514e" text-anchor="start">Slay the Spire 2, Ironclad, Ascension 0, standard runs (no run modifiers). Each dot is one run, green if it won; the bar reaches the best run.</text>
@@ -39,12 +39,13 @@
 <circle cx="630.8333333333334" cy="318" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="724.1666666666666" cy="318" r="3.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"/>
 <text x="736.1666666666666" y="323" font-size="13" font-weight="600"><tspan fill="#0b0b0b">23</tspan></text>
-<text x="24" y="362" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v3.2</tspan><tspan fill="#898781" font-size="13"> · 1 run</tspan></text>
+<text x="24" y="362" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Jev v3.2</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
 <text x="24" y="382" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Leaves a shop only when Jev puts at least half its probability on leaving; log-review</text>
 <text x="24" y="400" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">fixes</text>
-<path d="M590,376 H668.6666666666666 A3,3 0 0 1 671.6666666666666,379 V379 A3,3 0 0 1 668.6666666666666,382 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
+<path d="M590,376 H686.1666666666666 A3,3 0 0 1 689.1666666666666,379 V379 A3,3 0 0 1 686.1666666666666,382 H590 Z" fill="#2a78d6" fill-opacity="0.35"/>
 <circle cx="671.6666666666666" cy="379" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
-<text x="683.6666666666666" y="384" font-size="13" font-weight="600"><tspan fill="#0b0b0b">14</tspan></text>
+<circle cx="689.1666666666666" cy="379" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="701.1666666666666" y="384" font-size="13" font-weight="600"><tspan fill="#0b0b0b">17</tspan></text>
 <circle cx="30" cy="441" r="6" fill="#eb6834"/>
 <text x="44" y="446" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">Jev + Claude strategist</text>
 <text x="24" y="476" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v2</tspan><tspan fill="#898781" font-size="13"> · 2 runs</tspan></text>
