@@ -66,8 +66,25 @@ export const screenKey = s => `${s.run?.live_id}:${s.run?.act}:${s.run?.floor}:$
 // Label is included: after a reroll or purchase an index can name a different option.
 // An event option's description is part of its identity: a repeated page ("Linger — Take 4 damage",
 // then 12) is a new choice, not the one already answered (JEV12 lingered nine times, 69 to 25 HP).
+// A reward claim also carries the reward type, so it can be matched after re-indexing (claimKey).
 const optionKey = c => JSON.stringify({command:c.command,label:c.label,
- ...(c.command?.action==='choose_event_option'&&c.details?.description?{description:c.details.description}:{})});
+ ...(c.command?.action==='choose_event_option'&&c.details?.description?{description:c.details.description}:{}),
+ ...(c.command?.action==='claim_reward'&&c.details?.type?{type:c.details.type}:{})});
+// A claim re-indexes the rewards below it: JEV21 f22 listed the gold and then "Add a card to your deck."
+// (index 2), which became index 1 once the gold was taken, so the strategist was asked again; JEV22 f6
+// fell through to its listed discard before the card. A listed claim no longer offered at its index
+// matches the one offered claim with the same reward type and label; identical rewards are not guessed between.
+const claimKey = key => {
+ const o=JSON.parse(key);
+ return o.command?.action==='claim_reward'?JSON.stringify({type:o.type??null,label:o.label}):null;
+};
+const matchKey = (candidates,key) => {
+ const exact=candidates.find(x=>optionKey(x)===key);
+ if(exact)return exact;
+ const loose=claimKey(key);
+ const same=loose?candidates.filter(x=>x.command?.action==='claim_reward'&&claimKey(optionKey(x))===loose):[];
+ return same.length===1?same[0]:null;
+};
 const relicIds = s => (s.player?.relics ?? []).map(r => r.id).sort();
 
 function deckSummary(deck=[]) {
@@ -151,7 +168,7 @@ const commitsToElite=(map,candidates,next)=>{
 
 // The first option in the plan's order that is still offered.
 const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
- for(const key of list??[]){const c=candidates.find(x=>optionKey(x)===key);if(c)return c;}
+ for(const key of list??[]){const c=matchKey(candidates,key);if(c)return c;}
  return null;
 };
 
@@ -504,7 +521,8 @@ export function constrainCandidates(state,candidates,plan,mode='constrained',{fi
   if(first)return {candidates:[first],constraint:{kind:'strategist_choice',removed:candidates.length-1,removed_ids:removedIds(candidates,[first]),remembered:plan.screen!==screenKey(state)}};
  }
  if(plan.screen===screenKey(state)&&plan.allowed_options?.length){
-  const kept=candidates.filter(c=>plan.allowed_options.includes(optionKey(c)));
+  const listed=new Set(plan.allowed_options.map(k=>matchKey(candidates,k)).filter(Boolean));
+  const kept=candidates.filter(c=>listed.has(c));
   if(kept.length)return {candidates:kept,constraint:{kind:'allowed_options',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
  const fixed=exhaustConstraint(state,candidates)??restConstraint(state,candidates);

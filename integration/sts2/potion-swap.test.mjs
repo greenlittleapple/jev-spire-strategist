@@ -37,3 +37,34 @@ test('declining the swap leaves the potion',()=>{
  const plan=stampPlan({allowed_option_ids:[leave.id]},requestStamp(s,candidates,'owned_screen'));
  assert.deepEqual(constrainCandidates(s,candidates,plan,'constrained',{screenChoices:{[screenKey(s)]:plan.allowed_options}}).candidates.map(c=>c.command),[{action:'proceed'}]);
 });
+
+// JEV21 f22: gold, a potion and a card with a full belt; the answer was the gold, then the card.
+test('a listed claim still matches after an earlier claim re-indexes the rewards',()=>{
+ const card=index=>({index,type:'card',description:'Add a card to your deck.'});
+ const s=screen(full,[{index:0,type:'gold',description:'20 Gold'},dup(1),card(2)]),candidates=actionsFor(s,{potionSwaps:true});
+ const pick=label=>candidates.find(c=>c.label===label).id;
+ const plan=stampPlan({allowed_option_ids:[pick('20 Gold'),pick('Add a card to your deck.')]},requestStamp(s,candidates,'owned_screen'));
+ const screenChoices={[screenKey(s)]:plan.allowed_options};
+ // Gold taken: the card reward is now index 1 and is still the answer, with no new consult.
+ const s2=screen(full,[dup(0),card(1)]),c2=actionsFor(s2,{potionSwaps:true});
+ assert.equal(replanReason(s2,plan,c2,{screenChoices}),null);
+ assert.deepEqual(constrainCandidates(s2,c2,plan,'constrained',{screenChoices}).candidates.map(c=>c.command),[{action:'claim_reward',index:1}]);
+ // Two identical rewards are not guessed between: that asks again.
+ const s3=screen(full,[card(0),card(1),dup(2)]),c3=actionsFor(s3,{potionSwaps:true});
+ assert.equal(replanReason(s3,plan,c3,{screenChoices}),'owned_screen');
+ // A claimed reward does not match a different one with another label or type.
+ const s4=screen(full,[dup(0),{index:1,type:'gold',description:'30 Gold'}]),c4=actionsFor(s4,{potionSwaps:true});
+ assert.equal(replanReason(s4,plan,c4,{screenChoices}),'owned_screen');
+});
+
+test('after the discard, a listed claim that moved is still the one kept',()=>{
+ // JEV22 f6 order: gold, card, discard; here the discard came before the card.
+ const card=index=>({index,type:'card',description:'Add a card to your deck.'});
+ const s=screen(full,[{index:0,type:'gold',description:'18 Gold'},dup(1),card(2)]),candidates=actionsFor(s,{potionSwaps:true});
+ const discard=candidates.find(c=>c.command.action==='discard_potion'&&c.command.slot===2);
+ const plan=stampPlan({allowed_option_ids:[discard.id,candidates.find(c=>c.label==='Add a card to your deck.').id]},requestStamp(s,candidates,'owned_screen'));
+ // Slot free, gold gone: the screen is no longer owned, and the listed card claim (now index 1) is kept.
+ const s2={...screen([full[0],full[1]],[dup(0),card(1)])},c2=actionsFor(s2,{potionSwaps:true});
+ assert.equal(isOwnedScreen(s2),false);
+ assert.deepEqual(constrainCandidates(s2,c2,plan,'constrained').candidates.map(c=>c.command),[{action:'claim_reward',index:1}]);
+});
