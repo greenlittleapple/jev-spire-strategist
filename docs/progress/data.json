@@ -66,7 +66,8 @@
     {"run": "1790807077", "seed": "JEV21", "result": "lost", "act": 1, "floor": 14, "moves": 192, "tokens": 1516479, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
     {"run": "1790807355", "seed": "JEV22", "result": "lost", "act": 1, "floor": 17, "moves": 173, "tokens": 1097290, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
     {"run": "1790807614", "seed": "JEV23", "result": "lost", "act": 2, "floor": 31, "moves": 473, "tokens": 4231650, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
-    {"run": "1790808279", "seed": "JEV24", "result": "in progress", "act": 1, "floor": 8, "moves": 107, "tokens": 800467, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
+    {"run": "1790808279", "seed": "JEV24", "result": "lost", "act": 1, "floor": 8, "moves": 110, "tokens": 844040, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
+    {"run": "1790808437", "seed": "JEV25", "result": "in progress", "act": 1, "floor": 2, "moves": 11, "tokens": 60276, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
    ]
   },
   {
@@ -281,7 +282,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 24, "moves": 8883, "median_s": 0.77}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 25, "moves": 8897, "median_s": 0.77}
   ]
  }
 }
