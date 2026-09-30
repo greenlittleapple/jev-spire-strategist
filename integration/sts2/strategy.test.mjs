@@ -65,7 +65,7 @@ test('constrained mode enforces allowed options and gold reserve; advisory mode 
  const s=shop(),c=decisionCandidates(s);
  const p=adopted(s,c,'rich_shop',{allowed_option_ids:['a2','a3']});
  // Owned screens take the first listed option still offered.
- assert.deepEqual(constrainCandidates(s,c,p),{candidates:[c[2]],constraint:{kind:'strategist_choice',removed:3}});
+ assert.deepEqual(constrainCandidates(s,c,p),{candidates:[c[2]],constraint:{kind:'strategist_choice',removed:3,removed_ids:['a0','a1','a3'],remembered:false}});
  const rewards={...s,state_type:'rewards'},rp=adopted(rewards,c,'new_relic',{allowed_option_ids:['a2','a3']});
  assert.deepEqual(constrainCandidates(rewards,c,rp).candidates.map(x=>x.id),['a2','a3'],'other screens keep a filtered set');
  assert.equal(constrainCandidates(s,c,p,'advisory').candidates.length,4);
@@ -136,7 +136,7 @@ test('run start waits for the session plan, then Jev sees it and Claude-constrai
  assert.equal(status.plan.reason,'run_start');assert.equal(status.plan.run_id,'run-1');
  assert.deepEqual(Object.keys(requests[0].questions.move.criteria),['a0','a3']);
  assert.equal(requests[0].state.run_strategy.current_screen_note,'Buy Ashen Strike, then leave.');
- assert.deepEqual(result.constraint,{kind:'allowed_options',removed:2});
+ assert.deepEqual(result.constraint,{kind:'allowed_options',removed:2,removed_ids:['a1','a2']});
  assert.deepEqual(result.strategyEvents.map(e=>e.kind),['strategy_request','strategy_adopted']);
  assert.equal(await channel.current(),null,'answered request is consumed');
 }));

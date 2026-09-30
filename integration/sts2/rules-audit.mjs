@@ -34,15 +34,20 @@ export function reviewKind(d){
  return null;
 }
 
-// Keeps the fields the audit reads, so a large log fits in memory.
+const fc=f=>f?{hpLoss:f.hpLoss,quality:f.quality??null,survives:f.survives}:null;
+// Keeps the fields the audit reads, so a large log fits in memory. Other record kinds give null.
 export function slim(e){
  if(e.kind==='run_end')return {kind:'run_end',time:e.time,run:e.state?.run?.live_id??null,type:e.state?.state_type??null,hp:e.state?.player?.hp??0};
- const s=e.state??{},f=e.chosen?.forecast;
+ if(e.kind!=='decision')return null;
+ const s=e.state??{},f=e.chosen?.forecast,d=e.deliberation;
+ // Forecasts of the options a rule removed, when the rule recorded their IDs.
+ const removedIds=new Set((e.strategyConstraint?.rules??[e.strategyConstraint]).flatMap(r=>r?.removed_ids??[]));
+ const removed=removedIds.size?Object.fromEntries((e.candidates??[]).filter(c=>removedIds.has(c.id)).map(c=>[c.id,fc(c.forecast)])):null;
  return {kind:'decision',time:e.time,outcome:e.outcome,policy:e.policy??null,source:e.decisionSource??null,
   run:s.run?.live_id??null,act:s.run?.act??null,floor:s.run?.floor??null,type:s.state_type??null,battle:Boolean(s.battle),round:s.battle?.round??null,
   hp:s.player?.hp??null,max_hp:s.player?.max_hp??null,...(s.event?.event_id==='THE_ARCHITECT'?{architect:true}:{}),encounter:combat.has(s.state_type)&&s.battle?encounterKey(s.battle.enemies):null,
   options:e.candidates?.length??null,constraint:e.strategyConstraint??null,
-  review:reviewKind(e.deliberation),changed:e.deliberation?.changed??null,
+  review:reviewKind(d),changed:d?.changed??null,review_forecast:d?.review??null,override:d?.override??null,removed_forecast:removed,
   action:e.chosen?.command?.action??null,label:e.chosen?.label??null,
   forecast:f?{hpLoss:f.hpLoss,quality:f.quality??null,survives:f.survives,boundary:f.boundary??null,warnings:(f.warnings??[]).slice(0,3)}:null};
 }
@@ -120,12 +125,29 @@ export function errorSummary(rows){
   off_by_5_plus_pct:pctOf(abs.filter(x=>x>=5).length,abs.length)};
 }
 
+// A firing is costly when it removed a line forecast (known, surviving) to lose at least
+// max(5, 6% of max HP) less HP this turn than the line played; null without removed IDs or forecasts.
+function costlyRemoval(r,e){
+ const known=x=>x&&x.quality!=='unknown'&&x.survives===true&&Number.isFinite(x.hpLoss);
+ if(!r.removed_ids?.length||!e.removed_forecast||!known(e.forecast))return null;
+ const margin=Math.max(5,Math.ceil(0.06*(e.max_hp??0)));
+ return r.removed_ids.map(id=>e.removed_forecast[id]).some(x=>known(x)&&e.forecast.hpLoss-x.hpLoss>=margin);
+}
+// Review forecasts: for changed picks with both forecasts known, the first and final HP-loss forecasts.
+function reviewForecasts(v){
+ if(!v.some(x=>x.forecast))return {};
+ const rows=v.filter(x=>x.changed&&Number.isFinite(x.forecast?.initial?.hp_loss)&&Number.isFinite(x.forecast?.final?.hp_loss))
+  .map(x=>[x.forecast.initial.hp_loss,x.forecast.final.hp_loss]);
+ return {changed_with_forecasts:{n:rows.length,initial_mean_hp_loss:mean(rows.map(r=>r[0])),final_mean_hp_loss:mean(rows.map(r=>r[1])),
+  lower:rows.filter(([a,b])=>b<a).length,same:rows.filter(([a,b])=>b===a).length,higher:rows.filter(([a,b])=>b>a).length}};
+}
+
 const misses=rows=>rows.slice(0,8).map(({turnKey,ends_fight,survives,died,...r})=>({...r,run:String(r.run).split(':').pop()}));
 export function audit(events,{since=null,run=null}={}){
  const keep=e=>(!since||e.time>=since)&&(!run||e.run===run||String(e.run).endsWith(':'+run));
  events=events.filter(keep);
  const fights=buildFights(events);
- const firings=[],reviews=[],runs=new Map();
+ const firings=[],reviews=[],lifts=[],overrides=[],runs=new Map();
  for(const e of events){
   // The Architect event follows the final boss, and the game then ends the run at 0 HP.
   if(e.kind==='run_end'&&e.run)runs.set(e.run,runs.get(e.run)==='won'?'won':e.hp>0?'ended':'died');
@@ -140,10 +162,12 @@ export function audit(events,{since=null,run=null}={}){
    let left=e.options??null;
    for(const r of (c.rules??[c]).filter(x=>(x.removed??1)>0)){
     if(left!=null)left-=r.removed??0;
-    firings.push({...base,rule:r.kind,single:left===1,source:e.source});
+    firings.push({...base,rule:r.kind,single:left===1,source:e.source,costly:costlyRemoval(r,e),remembered:r.remembered??null});
    }
+   for(const l of c.lifted??[])lifts.push({run:e.run,rule:l.kind,reason:l.reason??'?'});
   }
-  if(e.review)reviews.push({...base,rule:'review:'+e.review,changed:e.changed===true});
+  if(e.review)reviews.push({...base,rule:'review:'+e.review,changed:e.changed===true,forecast:e.review_forecast});
+  if(e.override)overrides.push({run:e.run,kind:e.override.kind??'?',price:e.override.price??null});
  }
  const forecast=forecastCheck(events,fights);
  const errByTurn=new Map(forecast.filter(r=>!r.ends_fight).map(r=>[r.turnKey,r.error]));
@@ -161,12 +185,19 @@ export function audit(events,{since=null,run=null}={}){
   }
   return out;
  };
- const rules=summarize(firings,v=>({single_option:v.filter(x=>x.single).length,changed_pick:null}));
- const reviewOut=summarize(reviews,v=>({changed_pick:v.filter(x=>x.changed).length}));
+ const rules=summarize(firings,v=>({single_option:v.filter(x=>x.single).length,changed_pick:null,
+  ...(v.some(x=>x.costly!=null)?{with_removed_forecasts:v.filter(x=>x.costly!=null).length,costly:v.filter(x=>x.costly).length}:{}),
+  ...(v.some(x=>x.remembered!=null)?{remembered:v.filter(x=>x.remembered).length}:{})}));
+ const reviewOut=summarize(reviews,v=>({changed_pick:v.filter(x=>x.changed).length,...reviewForecasts(v)}));
  for(const [k,v] of Object.entries(reviewOut)){
   const inCombat=reviews.filter(x=>x.rule===k&&x.combat);
   if(inCombat.length)Object.assign(v,{when_changed:outcome(inCombat.filter(x=>x.changed),fights),when_kept:outcome(inCombat.filter(x=>!x.changed),fights)});
  }
+ const liftOut={};
+ for(const l of lifts){const x=(liftOut[l.rule+': '+l.reason]??={entries:0,runs:new Set()});x.entries++;x.runs.add(l.run);}
+ for(const x of Object.values(liftOut))x.runs=x.runs.size;
+ const overrideOut={};
+ for(const o of overrides){const x=(overrideOut[o.kind]??={decisions:0,gold_spent:0});x.decisions++;x.gold_spent+=o.price??0;}
  const byQuality=Object.fromEntries(Object.entries(Object.groupBy(forecast.filter(r=>!r.ends_fight),r=>r.quality)).sort().map(([k,v])=>[k,errorSummary(v)]));
  const byEncounter=Object.entries(Object.groupBy(forecast.filter(r=>!r.ends_fight),r=>`${r.type}: ${r.encounter}`))
   .map(([k,v])=>({encounter:k,...errorSummary(v)})).sort((a,b)=>b.n-a.n);
@@ -176,6 +207,9 @@ export function audit(events,{since=null,run=null}={}){
    first:events[0]?.time??null,last:events.at(-1)?.time??null},
   baseline:{all_combat_turns:baseline,...baselineBy},
   rules,reviews:reviewOut,
+  // Present only in logs that record them (rule lifts and Jev answer overrides).
+  ...(lifts.length?{lifts:Object.fromEntries(Object.entries(liftOut).sort())}:{}),
+  ...(overrides.length?{overrides:overrideOut}:{}),
   forecast:{
    // Turns that closed a fight (mostly deaths, where the loss is the HP left) are reported apart.
    overall:errorSummary(forecast.filter(r=>!r.ends_fight)),fight_ending_turns:errorSummary(forecast.filter(r=>r.ends_fight)),
@@ -207,6 +241,25 @@ export function report(a){
  for(const [k,r] of Object.entries(a.rules).filter(([,r])=>!r.combat_decisions))out.push(`${pad(k,22)} ${lpad(r.decisions,5)} ${lpad(r.single_option,6)}  runs ${r.runs}, died ${r.runs_died}`);
  out.push('','Reviews (changed: Jev switched its pick on the second look; HP kept/changed: mean HP lost that turn)');
  for(const [k,r] of Object.entries(a.reviews))out.push(`${pad(k,22)} ${lpad(r.decisions,5)} changed ${lpad(r.changed_pick,4)}`+(r.combat_decisions?` ${outcomeCells(r)}  HP kept ${r.when_kept.mean_hp_lost} / changed ${r.when_changed.mean_hp_lost}${fc(r)}`:''));
+ const withFc=Object.entries(a.reviews).filter(([,r])=>r.changed_with_forecasts?.n);
+ if(withFc.length){
+  out.push('','Changed picks with recorded forecasts: HP-loss forecast of the first pick against the final pick');
+  for(const [k,r] of withFc){const x=r.changed_with_forecasts;out.push(`${pad(k,22)} n ${lpad(x.n,4)}  first ${lpad(x.initial_mean_hp_loss,5)}  final ${lpad(x.final_mean_hp_loss,5)}  lower ${x.lower}, same ${x.same}, higher ${x.higher}`);}
+ }
+ const costly=Object.entries(a.rules).filter(([,r])=>r.with_removed_forecasts);
+ if(costly.length){
+  out.push('','Removed options, where the rule recorded their IDs. Costly: a removed line was forecast to lose max(5, 6% max HP) less than the line played');
+  for(const [k,r] of costly)out.push(`${pad(k,22)} ${lpad(r.with_removed_forecasts,5)} costly ${lpad(r.costly,4)}`);
+ }
+ for(const [k,r] of Object.entries(a.rules).filter(([,r])=>r.remembered!=null))out.push('',`${k}: ${r.remembered} of ${r.decisions} reused an answer from an earlier consult`);
+ if(a.lifts){
+  out.push('','Lifts: a rule stepped aside or would have removed every option (entries, runs)');
+  for(const [k,x] of Object.entries(a.lifts))out.push(`${pad(k,40)} ${lpad(x.entries,5)} ${lpad(x.runs,4)}`);
+ }
+ if(a.overrides){
+  out.push('','Overrides of Jev answers (decisions, gold of the chosen purchases)');
+  for(const [k,x] of Object.entries(a.overrides))out.push(`${pad(k,22)} ${lpad(x.decisions,5)} ${lpad(x.gold_spent,6)}`);
+ }
  for(const dim of ['type','act','policy']){
   out.push('',`By ${dim === 'type' ? 'fight type' : dim}: turns, no-HP share, mean HP, fights W/D/O`);
   const keys=Object.keys(a.baseline[dim]);
@@ -235,7 +288,7 @@ export async function readLogs(dir){
   // Streamed: the log passes the ~512 MB string limit. Only decisions and run ends are read.
   for await(const line of createInterface({input:createReadStream(resolve(dir,f))})){
    if(!line.includes('"kind":"decision"')&&!line.includes('"kind":"run_end"'))continue;
-   events.push(slim(JSON.parse(line)));
+   const e=slim(JSON.parse(line));if(e)events.push(e);
   }
  return events;
 }
