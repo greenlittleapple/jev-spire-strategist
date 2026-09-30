@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="312" viewBox="0 0 960 312" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
-<title id="t">Median time per move</title><desc id="d">Jev the Spire as imported: 3.00 s; Compact policy, same fixed waits: 2.45 s; Readiness-gated (current): 0.77 s</desc>
+<title id="t">Median time per move</title><desc id="d">Jev the Spire as imported: 3.00 s; Compact policy, same fixed waits: 2.45 s; Readiness-gated (current): 0.76 s</desc>
 <rect width="960" height="312" rx="12" fill="#1a1a19"/>
 <text x="24" y="40" font-size="20" font-weight="600" fill="#ffffff" text-anchor="start">Median time per move</text>
 <text x="24" y="64" font-size="14" font-weight="400" fill="#c3c2b7" text-anchor="start">Median seconds between consecutive executed moves, including the Jev call. Gaps over 10 minutes (pauses) are left out.</text>
@@ -17,9 +17,9 @@
 <path d="M560,170 H752 A4,4 0 0 1 756,174 V182 A4,4 0 0 1 752,186 H560 Z" fill="#898781" fill-opacity="1"/>
 <text x="766" y="183" font-size="14" font-weight="600" fill="#ffffff" text-anchor="start">2.45 s</text>
 <text x="24" y="234" font-size="15" font-weight="600" fill="#ffffff" text-anchor="start">Readiness-gated (current)</text>
-<text x="24" y="254" font-size="13.5" font-weight="400" fill="#c3c2b7" text-anchor="start">acts as soon as the bridge reports the game is ready · 26 runs, 9,419 moves</text>
-<path d="M560,230 H617.6 A4,4 0 0 1 621.6,234 V242 A4,4 0 0 1 617.6,246 H560 Z" fill="#3987e5" fill-opacity="1"/>
-<text x="631.6" y="243" font-size="14" font-weight="600" fill="#ffffff" text-anchor="start">0.77 s</text>
+<text x="24" y="254" font-size="13.5" font-weight="400" fill="#c3c2b7" text-anchor="start">acts as soon as the bridge reports the game is ready · 27 runs, 9,578 moves</text>
+<path d="M560,230 H616.8 A4,4 0 0 1 620.8,234 V242 A4,4 0 0 1 616.8,246 H560 Z" fill="#3987e5" fill-opacity="1"/>
+<text x="630.8" y="243" font-size="14" font-weight="600" fill="#ffffff" text-anchor="start">0.76 s</text>
 <text x="560" y="290" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">0 s</text>
 <text x="640" y="290" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">1 s</text>
 <text x="720" y="290" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">2 s</text>
