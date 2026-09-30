@@ -13,6 +13,7 @@
     "sts2:strategy": "node integration/sts2/strategy-cli.mjs",
     "sts2:start": "node integration/sts2/start-run.mjs",
     "sts2:scorecard": "node integration/sts2/scorecard.mjs",
+    "sts2:rules-audit": "node integration/sts2/rules-audit.mjs",
     "sts2:progress": "node integration/sts2/progress-chart.mjs",
     "sts2:check-runes": "node integration/sts2/check-rune-catalog.mjs",
     "sts2:test": "node --test integration/sts2/*.test.mjs && npm --prefix vendor/jev-the-spire test"
