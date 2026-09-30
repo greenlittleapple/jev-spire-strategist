@@ -7,7 +7,7 @@ import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId,FIGHT_START_REASONS,planForRun,activeFightPlan} from './playbook.mjs';
 import {encounterResults,planNeedsReview} from './fight-results.mjs';
-import {unmodeledNames,mechanicText,presentNames,mechanicKey} from './mechanics.mjs';
+import {unknownMechanics,mechanicsToAsk,mechanicText,presentNames,mechanicKey} from './mechanics.mjs';
 import {replayChoice} from './replay.mjs';
 
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -57,8 +57,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  const fightResults=()=>strategist.fightResults??null;
  const mechanics=strategist.mechanics??null;
  const known=mechanics?await mechanics.all():{};
- // Unmodeled powers, relics and cards in this fight that have no saved explanation yet.
- const unknownHere=['monster','elite','boss'].includes(state.state_type)?[...unmodeledNames(candidates)].filter(([n,kind])=>!known[mechanicKey(kind,n)]&&!known[mechanicKey('any',n)]):[];
+ // Unmodeled powers, relics and cards in this fight that have no saved explanation yet; powers named after
+ // your own cards and potions count as those items (integration/sts2/mechanics.mjs unknownMechanics).
+ const unknownHere=['monster','elite','boss'].includes(state.state_type)?unknownMechanics(state,candidates,known):[];
  const {map,position}=currentMap(state,mapMemory);
  status.fights??={};status.encountersAsked??=[];status.screenChoices??={};status.screenChoiceGiven??={};
  // Screens whose answer was adopted during this call (a strategist choice there is from this consult).
@@ -215,11 +216,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(status.countdownsAsked.length>50)status.countdownsAsked.shift();
   trigger='death_countdown';
  }
- // Unmodeled mechanics without a saved explanation ask once per fight.
+ // Unmodeled mechanics without a saved explanation: each name asks at most once per fight, and one that
+ // first appears later in the fight still asks.
  status.mechanicsAsked??=[];
- if(!trigger&&unknownHere.length&&!status.mechanicsAsked.includes(fightId(state))){
-  status.mechanicsAsked.push(fightId(state));
-  if(status.mechanicsAsked.length>50)status.mechanicsAsked.shift();
+ const toAsk=mechanicsToAsk(unknownHere,status.mechanicsAsked,fightId(state));
+ if(!trigger&&toAsk.length){
+  for(const [name] of toAsk)status.mechanicsAsked.push(`${fightId(state)}|${name}`);
+  while(status.mechanicsAsked.length>200)status.mechanicsAsked.shift();
   trigger='unknown_mechanic';
  }
  if(trigger)await consult(trigger);

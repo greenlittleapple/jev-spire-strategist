@@ -126,3 +126,26 @@ test('a combat rule that only records a lift does not claim a lone option; it st
  assert.equal(result.decisionSource,'single_option');
  assert.equal(result.constraint?.removed,0);assert.equal(result.constraint?.lifted?.[0]?.reason,'below_hallway_floor');
 });
+
+test('unknown_mechanic asks once per name per fight and leaves out powers named after your own potions',()=>withChannel(async channel=>{
+ // A normal fight with a saved encounter plan, so only the mechanics trigger can fire.
+ const state={state_type:'monster',run:run(6),player:{character:'Ironclad',hp:60,max_hp:80,energy:3,max_energy:3,block:0,gold:50,deck:[],relics:[relic],
+  potions:[{slot:0,id:'SHACKLING_POTION',name:'Shackling Potion',description:'Enemy loses 7 Strength this turn.',can_use_in_combat:true}],status:[],
+  hand:[{index:0,id:'STRIKE',name:'Strike',cost:'1',type:'Attack',description:'Deal 6 damage.',can_play:true,target_type:'AnyEnemy'}]},
+  battle:{round:2,turn:'player',is_play_phase:true,enemies:[{entity_id:'e',name:'Slime',hp:20,max_hp:20,block:0,status:[],intents:[]}]}};
+ const warn=(...names)=>({quality:'partial',survives:true,defeatedEnemies:[],warnings:names.map(n=>`Unmodeled enemy power: ${n}`)});
+ const candidates=[{id:'strike',label:'Strike',command:{action:'play_card',card_index:0},details:{description:'Deal 6 damage.'},forecast:warn('Ravenous','Shackling Potion')},
+  {id:'end',label:'End turn',command:{action:'end_turn'},details:{description:'End your turn.'},forecast:warn('Ravenous','Shackling Potion')}];
+ const status=newStrategyStatus({waitMs:5000});
+ status.plan=stampPlan(plan(),requestStamp(state,candidates,'run_start'));
+ const playbook={get:async()=>({plan:'Kill the Slime.',target_priority:[],source:'new_encounter'}),set:async()=>{}};
+ let calls=0;
+ await assert.rejects(hierarchicalDeliberate({state,candidates,strategist:{channel,status,playbook},cancelled:()=>++calls>1,ask:()=>assert.fail('no Jev call')}),/cancelled/);
+ const posted=await channel.current();
+ assert.equal(posted.stamp.reason,'unknown_mechanic');
+ assert.deepEqual(posted.brief.unknown_mechanics.map(m=>m.name),['Ravenous'],'our own potion is not an unknown enemy power');
+ // The same fight again: Ravenous was asked, so Jev decides without another consult.
+ const again=await hierarchicalDeliberate({state,candidates,strategist:{channel:{current:async()=>null,take:async()=>null,post:async()=>assert.fail('asked twice')},status,playbook},
+  ask:async()=>({answers:{move:{type:'choice',choice:'strike',confidence:0.9,probabilities:{strike:0.9,end:0.1}}},usage:{input_tokens:1,output_tokens:1}})});
+ assert.equal(again.answers.move.choice,'strike');
+}));
