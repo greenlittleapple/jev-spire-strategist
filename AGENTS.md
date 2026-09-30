@@ -5,3 +5,5 @@ When working on TypeSafe/Jev integration, question design, uncertainty handling,
 The selected game is Slay the Spire 2. Live Jev 1.13.0 has selected and executed a starting-relic choice. Start testing at Ascension 0; Ascension 10 strength remains unverified. Keep the user's existing gameplay mods enabled. See docs/STS2.md and docs/STS2-VERIFICATION.md for current integration and evidence.
 
 Claude strategy layer: while the STS2 runner is active, a Claude Code session acts as strategist through `npm run sts2:strategy -- wait | show | answer`. Follow docs/STS2.md#claude-strategy-layer. Plans must use only the brief's information and keep strings short. Running the watcher does not authorize starting Autoplay or a new run.
+
+Strategist brief: the agent that answers STS2 strategy requests works from docs/STS2-STRATEGIST.md (the loop, request reasons, brief, plan fields and how code enforces them, checked examples). The parent session spawns a `general-medium` agent with it rather than answering itself.
