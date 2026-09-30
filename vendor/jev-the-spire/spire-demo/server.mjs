@@ -25,6 +25,7 @@ if(lunaEnabled&&planBenefitEnabled)throw Error('Choose one experiment at a time:
 import { readFile, mkdir, appendFile, writeFile, rename, open, unlink } from 'node:fs/promises';
 import { readActiveCheckpoint, attachCheckpoint, defaultSaveRoot } from '../../../integration/sts2/save-state.mjs';
 import { characterName } from '../../../integration/sts2/character.mjs';
+import { labGit, fileSha256, fetchBridgeVersion, runStartRecord } from '../../../integration/sts2/run-record.mjs';
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -53,6 +54,8 @@ const sessionId = saved?.sessionId ?? new Date().toISOString().replaceAll(':', '
 const logFile = resolve(logDir, `${sessionId}.jsonl`);
 // Pinned so a new provider default can't change the model mid-comparison.
 const JEV_MODEL = process.env.JEV_MODEL ?? 'jev-1.13.0';
+// The lab commit at runner start, recorded in each run_start record (null without git).
+const labGitInfo = labGit(resolve(root, '../../..'));
 const MAX_DECISIONS = Number(process.env.MAX_DECISIONS ?? 2000);
 const MAX_INPUT_TOKENS = Number(process.env.MAX_INPUT_TOKENS ?? 30000000);
 if (!Number.isSafeInteger(MAX_DECISIONS) || MAX_DECISIONS < 1
@@ -241,6 +244,17 @@ async function step(token, preview = false) {
       view.message = 'Waiting for the saved checkpoint to match the live run: ' + (view.save?.reason ?? 'unavailable');
       if (Date.now() - waitingSince > 45000) stop(view.message);
       return;
+    }
+    // Once per run, before its first decision: what the run is played under (integration/sts2/run-record.mjs).
+    if (s.run?.live_id && view.runStartFor !== s.run.live_id) {
+      view.runStartFor = s.run.live_id;
+      const policy = planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY;
+      await log(runStartRecord({state: s, git: labGitInfo, policy, decisionMode: view.decisionMode, model: JEV_MODEL,
+        bridge: await fetchBridgeVersion(bridge + '/'),
+        content: {playbook: await fileSha256(resolve(strategyDir, 'playbook.json')), mechanics: await fileSha256(resolve(strategyDir, 'mechanics.json'))},
+        caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS},
+        save: checkpoint?.checkpoint?.run_id === s.run.live_id ? checkpoint.data : null}));
+      if (token !== generation) return;
     }
     // The bridge briefly reports unknown while entering a room or opening a selection.
     // Poll without issuing mutations, but retain a bounded stop for genuinely stuck screens.

@@ -5,10 +5,11 @@
 // game offers exactly the same options (integration/sts2/replay.mjs); combat is never replayed.
 // Seeds are required so decision modes can be compared on identical games. Runs use the
 // game's custom mode and are refused unless it shows ascension 0 and no modifiers.
-// It never abandons a run in progress.
+// It never abandons a run in progress. The record also carries the lab commit (lab_commit, lab_dirty).
 import {appendFile,mkdir,writeFile,rm} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {resolve,dirname} from 'node:path';
+import {labGit} from './run-record.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BRIDGE = 'http://127.0.0.1:15526/api/v1/singleplayer';
@@ -60,7 +61,7 @@ await dash(`/api/mode/${mode}`, true);
 // The first Autoplay acknowledges the new run identity; the second starts play.
 for (let i = 0; i < 3 && (await dash('/api/status')).mode !== 'running'; i++) { await dash('/api/run', true); await sleep(6000); }
 const after = await dash('/api/status');
-const record = {time:new Date().toISOString(), run:s.run.live_id, mode, seed:embark.seed, custom:true, character, ascension:s.run.ascension, label, replay_from:replayFrom};
+const record = {time:new Date().toISOString(), run:s.run.live_id, mode, seed:embark.seed, custom:true, character, ascension:s.run.ascension, label, replay_from:replayFrom, ...labGit(root)};
 await mkdir(resolve(root, '.private/sts2'), {recursive:true});
 await appendFile(resolve(root, '.private/sts2/series.jsonl'), JSON.stringify(record) + '\n');
 console.log(JSON.stringify({...record, runner:after.mode, message:after.message}));

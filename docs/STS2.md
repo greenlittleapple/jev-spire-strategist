@@ -40,6 +40,7 @@ The adapter handles visible rune choice, confirmation, player-rune rerolls and e
 - Original settings and profile1 saves: `.private/backups/before-sts2-setup/`. Restore only deliberately with the game closed; restoring progression can discard newer progress.
 - Disable only STS2 MCP in the game's mod list to stop exposing its local API. Other mods were not disabled or replaced.
 - Private run logs and session: `.private/sts2/runs/`.
+- Each run's log starts with a `run_start` record, written before the run's first decision (`integration/sts2/run-record.mjs`): `lab_commit` and `lab_dirty` (git at runner start; changes under `docs/` do not count as dirty), `policy`, `decision_mode`, `model`, `bridge` (the version in the bridge's root greeting), `content` (SHA-256 of the strategist's `playbook.json` and `mechanics.json` at that moment), `caps` (decision and input-token limits), `setup` (character from the save's ID, ascension, modifiers, game mode, seed) and the `act` and `floor` where the runner first played it. Any value that cannot be read is null. A runner restart mid-run does not write another record. `start-run` adds `lab_commit` and `lab_dirty` to its `series.jsonl` row.
 
 ## Sources and provenance
 
