@@ -17,7 +17,7 @@
 <path d="M560,170 H752 A4,4 0 0 1 756,174 V182 A4,4 0 0 1 752,186 H560 Z" fill="#898781" fill-opacity="1"/>
 <text x="766" y="183" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">2.45 s</text>
 <text x="24" y="234" font-size="15" font-weight="600" fill="#0b0b0b" text-anchor="start">Readiness-gated (current)</text>
-<text x="24" y="254" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">acts as soon as the bridge reports the game is ready · 19 runs, 7,905 moves</text>
+<text x="24" y="254" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">acts as soon as the bridge reports the game is ready · 20 runs, 7,938 moves</text>
 <path d="M560,230 H617.6 A4,4 0 0 1 621.6,234 V242 A4,4 0 0 1 617.6,246 H560 Z" fill="#2a78d6" fill-opacity="1"/>
 <text x="631.6" y="243" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">0.77 s</text>
 <text x="560" y="290" font-size="12" font-weight="400" fill="#898781" text-anchor="middle">0 s</text>
