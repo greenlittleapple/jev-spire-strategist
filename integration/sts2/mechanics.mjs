@@ -14,7 +14,9 @@ export function unmodeledNames(candidates) {
  for(const c of candidates??[]){
   for(const w of c.forecast?.warnings??[]){
    const m=String(w).match(/^Unmodeled (enemy power|player power|relic): (.+)$/);
-   if(m)names.set(m[2].trim(),m[1]);
+   // A power named after a potion the forecast models is that potion's own effect
+   // (JEV22: "enemy power: Shackling Potion", the Strength it takes away this turn).
+   if(m&&!(m[1]!=='relic'&&supportedPotions.has(m[2].trim().toLowerCase())))names.set(m[2].trim(),m[1]);
   }
   // notModeled names the card a line stopped on; a supported card there stopped for another reason
   // (an enemy power already flagged above), so only unsupported cards count.
@@ -22,6 +24,43 @@ export function unmodeledNames(candidates) {
  }
  return names;
 }
+
+// The player's own cards (every pile) and potions, by lower-case name, with the card type.
+const lc=x=>String(x?.name??'').replace(/\+$/,'').toLowerCase();
+function ownItems(state) {
+ const p=state?.player??{},cards=new Map();
+ for(const c of [...(p.deck??[]),...(p.hand??[]),...(p.draw_pile??[]),...(p.discard_pile??[]),...(p.exhaust_pile??[])])if(lc(c))cards.set(lc(c),c.type??null);
+ return {cards,potions:new Set((p.potions??[]).map(lc).filter(Boolean))};
+}
+
+// Mechanics to ask the strategist about in this fight, as [name, kind]: unmodeled, without a saved
+// note, and not the effect of the player's own card or potion. A power named after one of your cards
+// or potions is that item's effect (JEV21: "player power: The Bomb" after the card had been explained;
+// JEV22: "enemy power: Shackling Potion"). It counts as known when the item is modeled or explained;
+// otherwise the item itself is asked about, as a card, so one note covers both. An enemy power named
+// after a Power card in your deck is not treated as yours (enemies can have Barricade too).
+// One entry per name.
+export function unknownMechanics(state,candidates,known={}) {
+ const {cards,potions}=ownItems(state);
+ const noted=(kind,n)=>Boolean(known[mechanicKey(kind,n)]||known[mechanicKey('any',n)]);
+ const out=new Map();
+ for(const [name,kind] of unmodeledNames(candidates)){
+  const l=name.toLowerCase();
+  const potion=potions.has(l)||supportedPotions.has(l);
+  const card=cards.has(l)&&!(kind==='enemy power'&&cards.get(l)==='Power');
+  if(kind.endsWith('power')&&(potion||card)){
+   if((potion&&supportedPotions.has(l))||(card&&supportedCards.has(l))||noted('card',name))continue;
+   if(!out.has(name))out.set(name,'card');
+   continue;
+  }
+  if(!noted(kind,name)&&!out.has(name))out.set(name,kind);
+ }
+ return [...out];
+}
+
+// Names not yet asked about in this fight: each name is asked at most once per fight, and a
+// mechanic that first appears later in the fight is still asked. asked holds "fight|name" entries.
+export const mechanicsToAsk=(unknown,asked,fight)=>unknown.filter(([name])=>!asked.includes(`${fight}|${name}`));
 
 // The visible text of a named power, relic or card in this state.
 export function mechanicText(state,name) {
