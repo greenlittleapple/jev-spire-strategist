@@ -29,7 +29,7 @@ async function fakeWorld() {
  return w;
 }
 // Starts a run in the fake world the way start-run leaves it: game on floor 1, runner running.
-function starter(w, {endAfter = 2, runner = 'running', message = 'Autoplay enabled', onStart} = {}) {
+function starter(w, {endAfter = 2, runner = 'running', message = 'Autoplay enabled', onStart, endFloor = 17, endResult, endMessage = 'Run ended in defeat.'} = {}) {
  let n = 0;
  return async ({mode, seed}) => {
   const run = `r${++n}`, s = {state_type:'map', run:{live_id:run, act:1, floor:1}, player:{hp:80}};
@@ -37,8 +37,8 @@ function starter(w, {endAfter = 2, runner = 'running', message = 'Autoplay enabl
   let reads = 0;
   w.onStatus = world => {
    if (world.status.mode !== 'running' || ++reads < endAfter) return;
-   const end = {state_type:'game_over', run:{live_id:run, act:1, floor:17}, player:{hp:0}};
-   Object.assign(world.status, {mode:'paused', message:'Run ended in defeat.', state:end, events:[{kind:'run_end', time:new Date().toISOString(), state:end}]});
+   const end = {state_type:'game_over', run:{live_id:run, act:endFloor > 33 ? 3 : 1, floor:endFloor}, player:{hp:0}};
+   Object.assign(world.status, {mode:'paused', message:endMessage, state:end, events:[{kind:'run_end', time:new Date().toISOString(), ...(endResult ? {result:endResult} : {}), state:end}]});
    world.game = end; world.onStatus = null;
   };
   onStart?.(run);
@@ -82,6 +82,15 @@ test('a two-seed series starts each run after the previous one ends and logs one
   assert.ok(w.lines.some(l => /saved run exists/.test(l)));
   assert.deepEqual(w.posts, []);
   assert.equal(await exists(join(w.options.root, '.private/sts2/series.lock')), false);
+ } finally { await w.close(); }
+});
+
+test('the run_end result is used even when the status message has changed (a win at The Architect ends at 0 HP)', async () => {
+ const w = await fakeWorld();
+ try {
+  const start = starter(w, {endFloor:48, endResult:'victory', endMessage:'Paused by the operator.'});
+  const {results} = await runSeries({...w.options, seeds:['JEV21'], arms:['claude'], startRun:start});
+  assert.deepEqual(results.map(r => [r.run, r.result, r.act, r.floor]), [['r1', 'victory', 3, 48]]);
  } finally { await w.close(); }
 });
 

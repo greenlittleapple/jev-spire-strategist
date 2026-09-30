@@ -221,6 +221,8 @@ async function observe(retries = 2) {
   return s;
 }
 let lastEventId = null;
+// The policy label for the current decision mode, logged on run_start and every decision.
+const currentPolicy = () => planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY;
 async function step(token, preview = false) {
   if (busy || Date.now() < nextDecisionAt) return;
   busy = true;
@@ -235,8 +237,9 @@ async function step(token, preview = false) {
     if (s.state_type === 'game_over') {
       if(strategist?.fightResults)recordFight(strategist.fightResults,s);
       // The Architect event follows the final boss; the run then ends at 0 HP although it was won.
-      stop(lastEventId === 'THE_ARCHITECT' ? 'Run ended in victory.' : s.player?.hp <= 0 ? 'Run ended in defeat.' : 'Run ended. Verify the result in the game.');
-      await log({ kind: 'run_end', state: s }); return;
+      const result = lastEventId === 'THE_ARCHITECT' ? 'victory' : s.player?.hp <= 0 ? 'defeat' : 'unknown';
+      stop(result === 'unknown' ? 'Run ended. Verify the result in the game.' : `Run ended in ${result}.`);
+      await log({ kind: 'run_end', result, state: s }); return;
     }
     if (s.hextech?.available === false) throw Error('Hextech active rules could not be read: '+s.hextech.error);
     if (s.run && !s.saved_run) {
@@ -248,8 +251,7 @@ async function step(token, preview = false) {
     // Once per run, before its first decision: what the run is played under (integration/sts2/run-record.mjs).
     if (s.run?.live_id && view.runStartFor !== s.run.live_id) {
       view.runStartFor = s.run.live_id;
-      const policy = planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY;
-      await log(runStartRecord({state: s, git: labGitInfo, policy, decisionMode: view.decisionMode, model: JEV_MODEL,
+      await log(runStartRecord({state: s, git: labGitInfo, policy: currentPolicy(), decisionMode: view.decisionMode, model: JEV_MODEL,
         bridge: await fetchBridgeVersion(bridge + '/'),
         content: {playbook: await fileSha256(resolve(strategyDir, 'playbook.json')), mechanics: await fileSha256(resolve(strategyDir, 'mechanics.json'))},
         caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS},
@@ -334,7 +336,7 @@ async function step(token, preview = false) {
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY, decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
+    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();

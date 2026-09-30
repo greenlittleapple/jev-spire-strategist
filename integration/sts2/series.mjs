@@ -154,7 +154,8 @@ export async function runSeries(options) {
     if (s) {
      if (s.state?.run?.live_id === run) lastState = s.state;
      const end = (s.events ?? []).find(e => e.kind === 'run_end' && (e.state?.run?.live_id ? e.state.run.live_id === run : s.runId === run && e.time >= startedAt));
-     if (end) { ended = {state: end.state, result: resultOf(/^Run ended/.test(s.message) ? s.message : '', end.state), source: 'run_end'}; break; }
+     // Runners since the run_end result field log it; older ones only word it in the status message.
+     if (end) { ended = {state: end.state, result: end.result && end.result !== 'unknown' ? end.result : resultOf(/^Run ended/.test(s.message) ? s.message : '', end.state), source: 'run_end'}; break; }
      if (s.mode === 'paused') {
       // A game-over screen for this run that the runner did not log (the operator finished it by hand).
       let g = null; try { g = await game(); } catch {}
