@@ -13,6 +13,9 @@ import {replayChoice} from './replay.mjs';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const addUsage=(a,b)=>({input_tokens:(a?.input_tokens??0)+(b?.input_tokens??0),output_tokens:(a?.output_tokens??0)+(b?.output_tokens??0)});
 const noUsage={input_tokens:0,output_tokens:0};
+// Constraints from code rules, not from the strategist's plan: when one leaves a single option the
+// move is labeled 'rule' (with the rule's name), not 'claude'.
+const RULE_CONSTRAINTS=new Set(['combat','exhaust_choice','rest_waste']);
 const direct=(decisionSource,model,choice,extra={})=>({decisionSource,model,usage:noUsage,deliberation:null,...extra,
  answers:{move:{type:'choice',choice:choice.id,confidence:null,probabilities:{}}}});
 
@@ -27,7 +30,10 @@ export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.
 // replay = the active reference run from replay.mjs, or null.
 // factsVersion 2 or 3 adds exact route/resource facts (jev-compact-v2/v3); strategy uses v3.
 // mapMemory = {runId, act, map, position} from the runner's last map screen.
-export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
+// onEvent(event) receives each strategy event when it happens (the runner logs it then), so a
+// request posted by a decision that is later cancelled, or before a runner restart, is still logged.
+// strategyEvents in the result lists the same events.
+export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},onEvent=null,strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
  const version=strategist?3:factsVersion,factsPolicy=version>=3?FACTS_V3_POLICY:FACTS_POLICY;
  const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
@@ -39,6 +45,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   replay.diverged.add(screenKey(state));
   events.push({kind:'replay_diverged',screen:screenKey(state),source_run:replay.source});
  }
+ const emit=async event=>{events.push(event);if(onEvent)await onEvent(event);};
+ if(onEvent)for(const e of events)await onEvent(e);
  if(!strategist){
   if(replayed)return {...direct('replay','Reference run',replayed),strategyEvents:events};
   return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
@@ -51,19 +59,23 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  // Unmodeled powers, relics and cards in this fight that have no saved explanation yet.
  const unknownHere=['monster','elite','boss'].includes(state.state_type)?[...unmodeledNames(candidates)].filter(([n,kind])=>!known[mechanicKey(kind,n)]&&!known[mechanicKey('any',n)]):[];
  const {map,position}=currentMap(state,mapMemory);
- status.fights??={};status.encountersAsked??=[];status.screenChoices??={};
+ status.fights??={};status.encountersAsked??=[];status.screenChoices??={};status.screenChoiceGiven??={};
+ // Screens whose answer was adopted during this call (a strategist choice there is from this consult).
+ const adoptedHere=new Set();
  const encounter=currentEncounter(state,status.fights);
  const adopt=async()=>{
   const request=await channel.current();
   const answer=request&&await channel.take(request.id);
   if(!answer)return false;
   status.plan=stampPlan(answer.plan,request.stamp,{request_id:request.id,answeredAt:answer.answeredAt});
-  status.answers++;status.available=true;
-  // Remember each screen's ordered list so returning to that screen reuses it.
+  status.answers++;status.available=true;adoptedHere.add(status.plan.screen);
+  // Remember each screen's ordered list so returning to that screen reuses it; screenChoiceGiven
+  // records the request and floor each list came from, for the decision records.
   if(status.plan.allowed_options?.length){
-   if(Object.keys(status.screenChoices).some(k=>!k.startsWith(String(status.plan.run_id))))status.screenChoices={};
+   if(Object.keys(status.screenChoices).some(k=>!k.startsWith(String(status.plan.run_id)))){status.screenChoices={};status.screenChoiceGiven={};}
    status.screenChoices[status.plan.screen]=status.plan.allowed_options;
-   const keys=Object.keys(status.screenChoices);if(keys.length>60)delete status.screenChoices[keys[0]];
+   status.screenChoiceGiven[status.plan.screen]={request_id:request.id,floor:status.plan.floor};
+   const keys=Object.keys(status.screenChoices);if(keys.length>60){delete status.screenChoices[keys[0]];delete status.screenChoiceGiven[keys[0]];}
   }
   if(mechanics){
    const meta={run:request.stamp.run_id,floor:request.stamp.floor};
@@ -77,7 +89,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   }
   if(playbook&&request.stamp.encounter_key&&answer.plan.fight?.plan)
    await playbook.set(request.stamp.encounter_key,answer.plan.fight,{source:request.stamp.reason,run:request.stamp.run_id,floor:request.stamp.floor});
-  events.push({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,plan:status.plan});
+  await emit({kind:'strategy_adopted',reason:request.stamp.reason,request_id:request.id,requestCreatedAt:request.createdAt??null,answeredAt:answer.answeredAt??null,plan:status.plan});
   return true;
  };
  const consult=async reason=>{
@@ -107,7 +119,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
      // so the fight-start trigger does not fire again for the same fight.
      ...(!['monster','elite','boss'].includes(state.state_type)&&status.plan?.encounter&&status.plan.floor===state.run.floor&&status.plan.run_id===state.run.live_id?{encounter:status.plan.encounter}:{})}});
    status.requests++;
-   events.push({kind:'strategy_request',reason,request_id:request.id});
+   // Logged when posted, with the brief the strategist is shown.
+   await emit({kind:'strategy_request',reason,request_id:request.id,key,run_id:state.run?.live_id??null,state_type:state.state_type,
+    act:state.run?.act??null,floor:state.run?.floor??null,createdAt:request.createdAt,brief});
   }
   // Claude strategy mode never falls back to Jev: play waits for the answer until
   // it arrives or the operator pauses (which cancels the decision).
@@ -120,11 +134,26 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  };
  const decide=async()=>{
   if(replayed)return direct('replay','Reference run',replayed);
-  if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('forced',null,candidates[0]);
+  // True forced choices (isForcedChoice) returned above; one candidate left here comes from the
+  // runner's own filters (actionsFor), and the game may allow other actions.
+  if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('filtered',null,candidates[0]);
   const fight=playbook&&encounter?await playbook.get(encounter):null;
   const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
-  // A single allowed option is Claude's choice; no Jev call is needed.
-  if(constraint&&options.length===1)return direct('claude','Strategist',options[0],{constraint});
+  // A single option left by a code rule is that rule's move; one left by the strategist's plan is
+  // its choice. Neither needs a Jev call.
+  if(constraint&&options.length===1&&RULE_CONSTRAINTS.has(constraint.kind))
+   return direct('rule','Rule',options[0],{constraint,rule:constraint.kind==='combat'?constraint.rules?.at(-1)?.kind??'combat':constraint.kind});
+  if(constraint&&options.length===1){
+   const extra={constraint};
+   if(constraint.kind==='strategist_choice'){
+    const key=screenKey(state),given=status.screenChoices[key]?status.screenChoiceGiven[key]:{request_id:status.plan.request_id??null,floor:status.plan.floor??null};
+    extra.screenChoice={source:adoptedHere.has(key)?'consult':'remembered',floor:given?.floor??null,request_id:given?.request_id??null};
+    // A relic bought from the strategist's own list does not ask again as a new relic.
+    const item=options[0].command.action==='shop_purchase'?options[0].details:null;
+    if(item?.category==='relic'&&item.relic_id)status.listRelics={run_id:state.run?.live_id,ids:[...(status.listRelics?.run_id===state.run?.live_id?status.listRelics.ids:[]),item.relic_id].slice(-10)};
+   }
+   return direct('claude','Strategist',options[0],extra);
+  }
   const strategy=strategyContext(status.plan,state,fight);
   // Saved explanations of mechanics present now reach Jev directly, not only through plan text.
   const here=presentNames(state),notes=Object.entries(known).filter(([k,{note}])=>here.has(k)&&note!=='No special handling noted.').map(([k,{name,note}])=>({name:name??k,note}));
@@ -136,6 +165,14 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  let trigger=replanReason(state,status.plan,candidates,{ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
  // A replayed screen needs no strategist decision.
  if(trigger==='owned_screen'&&replayed)trigger=null;
+ // new_relic after buying the relic from the strategist's own shop list: the plan already chose it,
+ // so the relic joins the plan's list instead of asking again (10 of 82 new_relic consults).
+ if(trigger==='new_relic'&&status.listRelics?.run_id===state.run?.live_id){
+  const planned=status.plan.relic_ids??[],added=(state.player?.relics??[]).map(r=>r.id).filter(id=>!planned.includes(id));
+  if(added.length&&added.every(id=>status.listRelics.ids.includes(id))){
+   status.plan={...status.plan,relic_ids:[...planned,...added].sort()};status.listRelics=null;trigger=null;
+  }
+ }
  // A normal fight's first sight of an encounter with no saved plan asks for one, once per fight.
  // A saved plan that went badly since it was written (a loss, or a quarter of max HP lost on average)
  // is reviewed once per fight.

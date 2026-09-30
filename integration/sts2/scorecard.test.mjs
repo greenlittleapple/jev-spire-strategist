@@ -76,3 +76,20 @@ test('the CLI reads logs from STS2_PRIVATE_DIR',async()=>{
   assert.equal(row.moves,5);assert.equal(row.near_ties.all.share,1);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
+
+test('requests logged when posted date from createdAt; consults count adoptions and rule moves are separate',()=>{
+ const d=(source,constraint,t='2026-09-30T00:02:00.000Z')=>({...decision(state(2,'monster'),'Go'),time:t,decisionSource:source,strategyConstraint:constraint});
+ const [s]=scoreRuns([
+  {kind:'strategy_request',time:'2026-09-30T00:00:01.000Z',request_id:'q1',run_id:'r1',createdAt:'2026-09-30T00:00:01.000Z'},
+  {kind:'strategy_adopted',time:'2026-09-30T00:00:08.000Z',request_id:'q1',requestCreatedAt:'2026-09-30T00:00:01.000Z',answeredAt:'2026-09-30T00:00:07.000Z',plan:{run_id:'r1',createdAt:'2026-09-30T00:00:08.000Z'}},
+  // A cancelled wait: logged, never answered.
+  {kind:'strategy_request',time:'2026-09-30T00:01:00.000Z',request_id:'q2',run_id:'r1',createdAt:'2026-09-30T00:01:00.000Z'},
+  d('rule',{kind:'combat',rules:[{kind:'hallway_potion',removed:1}]}),
+  // An older log labeled a rule's single option as claude.
+  d('claude',{kind:'combat',rules:[{kind:'take_lethal',removed:2}]}),
+  d('claude',{kind:'strategist_choice',removed:2}),d('filtered',null)]);
+ assert.deepEqual(s.strategist,{requests:2,answers:1,median_answer_s:6});
+ assert.equal(s.claude_consults,1);assert.equal(s.rule_moves,2);
+ assert.deepEqual(s.sources,{rule:2,claude:1,filtered:1});
+ assert.deepEqual(s.rules.hallway_potion,{fired:1,forced:1});
+});

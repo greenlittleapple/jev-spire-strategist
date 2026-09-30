@@ -18,18 +18,24 @@ export function nearTie(answer) {
  const p = Object.values(answer?.probabilities ?? {}).filter(Number.isFinite).sort((a,b) => b - a);
  return p.length >= 2 ? p[0] - p[1] < NEAR_TIE : null;
 }
+// Constraints from code rules. Before decisionSource 'rule' existed, a rule that left one option was
+// logged as 'claude'; those are counted as rule moves here.
+const RULE_CONSTRAINTS = new Set(['combat','exhaust_choice','rest_waste']);
+export const sourceOf = e => e.decisionSource === 'claude' && RULE_CONSTRAINTS.has(e.strategyConstraint?.kind) ? 'rule' : e.decisionSource ?? 'jev';
 const median = a => { if (!a.length) return null; const s = [...a].sort((x,y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
 
 export function scoreRuns(events, series=[]) {
  const started = new Map(series.map(r => [r.run, r]));
  const runs = new Map();
- // Strategist requests are logged just before the decision that posted them; that decision
- // started latencyMs before its own record, which dates the request and names its run.
- // An answer is adopted when its plan is stamped (plan.createdAt).
+ // Strategist requests are logged when posted, with run_id and createdAt, and adoptions carry
+ // requestCreatedAt and answeredAt. Older logs wrote the request just before the decision that posted
+ // it; that decision started latencyMs before its own record, which dates the request and names its
+ // run, and the answer time is then taken at adoption (plan.createdAt).
  let unplaced = [];
  const requests = new Map(), adopted = [];
  const get = (id, time) => { const r = runs.get(id) ?? {id, first:time, last:time, decisions:[], end:null, requests:0, answers:0, answer_ms:[]}; runs.set(id, r); return r; };
  for (const e of events) {
+  if (e.kind === 'strategy_request' && e.run_id && e.createdAt) { requests.set(e.request_id, {run:e.run_id, start:Date.parse(e.createdAt)}); get(e.run_id, e.time).requests++; continue; }
   if (e.kind === 'strategy_request') { unplaced.push(e); continue; }
   if (e.kind === 'strategy_adopted') { adopted.push(e); continue; }
   const id = e.state?.run?.live_id;
@@ -48,7 +54,8 @@ export function scoreRuns(events, series=[]) {
   const q = requests.get(a.request_id), r = runs.get(a.plan?.run_id ?? q?.run);
   if (!r) continue;
   r.answers++;
-  const ms = Date.parse(a.plan?.createdAt ?? a.time) - (q?.start ?? NaN);
+  const ms = a.answeredAt && a.requestCreatedAt ? Date.parse(a.answeredAt) - Date.parse(a.requestCreatedAt)
+   : Date.parse(a.plan?.createdAt ?? a.time) - (q?.start ?? NaN);
   if (Number.isFinite(ms) && ms >= 0) r.answer_ms.push(ms);
  }
  return [...runs.values()].map(r => ({...score(r), seed: started.get(r.id)?.seed ?? null, series_mode: started.get(r.id)?.mode ?? null, label: started.get(r.id)?.label ?? null}));
@@ -94,7 +101,7 @@ function score(r) {
  const rules = {};
  for (const e of executed) {
   const c = e.strategyConstraint; if (!c) continue;
-  const forced = e.decisionSource === "claude" && combat.has(e.state.state_type);
+  const forced = ['claude','rule'].includes(e.decisionSource) && combat.has(e.state.state_type);
   for (const k of (c.rules ?? [c]).filter(x => (x.removed ?? 1) > 0).map(x => x.kind)) {
    const n = rules[k] ??= {fired: 0, forced: 0}; n.fired++; if (forced) n.forced++;
   }
@@ -117,7 +124,10 @@ function score(r) {
   potions_used: potions, potions_used_outside_elites_bosses: potions.filter(p => p.startsWith('monster')).length,
   moves: executed.length, jev_requests: requests.length, input_tokens: tokens,
   rules,
-  claude_consults: r.decisions.filter(e => e.decisionSource === 'claude').length,
+  // Consults are adopted strategist answers; rule moves are single options left by a code rule.
+  claude_consults: r.answers,
+  rule_moves: executed.filter(e => sourceOf(e) === 'rule').length,
+  sources: executed.reduce((n, e) => (n[sourceOf(e)] = (n[sourceOf(e)] ?? 0) + 1, n), {}),
   near_ties: Object.fromEntries(Object.entries(tie).map(([k,v]) => [k, {...v, share: v.decisions ? Math.round(100 * v.near_ties / v.decisions) / 100 : null}])),
   strategist: r.requests || r.answers ? {requests: r.requests, answers: r.answers, median_answer_s: r.answer_ms.length ? Math.round(median(r.answer_ms) / 100) / 10 : null} : null,
  };
@@ -131,7 +141,8 @@ function table(rows) {
    `elites ${s.elites_fought} (chose ${s.elite_choices_taken}/${s.elite_choices_offered})`, `relics ${s.relics_end}`, `gold ${s.gold_end}`,
    `potions ${s.potions_used.length} (${s.potions_used_outside_elites_bosses} hallway)`, `${s.moves} moves`, `rules ${Object.entries(s.rules).map(([k,v]) => `${k} ${v.fired}${v.forced ? `/${v.forced} forced` : ""}`).join(", ") || "-"}`, `${(s.input_tokens/1e6).toFixed(2)}M tok`,
    `near ties ${pct(s.near_ties.all.share)} (combat ${pct(s.near_ties.combat.share)}, other ${pct(s.near_ties.other.share)}) of ${s.near_ties.all.decisions}`,
-   s.strategist ? `strategist ${s.strategist.requests} req, ${s.strategist.answers} ans, median ${s.strategist.median_answer_s ?? '-'}s` : 'no strategist'].join(' | ');
+   s.strategist ? `strategist ${s.strategist.requests} req, ${s.strategist.answers} ans, median ${s.strategist.median_answer_s ?? '-'}s` : 'no strategist',
+   `${s.rule_moves} rule moves`].join(' | ');
  };
  return rows.map(line).join('\n');
 }
@@ -148,6 +159,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
    if (!['decision', 'run_end', 'strategy_request', 'strategy_adopted'].includes(kind)) continue;
    const e = JSON.parse(line); delete e.candidates; delete e.memory;
    if (kind === 'strategy_adopted') e.plan = {run_id: e.plan?.run_id, createdAt: e.plan?.createdAt};
+   if (kind === 'strategy_request') delete e.brief;
    events.push(e);
   }
  const seriesFile = resolve(dir, '../series.jsonl');
