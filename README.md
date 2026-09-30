@@ -47,6 +47,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Jev v2 (`jev-compact-v2`) | 14<sup>a</sup>, 28<sup>a</sup> | Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead |
 | Jev v3 (`jev-compact-v3`) | 15<sup>a</sup>, 7, 23<sup>a</sup> | Ordered route facts; second looks at hallway potion use and leaving a shop with gold |
 | Jev v3.2 (`jev-compact-v3.2`) | **0 of 5 won, median floor 14**: JEV21: 14, JEV22: 17, JEV23: 31, JEV24: 8, JEV25: 8 | Leaves a shop only when Jev puts at least half its probability on leaving; log-review fixes |
+| Jev v3.3 (`jev-compact-v3.3`) | - | The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle |
 | Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a</sup>, JEV2: 48<sup>a</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
 | Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a</sup>, JEV2: 48<sup>a</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
 | Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
@@ -67,6 +68,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27<sup>e</sup>, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
 | Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30 | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
 | Strategist v3.17 (`claude-strategy-v3`) | JEV21: 33, JEV22: 11 | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
+| Strategist v3.18 (`claude-strategy-v3`) | - | Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes |
 
 - <sup>a</sup> Multi-hit attack intents such as "3x7 (21)" were not parsed, so incoming damage and survival forecasts were unknown on those turns. Fixed in 8db3d55.
 - <sup>b</sup> The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP. Fixed in 470cf3c.
