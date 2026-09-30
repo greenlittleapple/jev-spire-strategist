@@ -139,9 +139,10 @@ You need Slay the Spire 2 on Steam (tested on v0.111.0), the .NET 9 SDK, Node.js
 2. Copy `.env.example` to `.env` and set `TYPESAFE_API_KEY`.
 3. Launch the game through Steam, then run `npm run sts2` (or double-click `Jev STS2.cmd`) and open http://127.0.0.1:4317. Choose the decision mode on the dashboard; the runner starts paused.
 4. From the game's main menu, start a seeded run and hand it to the runner: `npm run sts2:start -- --mode claude --seed JEV1`.
-5. For strategist mode, open this folder in Claude Code and ask it to act as the strategist. `AGENTS.md` points it to the request loop.
+5. For strategist mode, open this folder in Claude Code and ask it to act as the strategist, or to start an agent that answers from [docs/STS2-STRATEGIST.md](docs/STS2-STRATEGIST.md). `AGENTS.md` points it to the request loop.
+6. For several seeded runs in a row, `npm run sts2:series -- --seeds JEV21,JEV22 --mode jev_facts_v3` starts each run after the previous one ends; `--arms jev_facts_v3,claude` plays every seed in both modes. `touch .private/sts2/stop-series` stops it after the current run.
 
-`npm run sts2:scorecard` summarizes every logged run. `npm run sts2:progress -- --add` adds logged runs that the chart data lacks under their version (from the run's series label, or its policy when only one version has it) and rebuilds the charts above from the local logs; `-- --refresh` only updates the runs already listed. Logs, saves and the key stay in the ignored `.private/` folder and `.env`. Setup details, controls and recovery steps are in [docs/STS2.md](docs/STS2.md); verification evidence is in [docs/STS2-VERIFICATION.md](docs/STS2-VERIFICATION.md).
+`npm run sts2:scorecard` summarizes every logged run, and `npm run sts2:rules-audit` shows what each enforced rule and review removed or changed and what followed, with the forecast checked against the HP actually lost. `npm run sts2:progress -- --add` adds logged runs that the chart data lacks under their version (from the run's series label, or its policy when only one version has it) and rebuilds the charts above from the local logs; `-- --refresh` only updates the runs already listed. Logs, saves and the key stay in the ignored `.private/` folder and `.env`. Setup details, controls and recovery steps are in [docs/STS2.md](docs/STS2.md); verification evidence is in [docs/STS2-VERIFICATION.md](docs/STS2-VERIFICATION.md); the plan, next steps and open items are in [docs/PLAN.md](docs/PLAN.md).
 
 ## Porting to another game
 
