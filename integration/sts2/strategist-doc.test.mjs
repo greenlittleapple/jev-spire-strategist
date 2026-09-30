@@ -14,7 +14,8 @@ import {mapNodeKeys,distinctRoutes} from './route-facts.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
 const here=dirname(fileURLToPath(import.meta.url));
-const doc=await readFile(resolve(here,'../../docs/STS2-STRATEGIST.md'),'utf8');
+// CI checks the repository out on Windows with CRLF line endings; parse the doc as LF.
+const doc=(await readFile(resolve(here,'../../docs/STS2-STRATEGIST.md'),'utf8')).replace(/\r\n/g,'\n');
 // Each example is a ```json block directly after <!-- example: name -->.
 const blocks=[...doc.matchAll(/```json\n([\s\S]*?)\n```/g)];
 const examples=Object.fromEntries([...doc.matchAll(/<!-- example: ([a-z_]+) -->\n```json\n([\s\S]*?)\n```/g)].map(m=>[m[1],JSON.parse(m[2])]));
