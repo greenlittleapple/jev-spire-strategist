@@ -8,7 +8,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 <!-- results:start -->
 
-**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 26 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 31 in 16 runs.
+**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 27 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 31 in 16 runs.
 
 <!-- results:end -->
 
@@ -66,7 +66,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Strategist v3.14 (`claude-strategy-v3`) | JEV16: 17 | Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting |
 | Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27<sup>e</sup>, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
 | Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30 | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
-| Strategist v3.17 (`claude-strategy-v3`) | - | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
+| Strategist v3.17 (`claude-strategy-v3`) | JEV21: 33 | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
 
 - <sup>a</sup> Multi-hit attack intents such as "3x7 (21)" were not parsed, so incoming damage and survival forecasts were unknown on those turns. Fixed in 8db3d55.
 - <sup>b</sup> The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP. Fixed in 470cf3c.

@@ -267,7 +267,16 @@
     {"run": "1790712713", "seed": "JEV19", "result": "lost", "act": 2, "floor": 30, "moves": 360, "tokens": 2413014}
    ]
   },
-  {"name": "Strategist v3.17", "policy": "claude-strategy-v3", "group": "strategist", "mode": "claude", "added": "Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes", "runs": []}
+  {
+   "name": "Strategist v3.17",
+   "policy": "claude-strategy-v3",
+   "group": "strategist",
+   "mode": "claude",
+   "added": "Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes",
+   "runs": [
+    {"run": "1790808872", "seed": "JEV21", "result": "lost", "act": 2, "floor": 33, "moves": 408, "tokens": 2580867, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
+   ]
+  }
  ],
  "excluded": [
   {"run": "1790713810", "reason": "JEV20 (Strategist v3.16), abandoned at Act 1 floor 3 after 33 moves on 2026-09-30, when the code moved to v3.17"}
@@ -282,7 +291,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 25, "moves": 9011, "median_s": 0.77}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 26, "moves": 9419, "median_s": 0.77}
   ]
  }
 }
