@@ -7,6 +7,13 @@ export const PAUSE_REASONS = ['operator', 'shutdown', 'checkpoint_mismatch', 'un
   'no_actions', 'no_change', 'budget', 'run_changed', 'pin_mismatch', 'unspecified'];
 export const pauseRecord = (reason, message, extra = {}) => ({ kind: 'pause', reason, message, ...extra });
 
+// Bridge errors returned before anything is enqueued in the game (STS2MCP validation): the command
+// had no effect, so the runner logs a game_rejected dispatch and observes again instead of pausing
+// with an uncertain action. "Map screen is not open": JEV23 floor 5 sent a second choose_map_node from
+// a stale map state while the game was already traveling to the shop (ExecuteChooseMapNode checks the
+// screen first).
+export const PRE_ENQUEUE_REJECTION = /^card_index \d+ out of range|^Card '.+' cannot be played:|^Not in play phase|^Player actions are currently disabled|^Cannot end turn while a card|^Map screen is not open$|^Hextech selection is no longer active$|^Hextech option is no longer enabled$|^Hextech reroll offer or remaining uses changed before dispatch$|^Hextech rune changed before dispatch$/;
+
 // A fetch timeout names the call that timed out ("Game state read timed out", "Jev request timed out"):
 // both used to fail with the same "The operation was aborted due to timeout", and the operators'
 // auto-resume rule reads this text. Other errors pass through unchanged.

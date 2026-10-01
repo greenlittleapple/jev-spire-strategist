@@ -31,7 +31,7 @@ import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { actionsFor, fingerprint, factsFor, counterWait, triggeredCounters } from './actions.mjs';
-import { pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker } from './runner-records.mjs';
+import { pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker, PRE_ENQUEUE_REJECTION } from './runner-records.mjs';
 import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
 const turnHits = {}, lampMemory = {};
 
@@ -383,7 +383,7 @@ async function step(token, preview = false) {
     catch (error) {
       // These explicit validation errors happen before enqueueing in STS2MCP.
       // Observe anew and ask a fresh question; never resend the old command.
-      if (/^card_index \d+ out of range|^Card '.+' cannot be played:|^Not in play phase|^Player actions are currently disabled|^Cannot end turn while a card|^Hextech selection is no longer active$|^Hextech option is no longer enabled$|^Hextech reroll offer or remaining uses changed before dispatch$|^Hextech rune changed before dispatch$/.test(error.message)) {
+      if (PRE_ENQUEUE_REJECTION.test(error.message)) {
         view.uncertainAction = null;
         await log({ ...event, outcome: 'game_rejected', message: error.message });
         lastExecuted = ''; nextDecisionAt = Date.now() + 1500;
