@@ -25,7 +25,7 @@ if(lunaEnabled&&planBenefitEnabled)throw Error('Choose one experiment at a time:
 import { readFile, mkdir, appendFile, writeFile, rename, open, unlink } from 'node:fs/promises';
 import { readActiveCheckpoint, attachCheckpoint, defaultSaveRoot } from '../../../integration/sts2/save-state.mjs';
 import { characterName } from '../../../integration/sts2/character.mjs';
-import { labGit, fileSha256, fetchBridgeVersion, runStartRecord } from '../../../integration/sts2/run-record.mjs';
+import { labGit, fileSha256, fetchBridgeVersion, enabledMods, runStartRecord } from '../../../integration/sts2/run-record.mjs';
 import { pinMismatch } from '../../../integration/sts2/pins.mjs';
 import { repeatableDialogue } from '../../../integration/sts2/dialogue.mjs';
 import { fileURLToPath } from 'node:url';
@@ -273,7 +273,7 @@ async function step(token, preview = false) {
       await log(runStartRecord({state: s, git: labGitInfo, policy: currentPolicy(), decisionMode: view.decisionMode, model: JEV_MODEL,
         bridge: bridgeInfo,
         content: {playbook: await fileSha256(resolve(strategyDir, 'playbook.json')), mechanics: await fileSha256(resolve(strategyDir, 'mechanics.json'))},
-        caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS},
+        caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS}, mods: await enabledMods(),
         save: checkpoint?.checkpoint?.run_id === s.run.live_id ? checkpoint.data : null}));
       if (token !== generation) return;
       // A run on another bridge build or game version pauses before its first decision (integration/sts2/pins.mjs);

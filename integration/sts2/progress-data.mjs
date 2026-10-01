@@ -37,14 +37,33 @@ export async function readLogs({logDir, seriesFile} = logPaths()) {
 const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3'};
 const policyMode = p => POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null);
 
+// Cards from the Hornet and Cloud character mods (CARD.HORNET_MOD_CARD_*, CARD.CLOUD-*). Neow and events
+// offered them in Ironclad runs until both mods were disabled in the game's mod settings on 2026-09-30.
+export const MOD_CARD = /^CARD\.(?:HORNET_MOD_|CLOUD-)/;
+export const MOD_CARD_ISSUE = {id: 'character-mod-cards', label: 'A card from the Hornet or Cloud character mod entered the deck.',
+ fixed: "both mods were disabled in the game's mod settings on 2026-09-30"};
+
+// Mod cards gained in a saved run's map history (the deck itself is logged by card name only), each with
+// the floor where it first entered the deck and the room that gave it: an event, an encounter or a shop.
+export function modCards(history) {
+ const out = [], seen = new Set(); let floor = 0;
+ for (const act of history ?? []) for (const point of act ?? []) {
+  floor++;
+  for (const p of point?.player_stats ?? []) for (const c of p?.cards_gained ?? [])
+   if (MOD_CARD.test(c?.id) && !seen.has(c.id)) { seen.add(c.id); out.push({card: c.id, floor, room: point.rooms?.[0]?.model_id ?? point.map_point_type ?? null}); }
+ }
+ return out;
+}
+
 // Scored runs keyed by short run ID, with the fields the progress data needs: the decision mode (run_start,
 // else the decisions' own, else the series entry, else the policy's) and the lab commit when one was recorded
-// (run_start, else the series entry).
+// (run_start, else the series entry), the mod set from run_start, and the mod cards in the last saved map history.
 export function scoreLogged({events, series = [], starts = []}) {
- const modes = new Map();
+ const modes = new Map(), history = new Map();
  for (const e of events) {
   const id = shortId(e.state?.run?.live_id);
   if (e.kind === 'decision' && id && e.decisionMode) (modes.get(id) ?? modes.set(id, new Set()).get(id)).add(e.decisionMode);
+  if (id && e.state?.saved_run?.map_point_history) history.set(id, e.state.saved_run.map_point_history);
  }
  const startOf = new Map(starts.map(s => [shortId(s.run), s])), seriesOf = new Map(series.map(s => [shortId(s.run), s]));
  return new Map(scoreRuns(events, series).map(s => {
@@ -52,7 +71,7 @@ export function scoreLogged({events, series = [], starts = []}) {
   const logged = [...(modes.get(id) ?? [])];
   const mode = start?.decision_mode ?? (logged.length ? logged.join('+') : entry?.mode ?? policyMode(s.policy));
   const commit = start?.lab_commit ?? entry?.lab_commit ?? null, dirty = start?.lab_dirty ?? entry?.lab_dirty ?? null;
-  return [id, {...s, id, mode, lab_commit: commit, lab_dirty: dirty}];
+  return [id, {...s, id, mode, lab_commit: commit, lab_dirty: dirty, mods_hash: start?.mods_hash ?? null, mod_cards: modCards(history.get(id))}];
  }));
 }
 
@@ -72,14 +91,18 @@ export function versionFor(data, s) {
 
 // A listed run's fields from its scored row. A run whose log has no result stays "in progress" until
 // --refresh finds one. The mode is stored only where it differs from the version's; the lab commit only
-// when one was recorded. replay and issues are kept.
+// when one was recorded, and the mod set's hash when run_start logged one. replay and issues are kept, and
+// the mod card issue is added or removed from what the log shows.
 export function refreshRun(v, r, s) {
  if (!s) throw Error(`Run ${r.run} is not in the logs`);
  Object.assign(r, {seed: s.seed, result: s.result, act: s.act, floor: s.floor, moves: s.moves, tokens: s.input_tokens});
  if (s.mode && s.mode !== v.mode) r.mode = s.mode; else delete r.mode;
  if (s.lab_commit) r.lab_commit = s.lab_commit; else delete r.lab_commit;
  if (s.lab_dirty) r.lab_dirty = true; else delete r.lab_dirty;
- if (r.issues) { const issues = r.issues; delete r.issues; r.issues = issues; }
+ if (s.mods_hash) r.mods_hash = s.mods_hash; else delete r.mods_hash;
+ const issues = (r.issues ?? []).filter(id => id !== MOD_CARD_ISSUE.id);
+ if (s.mod_cards?.length) issues.push(MOD_CARD_ISSUE.id);
+ delete r.issues; if (issues.length) r.issues = issues;
  return r;
 }
 
@@ -105,6 +128,13 @@ export function addRuns(data, scored) {
  return out;
 }
 
+// Issues the progress tool tags itself go into data.issues once a run names them. Mutates data.
+export function addToolIssues(data) {
+ const named = new Set(data.versions.flatMap(v => v.runs.flatMap(r => r.issues ?? [])));
+ data.issues ??= [];
+ if (named.has(MOD_CARD_ISSUE.id) && !data.issues.some(i => i.id === MOD_CARD_ISSUE.id)) data.issues.push({...MOD_CARD_ISSUE});
+}
+
 // Every issue ID a run names must be in data.issues.
 export function checkIssues(data) {
  const known = new Set((data.issues ?? []).map(i => i.id));
@@ -126,16 +156,19 @@ export function seriesRows(data) {
 
 export const finishedRuns = row => row.runs.filter(r => r.floor != null && r.result !== 'in progress');
 const commitsOf = runs => [...new Set(runs.map(r => r.lab_commit).filter(Boolean))];
+const modSetsOf = runs => [...new Set(runs.map(r => r.mods_hash).filter(Boolean))];
 
 // A win rate needs WIN_RATE_MIN finished runs of one version in one decision mode, with no two recording
-// different lab commits (runs from before commits were recorded count). Returns {won, of, median_floor} or null.
+// different lab commits or mod sets (runs from before either was recorded count). Returns {won, of, median_floor} or null.
 export const WIN_RATE_MIN = 5;
 export function winRate(row) {
  const done = finishedRuns(row);
- if (done.length < WIN_RATE_MIN || new Set(done.map(r => r.mode ?? row.mode)).size > 1 || commitsOf(done).length > 1) return null;
+ if (done.length < WIN_RATE_MIN || new Set(done.map(r => r.mode ?? row.mode)).size > 1 || commitsOf(done).length > 1 || modSetsOf(done).length > 1) return null;
  return {won: done.filter(r => r.result === 'won').length, of: done.length, median_floor: median(done.map(r => r.floor))};
 }
 export const winRateText = w => `${w.won} of ${w.of} won, median floor ${w.median_floor}`;
 
 // Rows whose runs record more than one lab commit, for --refresh to warn about.
 export const mixedCommitRows = data => seriesRows(data).map(row => ({name: row.name, commits: commitsOf(row.runs)})).filter(x => x.commits.length > 1);
+// Rows whose runs record more than one mod set (run_start's mods_hash), for --refresh to warn about.
+export const mixedModRows = data => seriesRows(data).map(row => ({name: row.name, mods: modSetsOf(row.runs)})).filter(x => x.mods.length > 1);

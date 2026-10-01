@@ -3,7 +3,8 @@
 // or content can be told apart. Every lookup here returns null on failure; none stops the runner.
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {readFile, readdir, stat} from 'node:fs/promises';
+import {join} from 'node:path';
 import {characterName} from './character.mjs';
 
 // The lab checkout's commit and whether it has uncommitted changes. docs/ is left out of the dirty
@@ -35,6 +36,26 @@ export async function fetchBridgeVersion(url, timeoutMs = 1500) {
  try { return bridgeIdentity(await (await fetch(url, {signal: AbortSignal.timeout(timeoutMs)})).json()); } catch { return null; }
 }
 
+// The enabled gameplay mods from the game's settings.save, read at each run start since the mod list
+// can change between runs. The profile folder under steam/ is named by the Steam ID, which must stay
+// out of the log, so only mod IDs and their hash are returned. With several profiles the most recently
+// written settings.save is used.
+const settingsBase = () => process.env.APPDATA ? join(process.env.APPDATA, 'SlayTheSpire2', 'steam') : null;
+export async function enabledMods(base = settingsBase()) {
+ try {
+  let newest = null;
+  for (const d of await readdir(base, {withFileTypes: true})) {
+   if (!d.isDirectory()) continue;
+   const file = join(base, d.name, 'settings.save'), mtime = (await stat(file).catch(() => null))?.mtimeMs;
+   if (mtime != null && !(newest?.mtime >= mtime)) newest = {file, mtime};
+  }
+  const list = newest && JSON.parse((await readFile(newest.file, 'utf8')).replace(/^\uFEFF/, ''))?.mod_settings?.mod_list;
+  if (!Array.isArray(list)) return null;
+  const mods = [...new Set(list.filter(m => m?.is_enabled === true && typeof m.id === 'string').map(m => m.id))].sort();
+  return {mods, mods_hash: createHash('sha256').update(mods.join('\n')).digest('hex').slice(0, 12)};
+ } catch { return null; }
+}
+
 // Game setup from the live state and the raw save. The character comes from the save's
 // character_id, since a skin mod can replace the displayed title; the seed is the save's rng seed.
 export function runSetup(state, save) {
@@ -49,13 +70,13 @@ export function runSetup(state, save) {
  };
 }
 
-export function runStartRecord({state, git, policy, decisionMode, model, bridge = null, content = {}, caps, save = null}) {
+export function runStartRecord({state, git, policy, decisionMode, model, bridge = null, content = {}, caps, save = null, mods = null}) {
  return {kind: 'run_start', run: state?.run?.live_id ?? null,
   lab_commit: git?.lab_commit ?? null, lab_dirty: git?.lab_dirty ?? null,
   policy: policy ?? null, decision_mode: decisionMode ?? null, model: model ?? null, bridge,
   content: {playbook: content.playbook ?? null, mechanics: content.mechanics ?? null},
   caps: {max_decisions: caps?.maxDecisions ?? null, max_input_tokens: caps?.maxInputTokens ?? null},
-  setup: runSetup(state, save),
+  setup: runSetup(state, save), mods: mods?.mods ?? null, mods_hash: mods?.mods_hash ?? null,
   // Where the runner first played the run: act 1 floor 1 for a new run, later if the runner
   // picked up a run already in progress.
   act: state?.run?.act ?? null, floor: state?.run?.floor ?? null};

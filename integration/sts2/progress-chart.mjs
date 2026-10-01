@@ -7,7 +7,7 @@
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {readLogs, scoreLogged, refreshRun, addRuns, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows} from './progress-data.mjs';
+import {readLogs, scoreLogged, refreshRun, addRuns, addToolIssues, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows, mixedModRows} from './progress-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const dataFile = resolve(root, 'docs/progress/data.json');
@@ -44,6 +44,7 @@ export function issueMarker(data, id) {
  return String.fromCharCode(97 + i);
 }
 const affected = r => (r.issues?.length ?? 0) > 0;
+const fixedNote = f => !f || f === '-' ? '' : /^[0-9a-f]{7,40}$/.test(f) ? ` Fixed in ${f}.` : ` Fixed: ${f}.`;
 const svg = (height, title, desc, t, body) =>
  `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${height}" viewBox="0 0 ${W} ${height}" role="img" aria-labelledby="t d" font-family="${FONT}">\n`
  + `<title id="t">${esc(title)}</title><desc id="d">${esc(desc)}</desc>\n`
@@ -132,7 +133,8 @@ export function paceSvg(data, t) {
 }
 
 // The README's table view of the progress chart. A row with a win rate (winRate) leads with it. A run
-// affected by a known issue gets the issue's letter, and the letters used are explained under the table.
+// affected by a known issue gets the issue's letter, and the letters used are explained under the table. An issue's
+// fixed is a commit, '-' for none, or a phrase for a fix made outside the code (a settings change).
 export function progressTable(data) {
  checkIssues(data);
  const floor = r => r.result === 'in progress' ? `in progress (floor ${r.floor})` : r.result === 'won' ? `won (floor ${r.floor})` : String(r.floor);
@@ -142,7 +144,7 @@ export function progressTable(data) {
  const rated = v => { const w = winRate(v); return w ? `**${winRateText(w)}**: ${runs(v)}` : runs(v); };
  const used = new Set(data.versions.flatMap(v => v.runs.flatMap(r => r.issues ?? [])));
  const notes = (data.issues ?? []).filter(i => used.has(i.id))
-  .map(i => `- <sup>${issueMarker(data, i.id)}</sup> ${i.label}${i.fixed && i.fixed !== '-' ? ` Fixed in ${i.fixed}.` : ''}`);
+  .map(i => `- <sup>${issueMarker(data, i.id)}</sup> ${i.label}${fixedNote(i.fixed)}`);
  return ['| Version | Final floor of each run | What it added |', '|---|---|---|',
   ...seriesRows(data).map(v => `| ${v.name} (\`${v.policy}\`) | ${rated(v)} | ${v.added} |`), ...(notes.length ? ['', ...notes] : [])].join('\n');
 }
@@ -190,15 +192,17 @@ export function paceGroups(events) {
 }
 
 // Updates each listed run and the pace figures from the logs; with add, first adds the runs not yet listed.
-// Returns the --add report (or null) and warnings for rows that mix recorded lab commits.
+// Returns the --add report (or null) and warnings for rows that mix recorded lab commits or mod sets.
 export async function refresh(data, {add = false, logs} = {}) {
  logs ??= await readLogs();
  const scored = scoreLogged(logs);
  const report = add ? addRuns(data, scored) : null;
  for (const v of data.versions) for (const r of v.runs) refreshRun(v, r, scored.get(r.run));
+ addToolIssues(data);
  const pace = paceGroups(logs.events);
  for (const g of data.pace.groups) Object.assign(g, pace[g.id] ?? {runs: 0, moves: 0, median_s: null});
- const warnings = mixedCommitRows(data).map(x => `${x.name} mixes runs from lab commits ${x.commits.join(', ')}; it gets no win rate until they are split into versions.`);
+ const warnings = [...mixedCommitRows(data).map(x => `${x.name} mixes runs from lab commits ${x.commits.join(', ')}; it gets no win rate until they are split into versions.`),
+  ...mixedModRows(data).map(x => `${x.name} mixes runs with mod sets ${x.mods.join(', ')}; it gets no win rate until they are split into versions.`)];
  return {report, warnings};
 }
 

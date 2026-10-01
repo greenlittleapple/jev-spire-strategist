@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {paceGroups, progressTable, compactJson, progressSvg, paceSvg, readmeSummary} from './progress-chart.mjs';
+import {paceGroups, progressTable, compactJson, progressSvg, paceSvg, readmeSummary, refresh} from './progress-chart.mjs';
 
 const moves = (run, seconds, {ready = false, policy = 'jev-compact-v1'} = {}) => seconds.map(s => ({kind: 'decision', outcome: 'executed', policy,
  time: new Date(Date.UTC(2026, 8, 28) + s * 1000).toISOString(), state: {run: {live_id: run}, ...(ready ? {ready: true} : {})}}));
@@ -75,6 +75,9 @@ test('the README table marks runs with known issues and explains the letters use
  assert.equal(lines[3], '| Strategist v3 (`claude-strategy-v3`) | **JEV1: won (floor 48)** (replay)<sup>a,b</sup>, JEV2: in progress (floor 30) | Owned screens |');
  assert.deepEqual(lines.slice(4), ['', '- <sup>a</sup> Intents were not parsed. Fixed in abc1234.', '- <sup>b</sup> The game crashed.']);
  assert.equal(progressTable(data).split('\n').length, 4);
+ // A fix made outside the code, such as a settings change, reads as a phrase.
+ const d = withIssues(); d.issues[1].fixed = 'mods disabled on 2026-09-30';
+ assert.equal(progressTable(d).split('\n').at(-1), '- <sup>b</sup> The game crashed. Fixed: mods disabled on 2026-09-30.');
 });
 
 test('an unknown issue ID stops the render', () => {
@@ -107,4 +110,15 @@ test('compact JSON keeps a run with issues on one line', () => {
  assert.match(text, /\n {4}\{"run": "1", "seed": null, "result": "lost", "floor": 17, "issues": \["parse"\]\},?\n/);
  assert.match(text, /\n {2}\{"id": "crash", "label": "The game crashed.", "fixed": "-"\},?\n/);
  assert.match(text, /"notes": \[\n {2}"No run has won yet."\n \]/);
+});
+
+test('--refresh warns about a row whose runs record more than one mod set, and tags runs that gained a mod card', async () => {
+ const d = structuredClone(data); d.issues = []; d.versions[1].mode = 'claude';
+ const events = [...moves('modded:profile1:2', [0, 1, 2], {policy: 'claude-strategy-v3'}), ...moves('modded:profile1:3', [0, 1, 2], {policy: 'claude-strategy-v3'})];
+ events[0].state.saved_run = {map_point_history: [[{map_point_type: 'ancient', rooms: [{model_id: 'EVENT.NEOW'}], player_stats: [{cards_gained: [{id: 'CARD.CLOUD-BLIZZARA'}]}]}]]};
+ const starts = [{kind: 'run_start', run: 'modded:profile1:2', mods_hash: 'aaaaaaaaaaaa'}, {kind: 'run_start', run: 'modded:profile1:3', mods_hash: 'bbbbbbbbbbbb'}];
+ const {warnings} = await refresh(d, {logs: {events: [...moves('1', [0, 1]), ...events], series: [], starts}});
+ assert.deepEqual(warnings, ['Strategist v3 mixes runs with mod sets aaaaaaaaaaaa, bbbbbbbbbbbb; it gets no win rate until they are split into versions.']);
+ assert.deepEqual(d.versions[1].runs.map(r => [r.mods_hash, r.issues]), [['aaaaaaaaaaaa', ['character-mod-cards']], ['bbbbbbbbbbbb', undefined]]);
+ assert.deepEqual(d.issues.map(i => i.id), ['character-mod-cards']);
 });

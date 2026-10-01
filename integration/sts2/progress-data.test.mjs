@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
-import {logPaths, scoreLogged, versionFor, refreshRun, addRuns, checkIssues, seriesRows, winRate, winRateText, mixedCommitRows, WIN_RATE_MIN} from './progress-data.mjs';
+import {logPaths, scoreLogged, versionFor, refreshRun, addRuns, addToolIssues, checkIssues, modCards, MOD_CARD_ISSUE, seriesRows, winRate, winRateText, mixedCommitRows, mixedModRows, WIN_RATE_MIN} from './progress-data.mjs';
 
 const version = (name, policy, mode, runs = []) => ({name, policy, group: mode === 'claude' ? 'strategist' : 'jev', mode, added: `${name} rules`, runs});
 const dataOf = () => ({issues: [{id: 'crash', label: 'Crashed.', fixed: '-'}], versions: [
@@ -75,6 +75,43 @@ test('refreshing a run keeps its replay flag and issues, and stores the mode onl
  assert.throws(() => refreshRun(v, {run: '7'}, undefined), /Run 7 is not in the logs/);
 });
 
+// A saved map history as the game logs it: acts of map points, each with per-player stats and rooms.
+const point = (type, room, gained = []) => ({map_point_type: type, rooms: room ? [{model_id: room}] : [], player_stats: [{player_id: 1, cards_gained: gained.map(id => ({id}))}]});
+const history = [[point('ancient', 'EVENT.NEOW', ['CARD.CLOUD-BLIZZARA']), point('monster', 'ENCOUNTER.X', ['CARD.PERFECTED_STRIKE'])],
+ [point('shop', null, ['CARD.HORNET_MOD_CARD_HORNET_BEAST']), point('unknown', 'EVENT.COLORFUL_PHILOSOPHERS', ['CARD.HORNET_MOD_CARD_HORNET_BEAST', 'CARD.HORNET_MOD_CARD_HORNET_GEAR_BEE'])]];
+
+test('mod cards are found in the saved map history with the floor and room where each first entered the deck', () => {
+ assert.deepEqual(modCards(history), [{card: 'CARD.CLOUD-BLIZZARA', floor: 1, room: 'EVENT.NEOW'}, {card: 'CARD.HORNET_MOD_CARD_HORNET_BEAST', floor: 3, room: 'shop'},
+  {card: 'CARD.HORNET_MOD_CARD_HORNET_GEAR_BEE', floor: 4, room: 'EVENT.COLORFUL_PHILOSOPHERS'}]);
+ assert.deepEqual(modCards(undefined), []);
+ assert.deepEqual(modCards([[{map_point_type: 'monster'}], [point('rest', null, ['CARD.CLOUDBURST'])]]), []);
+});
+
+test('scored runs carry the mod set hash and mod cards from the last logged history, and refresh tags or clears the issue', () => {
+ const decision = (id, floor, h) => ({kind: 'decision', outcome: 'executed', time: `2026-09-29T00:0${floor}:00Z`, policy: 'claude-strategy-v3',
+  state: {state_type: 'map', run: {live_id: `modded:profile1:${id}`, act: 1, floor, ascension: 0}, player: {hp: 10}, ...(h ? {saved_run: {map_point_history: h}} : {})}});
+ const events = [decision('1', 1, [history[0].slice(0, 1)]), decision('1', 2, null), decision('2', 3, [history[0].slice(1)])];
+ const s = scoreLogged({events, starts: [{kind: 'run_start', run: 'modded:profile1:1', mods_hash: 'abc123def456'}]});
+ assert.deepEqual(s.get('1').mod_cards, [{card: 'CARD.CLOUD-BLIZZARA', floor: 1, room: 'EVENT.NEOW'}]);
+ assert.equal(s.get('1').mods_hash, 'abc123def456');
+ assert.deepEqual([s.get('2').mod_cards, s.get('2').mods_hash], [[], null]);
+ const data = dataOf(), v = data.versions[1], r = v.runs[0];
+ refreshRun(v, r, s.get('1'));
+ assert.deepEqual([r.issues, r.mods_hash], [['crash', MOD_CARD_ISSUE.id], 'abc123def456']);
+ refreshRun(v, r, s.get('1'));
+ assert.deepEqual(r.issues, ['crash', MOD_CARD_ISSUE.id]);
+ assert.throws(() => checkIssues(data), /unknown issue character-mod-cards/);
+ addToolIssues(data); addToolIssues(data);
+ assert.deepEqual(data.issues.map(i => i.id), ['crash', MOD_CARD_ISSUE.id]);
+ checkIssues(data);
+ // A run whose log shows no mod card loses the tag and keeps its other issues.
+ refreshRun(v, r, {...s.get('2'), mod_cards: []});
+ assert.deepEqual(r.issues, ['crash']);
+ assert.equal(r.mods_hash, undefined);
+ const clean = refreshRun(v, {run: '8', issues: [MOD_CARD_ISSUE.id]}, scoredRun('8', {mod_cards: []}));
+ assert.equal(clean.issues, undefined);
+});
+
 test('an issue ID that data.issues lacks stops the render', () => {
  const data = dataOf();
  checkIssues(data);
@@ -111,6 +148,18 @@ test(`a win rate needs ${WIN_RATE_MIN} finished runs of one version and mode tha
  assert.deepEqual(mixedCommitRows({versions: [{...row(one), runs: one}]}), [{name: 'Strategist v4', commits: ['aaa1111', 'bbb2222']}]);
  const modes = runs(5); modes[0].mode = 'jev';
  assert.equal(winRate(row(modes)), null);
+});
+
+test('a win rate also needs no two finished runs with different mod sets, and mixed rows are listed for a warning', () => {
+ const runs = Array.from({length: 5}, (_, i) => ({run: String(i), result: 'lost', floor: 17 + i}));
+ const row = r => ({name: 'Jev v4', mode: 'jev', runs: r});
+ // Runs without a recorded mod set count alongside one mod set; two different mod sets don't.
+ runs[0].mods_hash = 'aaaaaaaaaaaa'; runs[2].mods_hash = 'aaaaaaaaaaaa';
+ assert.equal(winRate(row(runs)).of, 5);
+ assert.deepEqual(mixedModRows({versions: [{...row(runs)}]}), []);
+ runs[4].mods_hash = 'bbbbbbbbbbbb';
+ assert.equal(winRate(row(runs)), null);
+ assert.deepEqual(mixedModRows({versions: [{...row(runs)}]}), [{name: 'Jev v4', mods: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb']}]);
 });
 
 test('--add leaves out runs listed in data.excluded and reports them', () => {
