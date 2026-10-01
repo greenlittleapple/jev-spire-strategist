@@ -172,7 +172,7 @@
 <circle cx="782.5" cy="1587" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="654.1666666666666" cy="1587" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="794.5" y="1592" font-size="13" font-weight="600"><tspan fill="#0b0b0b">33</tspan></text>
-<text x="24" y="1640" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.18</tspan><tspan fill="#898781" font-size="13"> · 4 runs</tspan></text>
+<text x="24" y="1640" font-size="15"><tspan font-weight="600" fill="#0b0b0b">Strategist v3.18</tspan><tspan fill="#898781" font-size="13"> · 0 of 5 won, median floor 24</tspan></text>
 <text x="24" y="1660" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3</text>
 <text x="24" y="1678" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">forecast; input fixes</text>
 <path d="M590,1654 H867 A3,3 0 0 1 870,1657 V1657 A3,3 0 0 1 867,1660 H590 Z" fill="#eb6834" fill-opacity="0.35"/>
@@ -180,6 +180,7 @@
 <circle cx="730" cy="1657" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="724.1666666666666" cy="1657" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <circle cx="689.1666666666666" cy="1657" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="782.5" cy="1657" r="4.5" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
 <text x="882" y="1662" font-size="13" font-weight="600"><tspan fill="#0b0b0b">48</tspan></text>
 <text x="24" y="1724" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Beating the final boss on floor 48 wins the run. Early strategist versions reused seed JEV1 (v3.1 to v3.3 replayed v3's non-combat choices on it);</text>
 <text x="24" y="1742" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">from v3.5 on, every run uses a new seed.</text>
