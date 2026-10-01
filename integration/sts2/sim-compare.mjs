@@ -4,14 +4,15 @@
 // HP after, HP lost and survival come from the first observation of a later round in the same
 // fight (the start of the next turn, after the enemy turn); a run that ends at 0 HP first counts as
 // 0 HP. Damage, Block, energy left and enemies defeated are measured only when the turn played
-// exactly the chosen line and then ended, from the state at that end_turn decision.
+// exactly the chosen line and then ended, from the state at that end_turn decision. Enemies are
+// matched by combat_id; the bridge lists living enemies only, so one that is missing counts as dead.
 // Logs are read from $STS2_PRIVATE_DIR/runs (default .private/sts2/runs), streamed line by line.
 import {readdir} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {createInterface} from 'node:readline';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {resolve, dirname} from 'node:path';
-import {FORECAST_FIELDS, workerActions} from './sim-shadow.mjs';
+import {FORECAST_FIELDS, workerActions, targetIds, enemyKey} from './sim-shadow.mjs';
 
 const combat = new Set(['monster', 'elite', 'boss']);
 // Screens that mean the fight is over; in-fight choice screens (hand_select) keep it open.
@@ -24,16 +25,17 @@ export function slimRecord(e) {
   if (e.kind === 'run_end') return {kind: 'run_end', time: e.time, run: e.state?.run?.live_id ?? null, hp: e.state?.player?.hp ?? 0};
   if (e.kind === 'sim_forecast') return e.status === 'ok' ? {kind: 'sim', time: e.time, run: e.run, decision: e.decision, started: e.decision_started ?? e.time, results: e.results ?? {}} : null;
   if (e.kind !== 'decision') return null;
-  const s = e.state ?? {}, p = s.player ?? {}, chosen = e.chosen;
+  // Enemies are keyed, and targets named, by combat_id: entity_ids shift when an enemy dies.
+  const s = e.state ?? {}, p = s.player ?? {}, chosen = e.chosen, targets = targetIds(s.battle?.enemies);
   return {kind: 'decision', time: e.time, outcome: e.outcome ?? null, stateHash: e.stateHash ?? null,
     run: s.run?.live_id ?? null, act: s.run?.act ?? null, floor: s.run?.floor ?? null, combat: combat.has(s.state_type) && Boolean(s.battle), ended: after.has(s.state_type) || !s.battle,
     round: s.battle?.round ?? null, hp: p.hp ?? null, max_hp: p.max_hp ?? null, block: p.block ?? null, energy: p.energy ?? null,
-    enemies: (s.battle?.enemies ?? []).map(x => ({id: x.entity_id, hp: x.hp ?? 0})),
-    command: chosen?.command ?? null, chosenId: chosen?.id ?? null, plan: workerActions(chosen?.plan).actions ?? null, planner: pick(chosen?.forecast)};
+    enemies: (s.battle?.enemies ?? []).map(x => ({id: String(enemyKey(x)), hp: x.hp ?? 0})),
+    command: chosen?.command ?? null, step: chosen?.command ? workerActions([{command: chosen.command}], targets).actions?.[0] ?? null : null,
+    chosenId: chosen?.id ?? null, plan: workerActions(chosen?.plan, targets).actions ?? null, planner: pick(chosen?.forecast)};
 }
 
 const sameFight = (a, b) => a.run === b.run && a.act === b.act && a.floor === b.floor;
-const asWorker = c => workerActions([{command: c}]).actions?.[0] ?? null;
 
 // What happened after decision i: {hpAfter, hpLoss, survives} and, when the line was followed,
 // {damage, block, energyLeft, defeatedEnemies}. Fields not measured are absent.
@@ -60,15 +62,16 @@ export function actualAfter(records, i) {
       if (r.outcome !== 'executed') continue;
       if (r.command?.action === 'end_turn') {
         if (JSON.stringify(played) === JSON.stringify(d.plan)) {
-          const after = id => r.enemies.find(e => e.id === id);
+          // The bridge lists living enemies only: one missing at the end of the line died there.
+          const hpAt = id => r.enemies.find(e => e.id === id)?.hp ?? 0;
           const start = d.enemies.filter(alive);
           Object.assign(out, {followed: true, block: r.block, energyLeft: r.energy,
-            damage: start.reduce((n, e) => n + Math.max(0, e.hp - (after(e.id)?.hp ?? e.hp)), 0),
-            defeatedEnemies: start.filter(e => after(e.id) && !alive(after(e.id))).length});
+            damage: start.reduce((n, e) => n + Math.max(0, e.hp - hpAt(e.id)), 0),
+            defeatedEnemies: start.filter(e => hpAt(e.id) <= 0).length});
         }
         break;
       }
-      played.push(asWorker(r.command));
+      played.push(r.step);
       if (played.length > d.plan.length) break;
     }
   }

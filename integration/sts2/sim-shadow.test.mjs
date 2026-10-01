@@ -6,7 +6,7 @@ import {join, dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {SimClient, simArgs, workerEnv} from './sim-client.mjs';
-import {simShadow, workerActions, buildLines, aggregateForecast, candidateResults, stateDifferences} from './sim-shadow.mjs';
+import {simShadow, workerActions, buildLines, aggregateForecast, candidateResults, stateDifferences, sampleForecast, targetIds} from './sim-shadow.mjs';
 import {compare, slimRecord, readRecords, report} from './sim-compare.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -17,13 +17,13 @@ const client = (env = {}, opts = {}) => new SimClient({exe: process.execPath, ar
 const workerState = (extra = {}) => ({round: 2, player: {hp: 40, max_hp: 80, block: 0, energy: 3, status: [],
   hand: [{id: 'STRIKE_IRONCLAD', name: 'STRIKE_IRONCLAD', upgraded: false, cost: 1}, {id: 'DEFEND_IRONCLAD', name: 'DEFEND_IRONCLAD', upgraded: false, cost: 1}, {id: 'WILD', name: 'WILD', upgraded: false, cost: 1}],
   draw_count: 5, discard_count: 0, exhaust_count: 0, potions: [{slot: 0, id: 'BLOCK_POTION', name: 'BLOCK_POTION'}]},
-  enemies: [{entity_id: 'E_0', name: 'Enemy', hp: 10, max_hp: 30, block: 0, status: [], intents: [{type: 'Attack', damage: 8, hits: 1}]}], ...extra});
+  enemies: [{entity_id: 'E_0', combat_id: 1, name: 'Enemy', hp: 10, max_hp: 30, block: 0, status: [], intents: [{type: 'Attack', damage: 8, hits: 1}]}], ...extra});
 // The bridge's view of the same moment.
 const bridgeState = () => ({state_type: 'monster', run: {live_id: 'run1', act: 1, floor: 3},
   player: {hp: 40, max_hp: 80, block: 0, energy: 3, known_draw_top: [{name: 'Strike'}],
     hand: [['STRIKE_IRONCLAD', 'Strike'], ['DEFEND_IRONCLAD', 'Defend+'], ['WILD', 'Wild']].map(([id, name], index) => ({id, name, index})),
     potions: [{slot: 0, id: 'BLOCK_POTION', name: 'Block Potion'}]},
-  battle: {round: 2, turn: 'player', is_play_phase: true, enemies: [{entity_id: 'E_0', name: 'Enemy', hp: 10}]}});
+  battle: {round: 2, turn: 'player', is_play_phase: true, enemies: [{entity_id: 'E_0', combat_id: 1, name: 'Enemy', hp: 10}]}});
 const step = command => ({label: command.action, command});
 const strike = step({action: 'play_card', card_index: 0, target: 'E_0'});
 const defend = step({action: 'play_card', card_index: 1});
@@ -34,7 +34,8 @@ const candidates = [
   {id: 'p2', plan: [endTurn]},
   {id: 'p3', plan: [strike, endTurn]},
   {id: 'p4', plan: [step({action: 'discard_potion', slot: 0})]},
-  {id: 'p5', plan: [step({action: 'play_card', card_index: 2, target: 'E_0'})]},
+  // The planner stopped this line at a random effect, so it gets 4 samples; the others get 1.
+  {id: 'p5', plan: [step({action: 'play_card', card_index: 2, target: 'E_0'})], forecast: {boundary: 'random'}},
 ];
 
 test('the client speaks JSON lines, matches ids and reports worker errors', async () => {
@@ -89,7 +90,7 @@ test('plans become worker actions; duplicates share a line and others are skippe
   assert.match(workerActions(undefined).reason, /no plan/);
   const {lines, members, skipped} = buildLines(candidates);
   // Plans that end the turn first, then longer ones: p0 is the prefix of p3 and shares its line.
-  assert.deepEqual(lines.map(l => l.id), ['p3', 'p2', 'p1', 'p5']);
+  assert.deepEqual(lines.map(l => [l.id, l.samples]), [['p3', 1], ['p2', 1], ['p1', 1], ['p5', 4]]);
   assert.deepEqual(members.p3, ['p3', 'p0']);
   assert.deepEqual(skipped, [{id: 'p4', reason: 'unsupported action: discard_potion'}]);
   const many = Array.from({length: 45}, (_, i) => ({id: `q${i}`, plan: [step({action: 'play_card', card_index: i})]}));
@@ -111,6 +112,11 @@ test('samples map to the planner forecast fields with mean, range, survive rate 
   assert.equal(spread.damage, 5.5); assert.deepEqual([spread.min.damage, spread.max.damage], [5, 6]);
   assert.equal(spread.survive_rate, 0.5); assert.equal(spread.survives, null); assert.equal(spread.hpLoss, 21.5);
   assert.deepEqual([spread.failed, spread.reason, spread.exact], [1, 'choice', undefined]);
+  // One sample shows no spread, so it is not marked exact.
+  assert.equal(aggregateForecast(start, [sample(4, 37)]).exact, undefined);
+  // The combat ended partway through the line: the sample ran.
+  const ended = aggregateForecast(start, [{ok: true, stopped_at: 1, reason: 'combat_ended', after_line: {...start, enemies: [{...start.enemies[0], hp: 0}]}, after_enemy_turn: null, player_dead: false, combat_won: true}]);
+  assert.deepEqual([ended.samples, ended.failed, ended.damage, ended.combat_won_rate], [1, undefined, 10, 1]);
   const won = aggregateForecast(start, [{ok: true, after_line: {...start, enemies: [{...start.enemies[0], hp: 0}]}, after_enemy_turn: null, player_dead: false, combat_won: true}]);
   assert.deepEqual([won.defeatedEnemies, won.hpAfter, won.hpLoss, won.survives, won.combat_won_rate], [1, 40, 0, true, 1]);
   assert.deepEqual(aggregateForecast(start, [{ok: false, stopped_at: 0, reason: 'illegal'}]), {ok: false, stopped_at: 0, reason: 'illegal'});
@@ -161,15 +167,15 @@ test('a shadow forecast is logged per decision without the replay path, with a l
     assert.deepEqual([on.status, on.version], ['on', 'stub-1']);
     const f = records.find(r => r.kind === 'sim_forecast');
     assert.equal(f.status, 'ok', JSON.stringify(f));
-    assert.deepEqual([f.run, f.act, f.floor, f.round, f.decision, f.seed, f.samples, f.known_top, f.lines], ['run1', 1, 3, 2, 'hash1', 2 ** 30, 4, 1, 4]);
+    assert.deepEqual([f.run, f.act, f.floor, f.round, f.decision, f.seed, f.samples, f.known_top, f.lines], ['run1', 1, 3, 2, 'hash1', 2 ** 30, {p3: 1, p2: 1, p1: 1, p5: 4}, 1, 4]);
     assert.ok(!JSON.stringify(records).includes(replay) && !JSON.stringify(records).includes('replay.json'));
     assert.deepEqual(f.skipped_lines, [{id: 'p4', reason: 'unsupported action: discard_potion'}]);
-    assert.deepEqual([f.results.p3.damage, f.results.p3.hpAfter, f.results.p3.exact], [6, 32, true]);
+    assert.deepEqual([f.results.p3.damage, f.results.p3.hpAfter, f.results.p3.samples], [6, 32, 1]);
     assert.equal(f.results.p0.same_as, 'p3');
     assert.deepEqual([f.results.p1.block, f.results.p1.hpLoss], [5, 3]);
     assert.deepEqual([f.results.p2.hpAfter, f.results.p2.energyLeft], [32, 3]);
     // Wild deals 4 to 6 depending on the sample: a distribution, not exact.
-    assert.equal(f.results.p5.exact, undefined); assert.ok(f.results.p5.min.damage < f.results.p5.max.damage);
+    assert.equal(f.results.p5.samples, 4); assert.equal(f.results.p5.exact, undefined); assert.ok(f.results.p5.min.damage < f.results.p5.max.damage);
     assert.equal(f.busy_skips, 1);
   } finally { await s.close(); }
 }));
@@ -231,7 +237,7 @@ test('a state mismatch skips the simulation; non-combat and enemy-turn states ar
 const decisionRecord = (time, {round = 2, hp = 40, energy = 3, block = 0, enemyHp = 10, chosen, outcome = 'executed', stateHash = null, type = 'monster'}) => ({
   time, kind: 'decision', outcome, stateHash,
   state: {state_type: type, run: {live_id: 'run1', act: 1, floor: 3}, player: {hp, max_hp: 80, block, energy},
-    battle: type === 'map' ? undefined : {round, enemies: [{entity_id: 'E_0', hp: enemyHp}]}},
+    battle: type === 'map' ? undefined : {round, enemies: [{entity_id: 'E_0', combat_id: 1, hp: enemyHp}]}},
   chosen});
 const plannerChoice = {id: 'p3', command: strike.command, plan: [strike, endTurn],
   forecast: {damage: 6, block: 0, hpLoss: 8, hpAfter: 32, survives: true, defeatedEnemies: [], energyLeft: 2}};
@@ -291,4 +297,60 @@ test('the npm script runs the compare tool on a log folder', async () => {
     const pkg = JSON.parse((await readFile(resolve(here, '../../package.json'), 'utf8')).replace(/\r\n/g, '\n'));
     assert.equal(pkg.scripts['sts2:sim-compare'], 'node integration/sts2/sim-compare.mjs');
   } finally { await rm(dir, {recursive: true, force: true}); }
+});
+
+// Two enemies of one kind. The bridge numbers living enemies only, so when LOUSE_0 (combat 1) dies,
+// LOUSE_1 (combat 2) becomes LOUSE_0; the worker keeps the dead one as LOUSE_dead_0.
+const louse = (entity_id, combat_id, hp) => ({entity_id, combat_id, name: 'LOUSE', hp, max_hp: 20, block: 0, status: [], intents: [{type: 'Attack', damage: 3, hits: 1}]});
+const twoLice = () => ({...workerState(), enemies: [louse('LOUSE_0', 1, 5), louse('LOUSE_1', 2, 10)]});
+const killFirst = [step({action: 'play_card', card_index: 0, target: 'LOUSE_0'}), step({action: 'play_card', card_index: 1, target: 'LOUSE_1'}), endTurn];
+
+test('enemies are matched by combat_id when an enemy dies and the others are renumbered', () => {
+  const start = twoLice();
+  const afterLine = {...start, enemies: [louse('LOUSE_dead_0', 1, 0), louse('LOUSE_0', 2, 4)]};
+  const f = sampleForecast(start, {ok: true, after_line: afterLine, after_enemy_turn: {...afterLine, player: {...start.player, hp: 37}}, player_dead: false, combat_won: false});
+  assert.deepEqual([f.damage, f.defeatedEnemies, f.hpAfter], [11, 1, 37]);
+  // The loaded state lists the dead enemy; the bridge does not. Living enemies match by combat_id.
+  const observed = {...bridgeState(), battle: {...bridgeState().battle, enemies: [{entity_id: 'LOUSE_0', combat_id: 2, hp: 4}]}};
+  assert.deepEqual(stateDifferences(observed, {...afterLine, round: 2, player: start.player}), []);
+  const swapped = {...observed, battle: {...observed.battle, enemies: [{entity_id: 'LOUSE_0', combat_id: 1, hp: 4}]}};
+  assert.deepEqual(stateDifferences(swapped, {...afterLine, round: 2, player: start.player}), ['enemies']);
+  // Targets are sent as combat ids, which do not shift when an enemy dies.
+  assert.deepEqual(workerActions(killFirst, targetIds(start.enemies)).actions.map(a => a.target), ['1', '2']);
+});
+
+test('a line that kills an enemy and then targets the next one is simulated on the right enemy', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sim-lice-'));
+  const replay = join(dir, 'replay.json');
+  await writeFile(replay, JSON.stringify({state: twoLice()}));
+  const records = [];
+  const s = simShadow({env: {...process.env, ...shadowEnv}, log: async e => records.push(e), fetchFn: replayFetch(replay), random: () => 0});
+  try {
+    const state = {...bridgeState(), battle: {...bridgeState().battle, enemies: [{entity_id: 'LOUSE_0', combat_id: 1, hp: 5}, {entity_id: 'LOUSE_1', combat_id: 2, hp: 10}]}};
+    await s.decision({state, candidates: [{id: 'p0', plan: killFirst}], decisionRef: 'h'});
+    const f = records.find(r => r.kind === 'sim_forecast');
+    assert.equal(f.status, 'ok', JSON.stringify(f));
+    // Strike kills combat 1 (5 HP). The plan's LOUSE_1 is now LOUSE_0 in the stub, as in the bridge;
+    // sent as combat id 2, the next card (Wild, 4 with seed 0) hits it. Combat 2 then attacks for 3.
+    assert.deepEqual([f.results.p0.defeatedEnemies, f.results.p0.damage, f.results.p0.hpAfter], [1, 9, 37]);
+  } finally { await s.close(); await rm(dir, {recursive: true, force: true}); }
+});
+
+test('compare matches enemies by combat_id and counts one missing from the bridge state as dead', () => {
+  const lice = (time, round, enemies, chosen, extra = {}) => ({time, kind: 'decision', outcome: 'executed', stateHash: extra.hash ?? null,
+    state: {state_type: 'monster', run: {live_id: 'run1', act: 1, floor: 3}, player: {hp: extra.hp ?? 40, max_hp: 80, block: 0, energy: extra.energy ?? 3},
+      battle: {round, enemies: enemies.map(([entity_id, combat_id, hp]) => ({entity_id, combat_id, hp}))}}, chosen});
+  const log = [
+    lice('2026-10-01T00:00:01Z', 2, [['LOUSE_0', 1, 5], ['LOUSE_1', 2, 10]], {id: 'p0', command: killFirst[0].command, plan: killFirst,
+      forecast: {damage: 11, block: 0, hpLoss: 3, hpAfter: 37, survives: true, defeatedEnemies: [{id: 'LOUSE_0'}], energyLeft: 1}}, {hash: 'h'}),
+    {time: '2026-10-01T00:00:02Z', kind: 'sim_forecast', status: 'ok', run: 'run1', decision: 'h', decision_started: '2026-10-01T00:00:00Z',
+      results: {p0: {damage: 11, block: 0, hpLoss: 3, hpAfter: 37, survives: true, defeatedEnemies: 1, energyLeft: 1}}},
+    // After the kill the bridge lists only combat 2, now numbered LOUSE_0; the plan named it LOUSE_1.
+    lice('2026-10-01T00:00:03Z', 2, [['LOUSE_0', 2, 10]], {id: 'x', command: {action: 'play_card', card_index: 1, target: 'LOUSE_0'}}, {energy: 2}),
+    lice('2026-10-01T00:00:04Z', 2, [['LOUSE_0', 2, 4]], {id: 'e', command: {action: 'end_turn'}}, {energy: 1}),
+    lice('2026-10-01T00:00:05Z', 3, [['LOUSE_0', 2, 4]], {id: 'e', command: {action: 'end_turn'}}, {hp: 37}),
+  ];
+  const result = compare(log.map(slimRecord));
+  assert.equal(result.counts.followed, 1);
+  for (const f of ['damage', 'defeatedEnemies', 'hpAfter', 'energyLeft']) assert.equal(result.agreement[f].sim_vs_actual.rate, 1, f);
 });

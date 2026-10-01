@@ -3,7 +3,9 @@
 // are lookup keys: STRIKE_IRONCLAD deals 6, DEFEND_IRONCLAD gives 5 Block, WILD deals 4 to 6 depending
 // on (seed, sample), CHOICE stops for a card choice; each costs 1. BLOCK_POTION gives 12 Block. After the line the
 // enemies attack for their intents. Commands crash and hang test the client; STUB_PING_FAIL=1 fails
-// ping, STUB_EXIT_AT_START=1 exits at once.
+// ping, STUB_EXIT_AT_START=1 exits at once. Like the bridge, living enemies are numbered
+// <MONSTER>_<n> among the living and renumbered after a death; a dead one becomes <MONSTER>_dead_<n>;
+// a target may also be a numeric combat_id. A line whose combat ends early stops with "combat_ended".
 import {readFileSync} from 'node:fs';
 import {createInterface} from 'node:readline';
 
@@ -11,18 +13,29 @@ if (process.env.STUB_EXIT_AT_START === '1') process.exit(2);
 let loaded = null;
 const send = msg => process.stdout.write(JSON.stringify(msg) + '\n');
 
+function renumber(s) {
+  const count = {}, dead = {};
+  for (const e of s.enemies) {
+    const kind = e.entity_id.replace(/_(?:dead_)?\d+$/, '');
+    e.entity_id = e.hp > 0 ? `${kind}_${(count[kind] = (count[kind] ?? -1) + 1)}` : `${kind}_dead_${(dead[kind] = (dead[kind] ?? -1) + 1)}`;
+  }
+}
+const resolve = (s, t) => /^\d+$/.test(String(t)) ? s.enemies.find(e => String(e.combat_id) === String(t) && e.hp > 0) : s.enemies.find(e => e.entity_id === t && e.hp > 0);
+
 function play(state, actions, seed, sample) {
   const s = structuredClone(state);
   for (const [i, a] of actions.entries()) {
+    if (!s.enemies.some(e => e.hp > 0)) return {ok: true, stopped_at: i, reason: 'combat_ended', after_line: structuredClone(s), after_enemy_turn: null, player_dead: false, combat_won: true};
     if (a.action === 'play_card') {
       const card = s.player.hand[a.card_index];
       if (!card || s.player.energy < 1) return {ok: false, stopped_at: i, reason: 'illegal'};
       if (card.id === 'CHOICE') return {ok: false, stopped_at: i, reason: 'choice'};
-      const target = s.enemies.find(e => e.entity_id === a.target) ?? s.enemies.find(e => e.hp > 0);
+      const target = a.target == null ? s.enemies.find(e => e.hp > 0) : resolve(s, a.target);
+      if (!target) return {ok: false, stopped_at: i, reason: 'illegal'};
       const damage = card.id === 'STRIKE_IRONCLAD' ? 6 : card.id === 'WILD' ? 4 + (seed + sample) % 3 : 0;
       if (target) target.hp = Math.max(0, target.hp - damage);
       if (card.id === 'DEFEND_IRONCLAD') s.player.block += 5;
-      s.player.energy -= 1; s.player.hand.splice(a.card_index, 1);
+      s.player.energy -= 1; s.player.hand.splice(a.card_index, 1); renumber(s);
     } else if (a.action === 'use_potion') {
       const k = s.player.potions.findIndex(p => p.slot === a.slot);
       if (k < 0) return {ok: false, stopped_at: i, reason: 'illegal'};

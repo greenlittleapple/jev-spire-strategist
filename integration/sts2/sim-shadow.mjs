@@ -13,14 +13,29 @@ const combatTypes = new Set(['monster', 'elite', 'boss']);
 // The forecast fields, named as in the planner's forecast() so the two compare directly.
 export const FORECAST_FIELDS = ['damage', 'block', 'hpLoss', 'hpAfter', 'survives', 'defeatedEnemies', 'energyLeft'];
 
+// Lines take 4 samples when the planner's forecast stopped at a draw or a random effect, else 1.
+export const SAMPLES_RANDOM = SIM_SAMPLES, SAMPLES_FIXED = 1;
+const RANDOM_BOUNDARIES = new Set(['draw', 'random']);
+export const samplesFor = candidate => RANDOM_BOUNDARIES.has(candidate?.forecast?.boundary) ? SAMPLES_RANDOM : SAMPLES_FIXED;
+
+// Enemies are matched by combat_id, which is stable. entity_id is the bridge's number among the
+// living, so it shifts when an enemy dies; a dead enemy in the worker is <MONSTER>_dead_<n>.
+export const enemyKey = e => e?.combat_id ?? e?.entity_id;
+// entity_id at the decision -> combat_id, for action targets. A plan's later steps name enemies as
+// they were numbered at the decision, but the bridge and the worker renumber after a death; the
+// worker's ResolveTarget also accepts the numeric combat id, which does not shift.
+export function targetIds(enemies) {
+  return new Map((enemies ?? []).filter(e => e?.entity_id != null && e.combat_id != null).map(e => [e.entity_id, String(e.combat_id)]));
+}
+
 // A candidate's plan as worker actions. A trailing end_turn is dropped: simulate ends the turn itself.
-export function workerActions(plan) {
+export function workerActions(plan, targets = null) {
   if (!Array.isArray(plan) || !plan.length) return {reason: 'no plan'};
-  const actions = [];
+  const actions = [], target = t => t == null ? null : targets?.get(t) ?? t;
   for (const [i, step] of plan.entries()) {
     const c = step?.command ?? {};
-    if (c.action === 'play_card' && Number.isInteger(c.card_index)) actions.push({action: 'play_card', card_index: c.card_index, target: c.target ?? null});
-    else if (c.action === 'use_potion' && Number.isInteger(c.slot)) actions.push({action: 'use_potion', slot: c.slot, target: c.target ?? null});
+    if (c.action === 'play_card' && Number.isInteger(c.card_index)) actions.push({action: 'play_card', card_index: c.card_index, target: target(c.target)});
+    else if (c.action === 'use_potion' && Number.isInteger(c.slot)) actions.push({action: 'use_potion', slot: c.slot, target: target(c.target)});
     else if (c.action === 'end_turn') { if (i !== plan.length - 1) return {reason: 'end_turn before the end of the plan'}; }
     else return {reason: `unsupported action: ${c.action ?? 'none'}`};
   }
@@ -32,16 +47,18 @@ export function workerActions(plan) {
 // (its first candidate in that order) to every candidate with the same sequence; skipped lists
 // candidates with no line and why.
 const endsTurn = c => Array.isArray(c.plan) && c.plan.at(-1)?.command?.action === 'end_turn' ? 1 : 0;
-export function buildLines(candidates, {maxLines = SIM_MAX_LINES} = {}) {
+// Each line has samples: the most any of its candidates needs.
+export function buildLines(candidates, {maxLines = SIM_MAX_LINES, targets = null} = {}) {
   const lines = [], members = {}, skipped = [], byKey = new Map();
   const ordered = (candidates ?? []).toSorted((a, b) => endsTurn(b) - endsTurn(a) || (b.plan?.length ?? 0) - (a.plan?.length ?? 0));
   for (const c of ordered) {
-    const {actions, reason} = workerActions(c.plan);
+    const {actions, reason} = workerActions(c.plan, targets);
     if (!actions) { skipped.push({id: c.id, reason}); continue; }
     const key = JSON.stringify(actions);
-    if (byKey.has(key)) { members[byKey.get(key)].push(c.id); continue; }
+    if (byKey.has(key)) { const line = byKey.get(key); members[line.id].push(c.id); line.samples = Math.max(line.samples, samplesFor(c)); continue; }
     if (lines.length >= maxLines) { skipped.push({id: c.id, reason: 'line limit'}); continue; }
-    byKey.set(key, c.id); members[c.id] = [c.id]; lines.push({id: c.id, actions});
+    const line = {id: c.id, actions, samples: samplesFor(c)};
+    byKey.set(key, line); members[c.id] = [c.id]; lines.push(line);
   }
   return {lines, members, skipped};
 }
@@ -51,16 +68,16 @@ const alive = e => (e?.hp ?? 0) > 0;
 export function sampleForecast(start, sample) {
   const line = sample.after_line, end = sample.player_dead ? null : (sample.after_enemy_turn ?? line);
   const startEnemies = (start.enemies ?? []).filter(alive);
-  const after = id => (line?.enemies ?? []).find(e => e.entity_id === id);
+  const after = e => (line?.enemies ?? []).find(x => enemyKey(x) === enemyKey(e));
   const hpAfter = sample.player_dead ? 0 : end?.player?.hp ?? null;
   const maxHpLost = end?.player?.max_hp != null ? Math.max(0, start.player.max_hp - end.player.max_hp) : 0;
   return {
-    damage: startEnemies.reduce((n, e) => n + Math.max(0, e.hp - (after(e.entity_id)?.hp ?? e.hp)), 0),
+    damage: startEnemies.reduce((n, e) => n + Math.max(0, e.hp - (after(e)?.hp ?? e.hp)), 0),
     block: line?.player?.block ?? null,
     hpLoss: hpAfter == null ? null : Math.max(0, start.player.hp - hpAfter) + maxHpLost,
     hpAfter,
     survives: !sample.player_dead && (hpAfter ?? 1) > 0,
-    defeatedEnemies: startEnemies.filter(e => after(e.entity_id) && !alive(after(e.entity_id))).length,
+    defeatedEnemies: startEnemies.filter(e => after(e) && !alive(after(e))).length,
     energyLeft: line?.player?.energy ?? null,
     combatWon: Boolean(sample.combat_won),
   };
@@ -68,7 +85,9 @@ export function sampleForecast(start, sample) {
 
 const round3 = x => Math.round(x * 1000) / 1000;
 // Mean of each field over the samples that ran, min and max where they differ, survive_rate, and
-// exact:true when every sample agrees. survives is true or false only when all samples agree.
+// exact:true when two or more samples ran and all agree (one sample shows no spread). survives is
+// true or false only when all samples agree. A sample with reason "combat_ended" ran (ok:true): the
+// combat ended partway through the line.
 export function aggregateForecast(start, samples) {
   const ok = (samples ?? []).filter(s => s.ok), failed = (samples ?? []).filter(s => !s.ok);
   if (!ok.length) return {ok: false, stopped_at: failed[0]?.stopped_at ?? null, reason: failed[0]?.reason ?? 'no samples'};
@@ -89,7 +108,7 @@ export function aggregateForecast(start, samples) {
   if (Object.keys(min).length) Object.assign(out, {min, max});
   if (failed.length) Object.assign(out, {failed: failed.length, stopped_at: failed[0].stopped_at ?? null, reason: failed[0].reason ?? null});
   const same = per.every(p => JSON.stringify(p) === JSON.stringify(per[0]));
-  if (same && !failed.length) out.exact = true;
+  if (same && !failed.length && per.length > 1) out.exact = true;
   return out;
 }
 
@@ -115,7 +134,7 @@ export function stateDifferences(observed, loaded) {
   if (hand(p.hand) !== hand(q.hand)) diffs.push('hand');
   const potions = list => JSON.stringify((list ?? []).filter(x => x?.id).map(x => [x.slot, x.id]).sort((a, b) => a[0] - b[0]));
   if (potions(p.potions) !== potions(q.potions)) diffs.push('potions');
-  const enemies = list => JSON.stringify((list ?? []).filter(alive).map(e => [e.entity_id, e.hp]).sort());
+  const enemies = list => JSON.stringify((list ?? []).filter(alive).map(e => [String(enemyKey(e)), e.hp]).sort());
   if (enemies(observed?.battle?.enemies) !== enemies(loaded?.enemies)) diffs.push('enemies');
   return diffs;
 }
@@ -163,7 +182,7 @@ export function simShadow({env = process.env, bridge = 'http://127.0.0.1:15526',
     if (why) { await turnOff(why); return; }
     const head = {kind: 'sim_forecast', run: state.run?.live_id ?? null, act: state.run?.act ?? null, floor: state.run?.floor ?? null,
       round: state.battle?.round ?? null, decision: decisionRef, decision_started: startedAt};
-    const {lines, members, skipped} = buildLines(candidates);
+    const {lines, members, skipped} = buildLines(candidates, {targets: targetIds(state.battle?.enemies)});
     const skippedLines = skipped.length ? skipped : [];
     if (!lines.length) { await record({...head, status: 'no_lines', skipped_lines: skippedLines}); return; }
     let response;
@@ -188,10 +207,16 @@ export function simShadow({env = process.env, bridge = 'http://127.0.0.1:15526',
       if (diffs.length) { await record({...head, status: 'state_mismatch', differences: diffs, replay: replayInfo, load_ms: loaded.ms ?? null}); return; }
       const seed = Math.floor(random() * 2 ** 31);
       const knownTop = Array.isArray(state.player?.known_draw_top) ? state.player.known_draw_top.length : 0;
-      const simulated = await sim.request('simulate', {lines, end_turn: true, samples: SIM_SAMPLES, seed, known_top: knownTop}, {timeoutMs: t.simulate});
-      if (!simulated.ok) { stats.errors++; await record({...head, status: 'simulate_failed', seed, error: String(simulated.error ?? '').slice(0, 300)}); return; }
-      await record({...head, status: 'ok', seed, samples: SIM_SAMPLES, known_top: knownTop, lines: lines.length,
-        ms: Math.round(performance.now() - started), timing: {replay: replayMs, load: loaded.ms ?? null, simulate: simulated.ms ?? null},
+      // samples is one number per request, so lines are sent in one request per sample count.
+      const simulated = {results: [], ms: 0};
+      for (const n of [...new Set(lines.map(l => l.samples))].sort((a, b) => a - b)) {
+        const group = lines.filter(l => l.samples === n).map(({id, actions}) => ({id, actions}));
+        const r = await sim.request('simulate', {lines: group, end_turn: true, samples: n, seed, known_top: knownTop}, {timeoutMs: t.simulate});
+        if (!r.ok) { stats.errors++; await record({...head, status: 'simulate_failed', seed, error: String(r.error ?? '').slice(0, 300)}); return; }
+        simulated.results.push(...r.results); simulated.ms += r.ms ?? 0;
+      }
+      await record({...head, status: 'ok', seed, samples: Object.fromEntries(lines.map(l => [l.id, l.samples])), known_top: knownTop, lines: lines.length,
+        ms: Math.round(performance.now() - started), timing: {replay: replayMs, load: loaded.ms ?? null, simulate: simulated.ms},
         busy_skips: stats.busySkips, replay: replayInfo, skipped_lines: skippedLines,
         results: candidateResults(loaded.state, simulated, members)});
       stats.logged++;
