@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Headless combat worker: runs the game's own combat code (sts2.dll) with no Godot engine.
+    The game assemblies are referenced for compilation only and loaded from the game folder at run time.
+    Build:  dotnet build -p:STS2GameDir="<game dir>"
+    Run:    set STS2_GAME_DIR=<game dir>, then bin/Release/net9.0/win-x64/Sts2Sim.exe COMMAND (see Program.cs)
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- The game ships its own .NET 9 runtime; run on .NET 9 too (self-contained, runtime pack from nuget.org). -->
+    <TargetFramework>net9.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>12.0</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TieredPGO>true</TieredPGO>
+    <STS2GameDataDir Condition="'$(STS2GameDataDir)' == ''">$(STS2GameDir)/data_sts2_windows_x86_64</STS2GameDataDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="sts2"><HintPath>$(STS2GameDataDir)/sts2.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GodotSharp"><HintPath>$(STS2GameDataDir)/GodotSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(STS2GameDataDir)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>
