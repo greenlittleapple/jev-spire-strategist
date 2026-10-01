@@ -127,8 +127,9 @@ test('Waterfall Giant death blow is incoming damage, and killing it is not victo
  const s=fixture('waterfall-deathblow');const f=projectSequence(s,['End turn']);
  assert.equal(f.incoming,57);assert.equal(f.survives,false);
  const death=projectSequence(fixture('waterfall-lethal'),['Strike → Waterfall Giant']);
- assert.equal(death.boundary,'death_effect');assert.equal(death.survives,null);
- assert.ok(death.delayedDeathEffects.length);
+ // The killed Giant is stunned that turn and erupts at the end of the next (logged), so this turn is known.
+ assert.equal(death.boundary,'death_effect');assert.equal(death.survives,true);assert.equal(death.hpLoss,0);
+ assert.ok(death.delayedDeathEffects.length);assert.ok(death.warnings.some(w=>/stunned, not defeated: When killed, deals 57 damage/.test(w)));
 });
 test('Toxic stacks contribute damage; Giant Rocks retain concrete attack plans',()=>{
  const f=projectSequence(fixture('myte-toxic'),['End turn']);
