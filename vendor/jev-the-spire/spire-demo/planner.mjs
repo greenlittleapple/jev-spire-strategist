@@ -12,7 +12,8 @@ export const POLICY_VERSION = 'jev-visible-v24-hextech';
 const amount = (powers, name) => (powers ?? []).filter(p => p.name?.toLowerCase() === name.toLowerCase()).reduce((n,p) => n + Number(p.amount ?? 0), 0);
 const number = (text, regex, fallback = 0) => Number(text.match(regex)?.[1] ?? fallback);
 const nameOf = c => (c.name ?? '').replace(/\+$/, '').toLowerCase();
-export const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang","frantic escape"]);
+export const supportedCards = new Set(['beckon','strike','defend','bash','uppercut','setup strike','inflame','shrug it off','rage','bludgeon','whirlwind','stomp','dismantle','rampage','anger','breakthrough','offering','slimed','twin strike','conflagration','bully','unrelenting','mind blast','perfected strike','thunderclap','impervious','dominate','vicious','molten fist','stone armor','armaments','feel no pain','giant rock','toxic','iron wave','pommel strike','taunt','battle trance','toric toughness','pyre','drum of battle','relax','flame barrier','hemokinesis','restlessness','bloodletting','colossus','expect a fight',"pact's end","cruelty","pillage","headbutt","true grit","spite","feed","fiend fire","thrash","cinder","evil eye","body slam","howl from beyond","juggernaut","crimson mantle","tremble","ashen strike","distraction","stoke","burning pact","metamorphosis","rupture","unmovable","juggling","stampede","aggression","forgotten ritual","brand","barricade","mayhem","infernal blade","secret weapon","one-two punch","sword boomerang","frantic escape",
+  'mangle','fight me!','omnislice','fisticuffs','blizzara','thrumming hatchet','demon form',"neow's fury",'primal force','second wind']);
 export const supportedPotions = new Set(['blood potion','fysh oil','strength potion','flex potion','weak potion','fortifier','block potion','energy potion','fire potion','swift potion','dexterity potion','speed potion','explosive ampoule','shackling potion','vulnerable potion','potion-shaped rock','beetle juice','regen potion','powdered demise','power potion','attack potion','skill potion','colorless potion','ashwater','lucky tonic','potion of binding','fruit juice','heart of iron','radiant tincture','cure all','clarity extract','stable serum','entropic brew','gambler\'s brew','glowwater potion','blessing of the forge','soldier\'s stew','duplicator']);
 // Powers the forecast covers. Anything else on the player or an enemy is flagged "Unmodeled ... power"
 // in warnings and listed in notModeled (see unmodeledMechanics), so the forecast is marked partial.
@@ -26,6 +27,10 @@ const knownPlayerPowers = new Set(['strength','dexterity','weak','frail','vulner
   'pyre','demon form','radiance','waste away','clarity','mind rot','prep time','retain hand','toric toughness','self-forming clay','block next turn','thorns','flame barrier']);
 const knownEnemyPowers = new Set(['strength','weak','vulnerable','slippery','plow','artifact','hardened shell','skittish','minion','hard to kill','intangible','personal hive','imbalanced','sandpit','paper cuts',
   'slow','flutter','back attack',
+  // Strength lost this turn (Mangle, Shackling Potion) is already in the displayed intents.
+  'mangle','shackling potion',
+  // Death rules whose effect comes after this turn (see laterDeathRule).
+  'steam eruption','reattach','illusion',
   // No effect on this turn's damage, block or displayed incoming: they act at the end of a turn,
   // on later turns, or on gold and discard piles.
   'ritual','territorial','high voltage','nemesis','demise','hatch','escape artist','thievery','rampart','plating','dexterity','painful stabs']);
@@ -37,7 +42,12 @@ const knownRelics = new Set(['ORICHALCUM','BURNING_BLOOD','VAJRA','GORGET','ORNA
   'HAPPY_FLOWER','JEWELED_MASK','JUZU_BRACELET','LANTERN','LAVA_ROCK','LOST_COFFER','LUCKY_FYSH','MEAL_TICKET','MERCURY_HOURGLASS',
   'MINIATURE_CANNON','NEOWS_BONES','NEOWS_TALISMAN','NUTRITIOUS_OYSTER','ODDLY_SMOOTH_STONE','PETRIFIED_TOAD','PHIAL_HOLSTER','POMANDER',
   'PRECISE_SCISSORS','RED_MASK','REGAL_PILLOW','SCROLL_BOXES','SMALL_CAPSULE','TOUCH_OF_OROBAS','VENERABLE_TEA_SET','WAR_PAINT',
-  'YUMMY_COOKIE','TOASTY_MITTENS','ICE_CREAM','BRONZE_SCALES']);
+  'YUMMY_COOKIE','TOASTY_MITTENS','ICE_CREAM','BRONZE_SCALES',
+  // Strike Dummy is in the shown damage of Strike cards (logged: Strike shows and deals 9 with no Strength).
+  'STRIKE_DUMMY','BAG_OF_MARBLES','BLOOD_VIAL','VERY_HOT_COCOA','PENDULUM','POLLINOUS_CORE','PAELS_BLOOD','PAELS_FLESH','CHANDELIER',
+  'SOZU','BRIMSTONE','MR_STRUGGLES','SPARKLING_ROUGE','SAI','WINGED_BOOTS','AMETHYST_AUBERGINE','PRAYER_WHEEL','TINY_MAILBOX',
+  // Modeled below.
+  'RED_SKULL','NUNCHAKU','KUSARIGAMA','PEN_NIB','VELVET_CHOKER']);
 
 const hasRelic=(s,id)=>(s.player.relics??[]).some(r=>r.id===id);
 // A relic whose whole text is a one-time pickup effect (Large Capsule, Alchemical Coffer, Tri-Boomerang)
@@ -56,6 +66,44 @@ export function unmodeledMechanics(s, runes = modeledRunes(s)) {
     && !(r.id === 'FLYING_KICK_RUNE' && runes.flyingKick)) add('relic', r.name);
   return items;
 }
+// Counter relics. A counter at its trigger value is the moment before the bridge shows the reset
+// (logged: Nunchaku 10, Kusarigama 3 and Pen Nib 10 read as 0 on the next state), so it counts as 0.
+function relicCounters(s, warnings) {
+  const relic = id => (s.player.relics ?? []).find(r => r.id === id);
+  const counter = (id, every) => { const r = relic(id); if (!r) return null;
+    if (!Number.isInteger(r.counter)) { warnings.push(`${r.name} counter unavailable: forecast omits its effect.`); return null; }
+    return r.counter % every; };
+  const skull = relic('RED_SKULL'), kusa = relic('KUSARIGAMA'), choker = relic('VELVET_CHOKER');
+  const kusaEvery = kusa ? number(kusa.description ?? '', /play (\d+) Attacks/i, 3) : 3;
+  const chokerLimit = choker ? number(choker.description ?? '', /cannot play more than (\d+) cards/i, 6) : 0;
+  const chokerPlayed = choker ? counter('VELVET_CHOKER', Infinity) : null;
+  return {
+    // Red Skull: Strength while HP is at or below half; the live Strength already includes it.
+    redSkull: skull ? number(skull.description ?? '', /(\d+) additional Strength/i, 3) : 0,
+    redSkullOn: s.player.hp * 2 <= s.player.max_hp,
+    // Nunchaku: energy on every 10th Attack (logged: Strike at counter 9 cost 1 and left energy unchanged).
+    nunchaku: counter('NUNCHAKU', 10),
+    // Kusarigama: damage to a random enemy on every 3rd Attack in a turn, not raised by Vulnerable
+    // (logged: Iron Wave 5 at counter 2 took 11; Dismantle 32 on Vulnerable at counter 2 took 38).
+    kusarigama: counter('KUSARIGAMA', kusaEvery), kusaEvery, kusaDamage: kusa ? number(kusa.description ?? '', /deal (\d+) damage/i, 6) : 0,
+    // Pen Nib: every 10th Attack deals double. At counter 9 every Attack in hand already shows double damage.
+    penNib: counter('PEN_NIB', 10),
+    // Velvet Choker: the counter is the number of cards played this turn.
+    cardsLeft: chokerPlayed === null ? null : Math.max(0, chokerLimit - chokerPlayed),
+  };
+}
+// Red Skull follows the current HP both ways.
+function redSkullCheck(m) {
+  if (!m.redSkull) return;
+  const on = m.hp * 2 <= m.maxHp;
+  if (on !== m.redSkullOn) { m.strengthDelta += on ? m.redSkull : -m.redSkull; m.redSkullOn = on; }
+}
+// Death rules that act after this turn. A Waterfall Giant is stunned when killed and its Steam
+// Eruption hits at the end of the next turn (logged: no damage taken that turn, then a DeathBlow for
+// the amount); Reattach and Illusion revive later and only matter while another enemy keeps the fight going.
+const laterDeathRule = (text, fightContinues) => /^When killed, deals \d+ damage at the end of your next turn\.?$/i.test(text)
+  || (fightContinues && /^(If other segments are still alive, revives in \d+ turns with \d+ HP|When this dies, it revives next turn at full HP)\.?$/i.test(text));
+const deathRuleText = /when killed|upon dying|on death|when this dies|would be defeated|revives?/i;
 function initial(s) {
   const runes = modeledRunes(s);
   const unmodeled = unmodeledMechanics(s, runes);
@@ -101,6 +149,7 @@ function initial(s) {
     cloakClasp:hasRelic(s,'CLOAK_CLASP'), charonsAshes:hasRelic(s,'CHARONS_ASHES'), forgottenSoul:hasRelic(s,'FORGOTTEN_SOUL'),
     // Letter Opener: every 3rd Skill in a turn deals 5 to all enemies; counter = Skills played this turn.
     letterOpener:letterProgress(s), skills:0,
+    ...relicCounters(s, warnings),
     // Smoggy: one Skill per turn. The live hand already reflects Skills played before this plan.
     smoggy:amount(s.player.status,'Smoggy')>0,
     // Unsettling Lamp: the first debuffing card each combat has its debuff doubled; lamp_used comes from the runner.
@@ -125,13 +174,14 @@ function cost(card, m) {
 
 function available(m, rootState) {
   const virtual = { ...rootState, player: { ...rootState.player, energy:m.energy, hand:m.hand.map((c,i) => ({
-    ...c, index:i, can_play: cost(c,m) <= m.energy && !(m.smoggy && m.skills > 0 && c.type === 'Skill') && (c.can_play || (/energy/i.test(c.unplayable_reason ?? '') && !/BlockedByHook/i.test(c.unplayable_reason ?? ''))),
+    ...c, index:i, can_play: cost(c,m) <= m.energy && !(m.cardsLeft !== null && m.cardsLeft <= 0) && !(m.smoggy && m.skills > 0 && c.type === 'Skill') && (c.can_play || (/energy/i.test(c.unplayable_reason ?? '') && !/BlockedByHook/i.test(c.unplayable_reason ?? ''))),
   })), potions:m.potions }, battle:{...rootState.battle,enemies:m.enemies} };
   return actionsFor(virtual);
 }
 
+// Returns the damage after multipliers and caps, before block (what "damage dealt" counts).
 function hit(m, enemy, value, attack) {
-  if (enemy.hp <= 0) return;
+  if (enemy.hp <= 0) return 0;
   let damage = Math.max(0, value);
   if (attack) {
     // Attack multipliers combine before one rounding down (logged: Iron Wave 5 on a Vulnerable
@@ -150,6 +200,7 @@ function hit(m, enemy, value, attack) {
     const cap=(power.description??'').match(/Reduce all damage taken and HP (?:loss|lost)(?:\s+.*?)?\s+to (\d+)/i);
     if(cap)damage=Math.min(damage,Number(cap[1]));
   }
+  const dealt = damage;
   const blocked = Math.min(enemy.block ?? 0, damage);
   enemy.block = (enemy.block ?? 0) - blocked; damage -= blocked;
   const slippery = (enemy.status ?? []).find(p => p.name.toLowerCase() === 'slippery' && p.amount > 0);
@@ -181,14 +232,14 @@ function hit(m, enemy, value, attack) {
     const left = enemy.hp * 10000, right = enemy.max_hp * (1000 + 8 * rune.maxHp);
     if(enemy.hp > 0 && (!Number.isSafeInteger(left) || !Number.isSafeInteger(right))) {
       m.unsupported=true;m.boundary='rune_threshold_unknown';
-      m.warnings.push('Flying Kick threshold cannot be compared exactly; re-observe instead of predicting execution.');return;
+      m.warnings.push('Flying Kick threshold cannot be compared exactly; re-observe instead of predicting execution.');return dealt;
     }
     const executed = enemy.hp > 0 && left < right;
     if (executed || enemy.hp <= 0) {
       if((enemy.status??[]).some(p=>/cannot (?:die|be killed)|prevent.*death|would.*die|reviv|resurrect|transform|when killed|upon dying|on death/i.test(p.description??''))) {
         m.unsupported=true; m.boundary='rune_death_unknown';
         m.warnings.push('Flying Kick reaches a kill threshold, but death prevention, revival or death effects require a fresh observation; execution and healing are uncertain.');
-        return;
+        return dealt;
       }
       if (executed) { m.cardDamage += enemy.hp; enemy.hp = 0; }
       const healed = Math.min(rune.heal, Math.max(0, rune.maxHp - m.hp));
@@ -201,6 +252,7 @@ function hit(m, enemy, value, attack) {
     m.stunned.push(enemy.entity_id);
     enemy.status=enemy.status.filter(p=>!['plow','strength'].includes(p.name.toLowerCase()));
   }
+  return dealt;
 }
 
 // Slow grows by its percent for every card played this turn; Tender lowers Strength and Dexterity.
@@ -223,9 +275,9 @@ function applyPower(enemy, name, n) {
 const STOP_AFTER = {distraction:'random', stoke:'random', 'burning pact':'selection', ashwater:'selection',
   'infernal blade':'random', 'entropic brew':'random', 'secret weapon':'selection', "gambler's brew":'selection',
   brand:'selection', 'glowwater potion':'draw', 'blessing of the forge':'upgrade', "soldier's stew":'upgrade',
-  'power potion':'selection', 'attack potion':'selection', 'skill potion':'selection', 'colorless potion':'selection'};
+  "neow's fury":'selection', 'primal force':'transform', 'power potion':'selection', 'attack potion':'selection', 'skill potion':'selection', 'colorless potion':'selection'};
 // Powers whose effects start on later turns (or later in the turn in ways not simulated).
-const LATER_ONLY = new Set(['rupture','unmovable','juggling','stampede','aggression','powdered demise','metamorphosis','barricade','mayhem','stable serum','clarity extract','radiant tincture']);
+const LATER_ONLY = new Set(['demon form','rupture','unmovable','juggling','stampede','aggression','powdered demise','metamorphosis','barricade','mayhem','stable serum','clarity extract','radiant tincture']);
 
 // Every block gain goes through here. Juggernaut deals its damage (not an Attack) to a random
 // enemy per gain: exact with one living enemy, otherwise the plan stops at a random boundary.
@@ -286,8 +338,10 @@ function apply(m0, a) {
   m.energy -= spent;
   if (potion) m.potions = m.potions.filter(p => p.slot !== item.slot);
   else m.hand.splice(a.command.card_index,1);
+  if (!potion && m.cardsLeft !== null) m.cardsLeft--;
   if(name!=='beckon')m.hp -= number(text,/Lose (\d+) HP/i);
   if (m.hp <= 0) { m.boundary = 'player_dead'; return m; }
+  redSkullCheck(m);
   if(name==='restlessness') {
     if(m.hand.length===0) {
       if(!m.noEnergyGain)m.energy+=(text.match(/\[[^\]]*energy_icon[^\]]*\]/g)??[]).length;
@@ -317,7 +371,12 @@ function apply(m0, a) {
   const damageMatch = name==='flame barrier' || name==='juggernaut' ? null : name==='mind blast' ? [null,String(m.drawCount)]
     : name==='body slam' ? [null,String(Math.max(0,(bodySlam ? Number(bodySlam[1])-m.startBlock : 0)+m.block))] : text.match(/Deal (\d+) damage/i);
   if (damageMatch) {
-    let dmg = Number(damageMatch[1]);
+    let dmg = Number(damageMatch[1]), nib = 1;
+    if (isAttack && m.penNib !== null && m.penNib !== undefined) {
+      // Pen Nib at 9 doubles the shown damage of every Attack, but only the next one is doubled.
+      if (m.penNib === 9) { if (dmg % 2 || m.weakFactor !== 1) m.warnings.push('Pen Nib: undoubled damage may differ by 1.'); dmg = Math.floor(dmg / 2); }
+      if ((m.penNib + m.attacks + 1) % 10 === 0) nib = 2;
+    }
     if (isAttack) {
       // Hand descriptions already include the player's current Strength/Weak.
       // Add only the change from simulated setup actions, never Strength twice.
@@ -328,13 +387,36 @@ function apply(m0, a) {
       if (m.weakFactor !== 1 && (m.strengthDelta || targets.some(e => amount(e.status,'Vulnerable')))) {
         m.warnings.push('Weak/Vulnerable rounding may differ by 1 damage per hit.');
       }
+      dmg *= nib;
     }
     for (const e of targets) {
       const hits = name === 'whirlwind' ? spent : name==='fiend fire' ? fiendFireCount : name==='sword boomerang' ? number(text,/(\d+) times/i,3) : name==='twin strike' || /Deal \d+ damage twice/i.test(text) ? 2 : name==='spite' ? (m.hp < m.startHp ? 2 : 1) : name==='conflagration' ? number(text,/damage to ALL enemies (\d+) times/i,4) : name === 'dismantle' && amount(e.status,'Vulnerable') > 0 ? 2 : 1;
       retaliationHits=hits;
       const bonus=name==='bully' ? number(text,/Deals (\d+) additional damage/i)*(amount(e.status,'Vulnerable')-(m.originalVulnerable[e.entity_id]??0))
         : name==='ashen strike' ? number(text,/Deals (\d+) additional damage for each card in your Exhaust Pile/i)*m.exhaustCount : 0;
-      for (let i=0; i<hits && e.hp>0; i++) hit(m,e,dmg+bonus,isAttack);
+      for (let i=0; i<hits && e.hp>0; i++) {
+        const before = {hp:e.hp, block:e.block ?? 0};
+        const dealt = hit(m,e,dmg+bonus,isAttack);
+        // Fisticuffs: block equal to the damage dealt, block-absorbed damage included (logged: 7 into
+        // 14 enemy block gave 7 Block; Vulnerable is included). An overkill is counted as HP plus block.
+        if (name==='fisticuffs') {
+          const sure = e.hp > 0 ? dealt : Math.min(dealt, before.hp + before.block);
+          if (sure < dealt) m.warnings.push('Fisticuffs kill: its block counts only the HP and block removed.');
+          gainBlock(m, sure);
+        }
+        // Omnislice: the other enemies take the damage dealt, through their block (logged: 12 on a
+        // Vulnerable target splashed 12; 11 splashed into 15 block left 4). The splash counts the HP the
+        // target lost, a lower bound when its block or a kill hides the rest.
+        if (name==='omnislice') {
+          const splash = before.hp - e.hp;
+          if (before.block > 0 || e.hp <= 0) m.warnings.push('Omnislice: splash counts only the HP the target lost.');
+          for (const o of m.enemies.filter(o => o !== e && o.hp > 0)) {
+            if ((o.status ?? []).some(retaliationRule)) { m.unsupported = true; m.boundary = 'unsupported'; m.warnings.push('Omnislice splash on an enemy with retaliation is not modeled; re-observe.'); return true; }
+            if ((o.status ?? []).some(p => /^(vulnerable|slow|flutter)$/i.test(p.name ?? ''))) m.warnings.push('Omnislice splash on a Vulnerable, Slow or Flutter enemy is counted without the multiplier.');
+            hit(m, o, splash, false);
+          }
+        }
+      }
     }
   }
   if(isAttack){
@@ -344,6 +426,12 @@ function apply(m0, a) {
   }
   if (isAttack) {
     m.attacks++; gainBlock(m, m.rage);
+    if (m.nunchaku !== null && m.nunchaku !== undefined && (m.nunchaku + m.attacks) % 10 === 0 && !m.noEnergyGain) m.energy += 1;
+    if (m.kusarigama !== null && m.kusarigama !== undefined && (m.kusarigama + m.attacks) % m.kusaEvery === 0) {
+      const living = m.enemies.filter(e => e.hp > 0);
+      if (living.length === 1) hit(m, living[0], m.kusaDamage, false);
+      else if (living.length > 1) { m.boundary ??= 'random'; m.warnings.push('Kusarigama hits a random enemy; re-observe.'); }
+    }
     if(m.freeAttack) { m.freeAttack=false; m.boundary='free_attack_consumed'; m.warnings.push('Re-read card costs after consuming Free Attack.'); }
     if (m.fan && m.fanProgress !== null && (m.fanProgress + m.attacks) % 3 === 0) gainBlock(m, 4);
   }
@@ -380,6 +468,11 @@ function apply(m0, a) {
   else if (name === 'crimson mantle') m.warnings.push('Crimson Mantle block arrives at the start of later turns, not this turn.');
   else if (name === 'feel no pain') m.feelNoPain+=number(text,/gain (\d+) Block/i);
   else if (name === 'rage') m.rage += number(text,/gain (\d+) Block/i);
+  // Second Wind: exhausts every non-Attack in hand, block per card (logged: one Power exhausted gave 7).
+  else if (name === 'second wind') {
+    const burned = m.hand.filter(c => c.type !== 'Attack'); m.hand = m.hand.filter(c => c.type === 'Attack');
+    for (const c of burned) { exhaustCard(m, c); if (m.unsupported) return true; gainBlock(m, Math.max(0, number(text,/Gain (\d+) Block for each/i) + Math.floor(m.dexterityDelta*m.frailFactor))); }
+  }
   else {
     const baseBlock=number(text,/Gain (\d+) Block/i);
     // The shown block includes current Strength; add only Strength changed in this plan.
@@ -406,6 +499,10 @@ function apply(m0, a) {
   if(name==='regen potion'&&m.maxHp){m.hp=Math.min(m.maxHp,m.hp+number(text,/Gain (\d+) Regen/i));m.warnings.push('Regen heals at the end of this turn and then decays; later turns are not forecast.');}
   if(LATER_ONLY.has(name))m.warnings.push(`${item.name}: its effect starts later and is not in this turn's numbers.`);
   if(STOP_AFTER[name]){m.boundary=STOP_AFTER[name];m.warnings.push(`${item.name} adds or chooses unknown cards; re-observe before continuing.`);}
+  // Mangle: the target loses Strength this turn, a debuff (logged: Attack 20 became 10 after Mangle's 10).
+  if(name==='mangle'){const n=number(text,/loses (\d+) Strength this turn/i);for(const e of targets)if(applyPower(e,'Mangle',n))e.strengthLoss=(e.strengthLoss??0)+n;}
+  // Fight Me!: the enemy's Strength gain raises each of its hits (logged: 6x2 became 7x2).
+  if(name==='fight me!'){const n=number(text,/enemy gains (\d+) Strength/i);for(const e of targets.filter(e=>e.hp>0))e.strengthLoss=(e.strengthLoss??0)-n;}
   if(name==='shackling potion'){const n=number(text,/lose (\d+) Strength/i);for(const e of m.enemies.filter(e=>e.hp>0))e.strengthLoss=(e.strengthLoss??0)+n;}
   if(name==='flex potion')m.warnings.push('Temporary Strength applies only to attacks before this turn ends; no future-turn benefit is forecast.');
   const gainStrength = name==='dominate'||name==='rupture'?0:number(text,/Gain (\d+) Strength/i);
@@ -460,6 +557,7 @@ function apply(m0, a) {
     if (replay && (m.hp <= 0 || m.enemies.every(e => e.hp <= 0) || m.unsupported || (m.boundary && m.boundary !== 'draw'))) break;
     if (replay) m.warnings.push(`${item.name} is played again (Replay or an extra-play effect).`);
     if (resolve(replay)) return m;
+    redSkullCheck(m);
     // "Whenever you play a card" effects fire after each play, extra plays included (logged: Tender
     // lowered the second One-Two Punch play of Molten Fist from 10 to 9).
     if (!potion) afterCardPlayed(m);
@@ -467,15 +565,18 @@ function apply(m0, a) {
   // A departure is not a kill: do not trigger the minion's on-death effects.
   const minionRule=e=>(e.status??[]).some(p=>/^Minions abandon combat without their leader\.?$/i.test((p.description??'').trim()));
   const leaders=m.enemies.filter(e=>!minionRule(e));
-  const leaderDeathUncertain=leaders.some(e=>(e.status??[]).some(p=>/when killed|upon dying|on death|when this dies|would be defeated|reviv|resurrect|transform/i.test(p.description??'')));
+  const leaderDeathUncertain=leaders.some(e=>(e.status??[]).some(p=>/when killed|upon dying|on death|when this dies|would be defeated|reviv|resurrect|transform/i.test(p.description??'')&&!laterDeathRule(p.description??'',false)));
   if(leaders.length===1 && leaders[0].hp<=0 && !leaderDeathUncertain && !m.unsupported){
     for(const e of m.enemies.filter(e=>e.hp>0 && minionRule(e))){e.hp=0;e.departedWithLeader=leaders[0].entity_id;}
   }
   // An empty board (a boss between revives) is not a win: nothing was killed.
   if (m.enemies.length && m.enemies.every(e => e.hp <= 0)) {
-    const deathEffects=m.enemies.filter(e=>!e.departedWithLeader).flatMap(e=>(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')));
+    const deathEffects=m.enemies.filter(e=>!e.departedWithLeader).flatMap(e=>(e.status??[]).filter(p=>deathRuleText.test(p.description??'')));
     m.boundary=deathEffects.length?'death_effect':'combat_won';
-    if(deathEffects.length){m.deathUnresolved=true;m.warnings.push('Enemy death triggers remain unresolved: do not assume victory or survival. Re-observe the death effect.');}
+    const unresolved=deathEffects.filter(p=>!laterDeathRule(p.description??'',false));
+    for(const e of m.enemies)for(const p of e.status??[])if(deathEffects.includes(p)&&!unresolved.includes(p))
+      m.warnings.push(`${e.name} is stunned, not defeated: ${p.description} The fight continues.`);
+    if(unresolved.length){m.deathUnresolved=true;m.warnings.push('Enemy death triggers remain unresolved: do not assume victory or survival. Re-observe the death effect.');}
   }
   if (m.hp <= 0) m.boundary = 'player_dead';
   return m;
@@ -521,7 +622,7 @@ function forecast(m, s) {
       const hit=String(i.label??'').trim().match(/^(\d+)(?:\s*[x×]\s*(\d+))?(?:\s*\(\d+\))?$/i);
       return hit && sum!==null ? sum+Number(hit[1])*Number(hit[2]??1) : null;
     },0),
-    deathRules:(e.status??[]).filter(p=>/when killed|upon dying|on death|when this dies|would be defeated|revives?/i.test(p.description??'')).map(p=>p.description),
+    deathRules:(e.status??[]).filter(p=>deathRuleText.test(p.description??'')).map(p=>p.description),
   }));
   // Orichalcum: ending the turn with no Block from cards gives its Block before the enemy attacks.
   const orichalcumBlock = m.orichalcum && m.block === 0 ? m.orichalcum : 0;
@@ -534,7 +635,7 @@ function forecast(m, s) {
   const facingEffectsChanged=m.enemies.some(e=>facingStatus(e.status)!==facingStatus(s.battle.enemies.find(x=>x.entity_id===e.entity_id)?.status));
   const facingUsable=facingProjection&&!facingEffectsChanged&&!m.unsupported;
   if(facingUsable)incoming=facingProjection.incomingMax;
-  const uncertain = m.unsupportedRunes.length > 0 || lethalTurnRule || (positioningUnknown&&!facingUsable) || m.unsupported || m.deathUnresolved || defeatedEnemies.some(e=>e.deathRules.length) || !parsed;
+  const uncertain = m.unsupportedRunes.length > 0 || lethalTurnRule || (positioningUnknown&&!facingUsable) || m.unsupported || m.deathUnresolved || defeatedEnemies.some(e=>e.deathRules.some(r=>!laterDeathRule(r,m.enemies.some(x=>x.hp>0)))) || !parsed;
   // Player debuffs that deal damage at the end of the turn (Disintegration; Constrict while its
   // source is alive). Damage, so Block reduces it, like the hand cards below.
   const endTurnStatusDamage = m.enemies.some(e=>e.hp>0) ? (s.player.status??[]).reduce((sum,p)=>{

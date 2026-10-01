@@ -68,13 +68,13 @@ test('Expect a Fight gives energy only from its Sown sentence and adds block for
 
 test('powers the forecast does not cover are listed in notModeled with their kind',()=>{
  const s=fight([strike(0)],{status:[{name:'Hex',amount:1,description:'While Spectral Knight is alive, ALL your cards are Ethereal.'}],
-  enemyStatus:[{name:'Steam Eruption',amount:15,description:'When killed, deals 15 damage at the end of your next turn.'},slow(0)]});
- s.player.relics=[{id:'PENDULUM',name:'Pendulum',description:'Something new.'}];
- assert.deepEqual(unmodeledMechanics(s),[{kind:'player power',name:'Hex'},{kind:'enemy power',name:'Steam Eruption'},{kind:'relic',name:'Pendulum'}]);
+  enemyStatus:[{name:'Ravenous',amount:4,description:'When an enemy dies, Corpse Slug immediately eats it, becoming Stunned and gaining 4 Strength.'},slow(0)]});
+ s.player.relics=[{id:'CENTENNIAL_PUZZLE',name:'Centennial Puzzle',description:'Something new.'}];
+ assert.deepEqual(unmodeledMechanics(s),[{kind:'player power',name:'Hex'},{kind:'enemy power',name:'Ravenous'},{kind:'relic',name:'Centennial Puzzle'}]);
  const f=projectSequence(s,['Strike → E']);
- assert.deepEqual(f.notModeled,['player power: Hex','enemy power: Steam Eruption','relic: Pendulum']);
+ assert.deepEqual(f.notModeled,['player power: Hex','enemy power: Ravenous','relic: Centennial Puzzle']);
  assert.equal(f.quality,'partial');
- assert.ok(f.warnings.includes('Unmodeled enemy power: Steam Eruption'));
+ assert.ok(f.warnings.includes('Unmodeled enemy power: Ravenous'));
  // Powers with no effect before the enemy attacks this turn are not flagged.
  const quiet=fight([strike(0)],{status:[{name:'Pyre',amount:1},{name:'No Draw',amount:1}],enemyStatus:[{name:'Ritual',amount:2}]});
  assert.deepEqual(unmodeledMechanics(quiet),[]);
