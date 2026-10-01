@@ -140,6 +140,25 @@ Claude usage counts against the subscription, not TypeSafe tokens. Requests and 
 
 Status: unit and integration tests cover triggers, constraints, validation, the file channel, escalation, waiting without timeout and cancellation. Live cycle verified on 2026-09-28 in two seeded standard A0 runs (JEV1: lost at the Act 2 boss, floor 33; JEV2: lost at the Act 3 boss, floor 48), with Claude answering run-start, route, shop, elite, boss, card-reward and low-HP requests through the file channel. Those two runs used advisory combat plans; later JEV1 runs (v3) used the enforced combat rules. `npm run sts2:scorecard` reports per-run rule counts (`rules`: times each rule removed options, and times it left a single option) and gold and potions at each boss entry.
 
+## Engine forecasts in shadow mode
+
+Shadow mode runs the game's own combat code beside the hand-written forecast and logs both; it never changes play. It is off unless the runner starts with `SIM_FORECAST=shadow`.
+
+At each combat decision on the player's turn, the runner hands the state and candidates to `integration/sts2/sim-shadow.mjs` and goes on without waiting. That module fetches the current fight's replay from the bridge (`GET /api/v1/combat_replay`, bridge 0.4.0-jev.2 or later), has the headless worker (`integration/sts2-sim`, through `sim-client.mjs`) load it, and simulates the candidates' lines: play_card, use_potion and end_turn only, duplicates removed, at most 40 lines, 4 samples, a random logged seed, the turn ended after each line, and `known_top` from `known_draw_top`. If the loaded state differs from the observed one (round, HP, energy, Block, hand or enemy HP), nothing is simulated and the record says `state_mismatch`. While one forecast runs, later decisions are skipped and counted (`busy_skips`).
+
+Each result is a `sim_forecast` record carrying the decision's `stateHash` (now also on the decision record), run, act, floor, round, seed, timings and, per candidate, the planner's field names: `damage`, `block`, `hpLoss`, `hpAfter`, `survives`, `defeatedEnemies` (a count), `energyLeft`. Each is the mean over samples, with `min` and `max` where samples differ, plus `survive_rate`, and `exact: true` when every sample agrees. `survives` is null when samples disagree. The replay's file path is never logged.
+
+If the worker executable is missing, `STS2_GAME_DIR` is unset, the ping fails, the worker cannot be restarted, or the bridge answers 404 or 405 (an older bridge) or 409 three times in a row, one `sim_status` record gives the reason and shadow mode stays off until the runner restarts.
+
+| Variable | Meaning |
+| --- | --- |
+| `SIM_FORECAST` | `shadow` turns it on. |
+| `STS2_SIM_EXE` | Worker executable. Default: the Release build under `integration/sts2-sim/bin`. |
+| `STS2_SIM_ARGS` | Worker arguments, a JSON array or words separated by spaces. Default: `serve`. |
+| `STS2_GAME_DIR` | Installed game folder, passed to the worker. Keys and tokens in the runner's environment are not passed. |
+
+`npm run sts2:sim-compare -- --since <ISO time> [--json]` joins `sim_forecast` records to executed decisions and, for the chosen candidate, compares the planner forecast, the sim forecast and what happened: HP at the first observation of the next round in the same fight (0 if the run ended at 0 HP). Damage, Block, energy left and enemies defeated are measured only when the turn played exactly the chosen line and then ended. It prints agreement rates per field (planner against actual, sim against actual, planner against sim; numbers agree within 0.5) and the 20 largest disagreements with run, floor and round.
+
 ## Scorecard
 
 `npm run sts2:scorecard` (add `--json`, `--since <ISO time>`, or `--all` to include runs under 5 moves; logs are read from `$STS2_PRIVATE_DIR/runs`, default `.private/sts2/runs`) summarizes every logged run: modifier (standard or Hextech Mayhem), policy, result, floor, and for each boss the percentage of HP removed (a later floor or act, or a reward screen on the boss floor, counts as a kill), entry HP, potions held and rounds. It also reports elites fought versus elites chosen when optional, relics and gold at the end, potions used in hallway fights, moves and Jev input tokens. Floor reached alone can't separate runs that all die at the Act 1 boss.

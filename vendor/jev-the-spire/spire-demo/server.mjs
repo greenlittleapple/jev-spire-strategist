@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { actionsFor, fingerprint, factsFor, counterWait, triggeredCounters } from './actions.mjs';
 import { pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker } from './runner-records.mjs';
+import { simShadow } from '../../../integration/sts2/sim-shadow.mjs';
 import { decisionCandidates, decisionQuestion, markHitsThisTurn, markLampUsed, noteDebuffCard, POLICY_VERSION } from './planner.mjs';
 const turnHits = {}, lampMemory = {};
 
@@ -122,6 +123,8 @@ async function log(event) {
   // or stop can be reconciled on restart; other snapshots are throttled.
   if (entry.kind === 'dispatch') await flushSnapshot(); else persistSnapshot();
 }
+// Shadow-mode engine forecasts (SIM_FORECAST=shadow): logged beside decisions, never awaited.
+const shadow = simShadow({ bridge, log });
 // The dashboard snapshot (about 2 MB) is written at most every 2 s; the run log above is the record.
 // Writes are serialized through one chain so a flush and a throttled write never race on the .tmp file.
 let snapshotChain = Promise.resolve(), snapshotTimer = null;
@@ -332,6 +335,7 @@ async function step(token, preview = false) {
       await stop('Session budget reached. Totals persist across restarts; adjust the launch limits deliberately before resuming.', 'budget'); return;
     }
     if (!apiKey) throw new Error('Missing TYPESAFE_API_KEY or private TypeSafe configuration.');
+    shadow.decision({ state: planningState, candidates: actions, decisionRef: hash });
     view.message = 'Jev is choosing…';
     view.pending = { startedAt: Date.now(), options: actions.length };
     const start = performance.now();
@@ -368,7 +372,7 @@ async function step(token, preview = false) {
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, rule:result.rule??null, screenChoice:result.screenChoice??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
+    const event = { kind: 'decision', stateHash: hash, decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, rule:result.rule??null, screenChoice:result.screenChoice??null, escalatedFrom:result.escalatedFrom??null, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();
@@ -496,6 +500,7 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true; await stop('Stopped', 'shutdown'); server.close();
+  await shadow.close().catch(() => {});
   // Pending dispatch was persisted before sending; retain that marker on interruption,
   // and write the latest snapshot (counters, strategist status) before exiting.
   await flushSnapshot().catch(() => {});
