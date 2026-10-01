@@ -300,7 +300,10 @@
    "added": "Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes",
    "runs": [
     {"run": "1790813491", "seed": "JEV21", "result": "lost", "act": 3, "floor": 48, "moves": 619, "tokens": 4795381, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
-    {"run": "1790815043", "seed": "JEV22", "result": "lost", "act": 2, "floor": 24, "moves": 297, "tokens": 1776824, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"}
+    {"run": "1790815043", "seed": "JEV22", "result": "lost", "act": 2, "floor": 24, "moves": 297, "tokens": 1776824, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
+    {"run": "1790815694", "seed": "JEV23", "result": "lost", "act": 2, "floor": 23, "moves": 348, "tokens": 2286190, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
+    {"run": "1790816753", "seed": "JEV24", "result": "lost", "act": 1, "floor": 17, "moves": 195, "tokens": 1006394, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
+    {"run": "1790817197", "seed": "JEV25", "result": "lost", "act": 2, "floor": 33, "moves": 439, "tokens": 2927586, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"}
    ]
   }
  ],
@@ -317,7 +320,7 @@
   "groups": [
    {"id": "imported", "label": "Jev the Spire as imported", "detail": "its multi-question policy and fixed waits", "runs": 1, "moves": 638, "median_s": 3},
    {"id": "fixed", "label": "Compact policy, same fixed waits", "detail": "1.2 s after each move, 0.7 s settle, 0.6 s loop", "runs": 19, "moves": 5595, "median_s": 2.45},
-   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 34, "moves": 11919, "median_s": 0.74}
+   {"id": "ready", "label": "Readiness-gated (current)", "detail": "acts as soon as the bridge reports the game is ready", "runs": 37, "moves": 12901, "median_s": 0.74}
   ]
  }
 }
