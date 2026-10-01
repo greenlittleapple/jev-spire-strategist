@@ -39,6 +39,20 @@ public static class HeadlessPatches
         Prefix(AccessTools.Method(locString, "GetFormattedText"), nameof(LocKey));
         Prefix(AccessTools.Method(locString, "GetRawText"), nameof(LocKey));
         Prefix(AccessTools.Method(locString, "Exists", new[] { typeof(string), typeof(string) }), nameof(LocMissing));
+
+        Harmony.Patch(AccessTools.PropertyGetter(typeof(MegaCrit.Sts2.Core.Multiplayer.NetSingleplayerGameService), "NetId"),
+            postfix: new HarmonyMethod(typeof(HeadlessPatches), nameof(SingleplayerNetIdOverride)));
+    }
+
+    /// <summary>
+    /// Singleplayer runs always use player id 1, but saved combat replays carry an anonymized player id. Setting this
+    /// lets a replay's snapshot be loaded as a normal singleplayer run while keeping the id its checksums include.
+    /// </summary>
+    public static ulong? SingleplayerNetId;
+
+    private static void SingleplayerNetIdOverride(ref ulong __result)
+    {
+        if (SingleplayerNetId != null) __result = SingleplayerNetId.Value;
     }
 
     private static bool LocKey(MegaCrit.Sts2.Core.Localization.LocString __instance, ref string __result)
