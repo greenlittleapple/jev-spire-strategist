@@ -7,7 +7,7 @@
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {readLogs, scoreLogged, refreshRun, addRuns, addToolIssues, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows} from './progress-data.mjs';
+import {readLogs, scoreLogged, refreshRun, addRuns, addToolIssues, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows, mixedModRows} from './progress-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const dataFile = resolve(root, 'docs/progress/data.json');
@@ -192,7 +192,7 @@ export function paceGroups(events) {
 }
 
 // Updates each listed run and the pace figures from the logs; with add, first adds the runs not yet listed.
-// Returns the --add report (or null) and warnings for rows that mix recorded lab commits.
+// Returns the --add report (or null) and warnings for rows that mix recorded lab commits or mod sets.
 export async function refresh(data, {add = false, logs} = {}) {
  logs ??= await readLogs();
  const scored = scoreLogged(logs);
@@ -201,7 +201,8 @@ export async function refresh(data, {add = false, logs} = {}) {
  addToolIssues(data);
  const pace = paceGroups(logs.events);
  for (const g of data.pace.groups) Object.assign(g, pace[g.id] ?? {runs: 0, moves: 0, median_s: null});
- const warnings = mixedCommitRows(data).map(x => `${x.name} mixes runs from lab commits ${x.commits.join(', ')}; it gets no win rate until they are split into versions.`);
+ const warnings = [...mixedCommitRows(data).map(x => `${x.name} mixes runs from lab commits ${x.commits.join(', ')}; it gets no win rate until they are split into versions.`),
+  ...mixedModRows(data).map(x => `${x.name} mixes runs with mod sets ${x.mods.join(', ')}; it gets no win rate until they are split into versions.`)];
  return {report, warnings};
 }
 

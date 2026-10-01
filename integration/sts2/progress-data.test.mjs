@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
-import {logPaths, scoreLogged, versionFor, refreshRun, addRuns, addToolIssues, checkIssues, modCards, MOD_CARD_ISSUE, seriesRows, winRate, winRateText, mixedCommitRows, WIN_RATE_MIN} from './progress-data.mjs';
+import {logPaths, scoreLogged, versionFor, refreshRun, addRuns, addToolIssues, checkIssues, modCards, MOD_CARD_ISSUE, seriesRows, winRate, winRateText, mixedCommitRows, mixedModRows, WIN_RATE_MIN} from './progress-data.mjs';
 
 const version = (name, policy, mode, runs = []) => ({name, policy, group: mode === 'claude' ? 'strategist' : 'jev', mode, added: `${name} rules`, runs});
 const dataOf = () => ({issues: [{id: 'crash', label: 'Crashed.', fixed: '-'}], versions: [
@@ -148,6 +148,18 @@ test(`a win rate needs ${WIN_RATE_MIN} finished runs of one version and mode tha
  assert.deepEqual(mixedCommitRows({versions: [{...row(one), runs: one}]}), [{name: 'Strategist v4', commits: ['aaa1111', 'bbb2222']}]);
  const modes = runs(5); modes[0].mode = 'jev';
  assert.equal(winRate(row(modes)), null);
+});
+
+test('a win rate also needs no two finished runs with different mod sets, and mixed rows are listed for a warning', () => {
+ const runs = Array.from({length: 5}, (_, i) => ({run: String(i), result: 'lost', floor: 17 + i}));
+ const row = r => ({name: 'Jev v4', mode: 'jev', runs: r});
+ // Runs without a recorded mod set count alongside one mod set; two different mod sets don't.
+ runs[0].mods_hash = 'aaaaaaaaaaaa'; runs[2].mods_hash = 'aaaaaaaaaaaa';
+ assert.equal(winRate(row(runs)).of, 5);
+ assert.deepEqual(mixedModRows({versions: [{...row(runs)}]}), []);
+ runs[4].mods_hash = 'bbbbbbbbbbbb';
+ assert.equal(winRate(row(runs)), null);
+ assert.deepEqual(mixedModRows({versions: [{...row(runs)}]}), [{name: 'Jev v4', mods: ['aaaaaaaaaaaa', 'bbbbbbbbbbbb']}]);
 });
 
 test('--add leaves out runs listed in data.excluded and reports them', () => {

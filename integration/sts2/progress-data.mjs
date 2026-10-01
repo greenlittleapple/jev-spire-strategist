@@ -156,16 +156,19 @@ export function seriesRows(data) {
 
 export const finishedRuns = row => row.runs.filter(r => r.floor != null && r.result !== 'in progress');
 const commitsOf = runs => [...new Set(runs.map(r => r.lab_commit).filter(Boolean))];
+const modSetsOf = runs => [...new Set(runs.map(r => r.mods_hash).filter(Boolean))];
 
 // A win rate needs WIN_RATE_MIN finished runs of one version in one decision mode, with no two recording
-// different lab commits (runs from before commits were recorded count). Returns {won, of, median_floor} or null.
+// different lab commits or mod sets (runs from before either was recorded count). Returns {won, of, median_floor} or null.
 export const WIN_RATE_MIN = 5;
 export function winRate(row) {
  const done = finishedRuns(row);
- if (done.length < WIN_RATE_MIN || new Set(done.map(r => r.mode ?? row.mode)).size > 1 || commitsOf(done).length > 1) return null;
+ if (done.length < WIN_RATE_MIN || new Set(done.map(r => r.mode ?? row.mode)).size > 1 || commitsOf(done).length > 1 || modSetsOf(done).length > 1) return null;
  return {won: done.filter(r => r.result === 'won').length, of: done.length, median_floor: median(done.map(r => r.floor))};
 }
 export const winRateText = w => `${w.won} of ${w.of} won, median floor ${w.median_floor}`;
 
 // Rows whose runs record more than one lab commit, for --refresh to warn about.
 export const mixedCommitRows = data => seriesRows(data).map(row => ({name: row.name, commits: commitsOf(row.runs)})).filter(x => x.commits.length > 1);
+// Rows whose runs record more than one mod set (run_start's mods_hash), for --refresh to warn about.
+export const mixedModRows = data => seriesRows(data).map(row => ({name: row.name, mods: modSetsOf(row.runs)})).filter(x => x.mods.length > 1);
