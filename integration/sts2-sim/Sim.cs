@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.GameActions;
 using MegaCrit.Sts2.Core.Multiplayer.Replay;
+using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.Saves;
@@ -37,6 +38,7 @@ public sealed class Sim
     {
         RunManager rm = RunManager.Instance;
         rm.CleanUp();
+        save = Copy(save); // loading mutates the SerializableRun (e.g. map history), so each start gets its own copy
         HeadlessPatches.SingleplayerNetId = save.Players[0].NetId;
         RunState run = RunState.FromSerializable(save);
         var sim = new Sim(run);
@@ -61,6 +63,16 @@ public sealed class Sim
     }
 
     public CombatState Combat => StateView.Combat;
+
+    /// <summary>Deep copy through the game's own packet serialization (the format replays use).</summary>
+    public static SerializableRun Copy(SerializableRun save)
+    {
+        var writer = new PacketWriter();
+        writer.Write(save);
+        var reader = new PacketReader();
+        reader.Reset(writer.Buffer.AsSpan(0, writer.BytePosition).ToArray());
+        return reader.Read<SerializableRun>();
+    }
 
     public void PlayCard(int handIndex, uint? targetCombatId)
     {

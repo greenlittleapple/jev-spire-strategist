@@ -34,6 +34,7 @@ public static class Program
             "demo" => Demo(rest[0]),
             "branch" => Branch(rest[0], int.Parse(rest[1]), rest.Length > 2 ? int.Parse(rest[2]) : 20),
             "states" => States(rest[0], rest[1]),
+            "save" => FromSave(rest[0]),
             "bench" => Bench(rest[0], rest.Length > 1 ? int.Parse(rest[1]) : 20),
             _ => Usage(command),
         };
@@ -41,7 +42,7 @@ public static class Program
 
     private static int Usage(string command)
     {
-        Console.Error.WriteLine($"unknown command {command}; commands: boot | replay <file.mcr> | drive <file.mcr> | demo <file.mcr> | bench <file.mcr> [runs] | branch <file.mcr> <actions> [runs] | states <file.mcr> <out.jsonl>");
+        Console.Error.WriteLine($"unknown command {command}; commands: boot | replay <file.mcr> | drive <file.mcr> | demo <file.mcr> | bench <file.mcr> [runs] | branch <file.mcr> <actions> [runs] | states <file.mcr> <out.jsonl> | save <current_run.save>");
         return 2;
     }
 
@@ -190,6 +191,34 @@ public static class Program
             writer.WriteLine($"{{\"step\":{++step},\"after\":{System.Text.Json.JsonSerializer.Serialize(e.action?.ToString())},\"state\":{StateView.Json(StateView.Read(sim.Combat))}}}"),
             onStarted: () => writer.WriteLine($"{{\"step\":0,\"after\":null,\"state\":{StateView.Json(StateView.Read(StateView.Combat))}}}"));
         Console.WriteLine($"wrote {step + 1} states; {result.Parity.Summary(replay.checksumData.Count)}");
+        return 0;
+    }
+
+    /// <summary>
+    /// Loads a run save (the JSON SerializableRun the game writes on entering a room) and enters its current room.
+    /// If that room is a combat, prints the starting state, ends the turn twice and checks a second load matches.
+    /// </summary>
+    private static int FromSave(string path)
+    {
+        var read = MegaCrit.Sts2.Core.Saves.SaveManager.FromJson<MegaCrit.Sts2.Core.Saves.SerializableRun>(File.ReadAllText(path));
+        var save = read.SaveData ?? throw new InvalidDataException("Could not read save: " + read.Status);
+        string? first = null;
+        for (int run = 1; run <= 2; run++)
+        {
+            var sim = Sim.Start(save);
+            var room = sim.Run.CurrentRoom;
+            Console.WriteLine($"run {run}: entered {room?.GetType().Name} at act {sim.Run.CurrentActIndex} floor {sim.Run.TotalFloor}");
+            if (MegaCrit.Sts2.Core.Combat.CombatManager.Instance.DebugOnlyGetState() == null) return 0;
+            var log = new System.Text.StringBuilder();
+            log.AppendLine("start: " + StateView.Json(StateView.Read(sim.Combat)));
+            for (int t = 0; t < 2 && MegaCrit.Sts2.Core.Combat.CombatManager.Instance.IsInProgress; t++)
+            {
+                sim.EndTurn();
+                log.AppendLine($"after end turn {t + 1}: " + StateView.Json(StateView.Read(sim.Combat)));
+            }
+            if (run == 1) { first = log.ToString(); Console.Write(first); }
+            else Console.WriteLine(log.ToString() == first ? "second load: identical" : "second load: DIFFERENT");
+        }
         return 0;
     }
 }
