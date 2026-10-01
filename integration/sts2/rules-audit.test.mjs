@@ -113,3 +113,11 @@ test('logs without the new records keep the earlier report',()=>{
  assert.equal('costly' in a.rules.hallway_potion||'changed_with_forecasts' in a.reviews['review:danger'],false);
  assert.doesNotMatch(report(a),/Lifts|Changed picks with recorded|Overrides|Removed options/);
 });
+
+test('a potion swap claim counts as a screen rule that left a single option',()=>{
+ const swap={kind:'potion_swap_claim',removed:1,removed_ids:['a0'],discarded:'Swift Potion'};
+ const a=audit([decision(state('rewards',{run:'r9',floor:6}),{action:'claim_reward',constraint:swap,options:2,source:'rule'})].map(slim));
+ assert.equal(a.rules.potion_swap_claim.decisions,1);assert.equal(a.rules.potion_swap_claim.single_option,1);
+ assert.equal(a.rules.potion_swap_claim.combat_decisions,0);assert.equal(a.rules.potion_swap_claim.runs,1);
+ assert.match(report(a),/potion_swap_claim\s+1\s+1\s+runs 1, died 0/);
+});

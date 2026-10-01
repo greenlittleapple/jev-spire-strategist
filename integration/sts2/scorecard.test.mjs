@@ -93,3 +93,11 @@ test('requests logged when posted date from createdAt; consults count adoptions 
  assert.deepEqual(s.sources,{rule:2,claude:1,filtered:1});
  assert.deepEqual(s.rules.hallway_potion,{fired:1,forced:1});
 });
+
+test('a potion swap claim is a rule move and is counted under its rule',()=>{
+ const claim={...decision(state(6,'rewards'),'Flex Potion','claim_reward'),decisionSource:'rule',rule:'potion_swap_claim',
+  strategyConstraint:{kind:'potion_swap_claim',removed:1,removed_ids:['a0'],discarded:'Swift Potion'}};
+ const [s]=scoreRuns([decision(state(1,'event'),'Start'),claim]);
+ assert.equal(s.rule_moves,1);assert.equal(s.sources.rule,1);
+ assert.deepEqual(s.rules.potion_swap_claim,{fired:1,forced:0});
+});

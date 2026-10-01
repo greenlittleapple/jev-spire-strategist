@@ -17,6 +17,15 @@ export const OWNED_SCREENS = new Set(['card_reward','shop','fake_merchant','even
 const potionSwap = s => s.state_type==='rewards' && (s.player?.potions?.length??0) >= (s.player?.max_potion_slots??3)
  && (s.rewards?.items??[]).some(i=>i.type==='potion');
 export const isOwnedScreen = s => (OWNED_SCREENS.has(s.state_type) && !(s.state_type==='card_select' && s.battle)) || potionSwap(s);
+// Once the discard frees a slot the screen is no longer owned, so Jev would choose the claim and could
+// leave the potion the discard made room for. The discard records the potion it was for (swapPending),
+// and the next decision on that screen claims it (swapClaim). Matched by type and label: a claim
+// re-indexes the rewards list. A potion no longer listed falls through to normal play.
+const rewardLabel = x => x?.name ?? x?.title ?? x?.description;
+export const swapPending = (state,chosen) => chosen?.command?.action==='discard_potion'&&state.state_type==='rewards'&&chosen.details?.take
+ ? {screen:screenKey(state),type:chosen.details.take.type??'potion',label:rewardLabel(chosen.details.take),discarded:chosen.details.discard?.name??null} : null;
+export const swapClaim = (state,candidates,pending) => pending&&pending.screen===screenKey(state)
+ ? candidates.find(c=>c.command?.action==='claim_reward'&&c.details?.type===pending.type&&c.label===pending.label)??null : null;
 
 const text = {type:'string'};
 const list = {type:'array',items:text};

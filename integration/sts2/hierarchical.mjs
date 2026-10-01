@@ -2,7 +2,7 @@
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
 import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY,STRATEGY_FACTS_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
- strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown} from './strategy.mjs';
+ strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown,swapPending,swapClaim} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId,FIGHT_START_REASONS,planForRun,activeFightPlan} from './playbook.mjs';
@@ -185,6 +185,12 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  };
 
  await adopt();
+ // A potion discard is followed by the claim it made room for (strategy.mjs swapClaim), with no consult.
+ // The pending swap is kept until that claim is no longer offered, so a stale or cancelled claim is retried.
+ const swapped=swapClaim(state,candidates,status.potionSwap);
+ if(!swapped)status.potionSwap=null;
+ else return {...direct('rule','Rule',swapped,{rule:'potion_swap_claim',constraint:{kind:'potion_swap_claim',removed:candidates.length-1,
+  removed_ids:candidates.filter(c=>c!==swapped).map(c=>c.id),discarded:status.potionSwap.discarded}}),strategyEvents:events};
  let trigger=replanReason(state,status.plan,candidates,{ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
  // A replayed screen needs no strategist decision.
  if(trigger==='owned_screen'&&replayed)trigger=null;
@@ -233,5 +239,6 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   result=await decide();
   result={...result,usage:addUsage(first.usage,result.usage),escalatedFrom:first.answers.move};
  }
+ status.potionSwap=swapPending(state,candidates.find(c=>c.id===result.answers?.move?.choice));
  return {...result,strategyEvents:events};
 }
