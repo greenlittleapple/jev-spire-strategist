@@ -41,7 +41,7 @@ public sealed class Sim
         RunState run = RunState.FromSerializable(save);
         var sim = new Sim(run);
         _selectorScope?.Dispose();
-        _selectorScope = CardSelectCmd.UseSelector(sim.Choices);
+        _selectorScope = CardSelectCmd.UseSelector(sim.Choices, localOnly: true);
         sim._loop.Run(() => rm.SetUpSavedSingleplayer(run, save), "SetUpSavedSingleplayer");
         afterSetUp?.Invoke(rm);
         rm.Launch();

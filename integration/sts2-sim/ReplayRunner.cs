@@ -100,18 +100,21 @@ public static class ReplayRunner
     /// <summary>
     /// Feeds only the recorded player actions to a singleplayer Sim. Hook actions and resumes are skipped because the
     /// game generates them itself; a ready-to-begin-enemy-turn action becomes an end-turn request.
-    /// Player choices (card selection screens) are not supported yet.
+    /// Recorded card choices are handed to the Sim's choice selector.
     /// </summary>
     public static Result Driven(CombatReplay replay, Action<Sim, CombatReplayEvent>? afterAction = null)
     {
         ChecksumParity? parity = null;
         var sim = Sim.Start(replay.serializableRun, replay, rm => parity = ChecksumParity.Attach(rm, replay));
         int skipped = 0, endTurns = 0;
-        foreach (CombatReplayEvent e in replay.events)
+        for (int i = 0; i < replay.events.Count; i++)
         {
-            if (e.eventType == CombatReplayEventType.PlayerChoice)
-                throw new NotSupportedException("Replay contains a player choice; the driven mode cannot answer choices yet.");
+            CombatReplayEvent e = replay.events[i];
             if (e.eventType != CombatReplayEventType.GameAction) { skipped++; continue; }
+            // Choices recorded right after this action belong to it; queue them before the action asks.
+            for (int j = i + 1; j < replay.events.Count && replay.events[j].eventType != CombatReplayEventType.GameAction; j++)
+                if (replay.events[j].eventType == CombatReplayEventType.PlayerChoice)
+                    sim.Choices.AnswerRecorded(sim.Player, sim.Run, replay.events[j].playerChoiceResult!.Value);
             GameAction action = e.action!.ToGameAction(sim.Player);
             if (action is ReadyToBeginEnemyTurnAction) { sim.EndTurn(); endTurns++; }
             else sim.Enqueue(action);
