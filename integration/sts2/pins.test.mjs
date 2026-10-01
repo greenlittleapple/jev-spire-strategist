@@ -10,7 +10,7 @@ test('the pinned bridge and game pass', () => {
 });
 
 test('another bridge, another game version or no answer from the bridge is reported', () => {
- assert.match(pinMismatch({...pinned, version: '0.4.0', game: null}, PINS, {}), /bridge 0\.4\.0 \(pinned 0\.4\.0-jev\.1\), game unknown \(pinned v0\.111\.0\)/);
+ assert.match(pinMismatch({...pinned, version: '0.4.0', game: null}, PINS, {}), /bridge 0\.4\.0 \(pinned 0\.4\.0-jev\.2\), game unknown \(pinned v0\.111\.0\)/);
  assert.match(pinMismatch({...pinned, game: 'v0.112.0'}, PINS, {}), /^Pinned build check failed: game v0\.112\.0 \(pinned v0\.111\.0\)\./);
  assert.match(pinMismatch(null, PINS, {}), /bridge unknown .*game unknown/);
 });

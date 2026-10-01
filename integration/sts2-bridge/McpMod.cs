@@ -20,7 +20,7 @@ namespace STS2_MCP;
 public static partial class McpMod
 {
     // Upstream STS2MCP 0.4.0 plus this lab's changes; bump the jev number with every bridge change.
-    public const string Version = "0.4.0-jev.1";
+    public const string Version = "0.4.0-jev.2";
     public const int DefaultPort = 15526;
     private const string ConfigFileName = "STS2_MCP.conf";
 
@@ -277,6 +277,11 @@ public static partial class McpMod
             else if (path == "/api/v1/hextech")
             {
                 if (request.HttpMethod == "GET") SendJson(response, RunOnMainThread(BuildHextechCatalog).GetAwaiter().GetResult());
+                else SendError(response, 405, "Method not allowed");
+            }
+            else if (path == "/api/v1/combat_replay")
+            {
+                if (request.HttpMethod == "GET") HandleGetCombatReplay(response);
                 else SendError(response, 405, "Method not allowed");
             }
             else if (path == "/api/v1/wiki")

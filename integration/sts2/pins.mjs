@@ -2,7 +2,7 @@
 // before its first decision, as the BTD6 runner pauses on an unpinned mod loader, so a Steam update
 // or an older bridge can't enter a comparison unnoticed. Update PINS after installing and checking
 // a new build; STS2_UNPINNED=1 skips the check.
-export const PINS = {bridge: '0.4.0-jev.1', game: 'v0.111.0'};
+export const PINS = {bridge: '0.4.0-jev.2', game: 'v0.111.0'};
 
 // bridge: run_start's {version, build, game} from the bridge greeting, or null when it didn't answer.
 export function pinMismatch(bridge, pins = PINS, env = process.env) {
