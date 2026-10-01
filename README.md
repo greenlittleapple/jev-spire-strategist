@@ -8,7 +8,7 @@ It builds on [Jev the Spire](https://github.com/alexmeckes/jev-the-spire), where
 
 <!-- results:start -->
 
-**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 28 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 33 in 19 runs.
+**Results so far** (Ironclad, Ascension 0, standard runs): 3 wins, by Strategist v3.5 on seed JEV4 and Strategist v3.8 on seed JEV8 and Strategist v3.13 on seed JEV15. Of the 28 finished strategist runs, 6 reached the final boss on floor 48. Jev alone got no further than floor 33 in 20 runs.
 
 <!-- results:end -->
 
@@ -47,7 +47,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Jev v2 (`jev-compact-v2`) | 14<sup>a</sup>, 28<sup>a</sup> | Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead |
 | Jev v3 (`jev-compact-v3`) | 15<sup>a</sup>, 7, 23<sup>a</sup> | Ordered route facts; second looks at hallway potion use and leaving a shop with gold |
 | Jev v3.2 (`jev-compact-v3.2`) | **0 of 5 won, median floor 14**: JEV21: 14, JEV22: 17, JEV23: 31, JEV24: 8, JEV25: 8 | Leaves a shop only when Jev puts at least half its probability on leaving; log-review fixes |
-| Jev v3.3 (`jev-compact-v3.3`) | JEV21: 17, JEV22: 24, JEV23: 33, JEV24: in progress (floor 2) | The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle |
+| Jev v3.3 (`jev-compact-v3.3`) | JEV21: 17, JEV22: 24, JEV23: 33, JEV24: 8 | The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle |
 | Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a</sup>, JEV2: 48<sup>a</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
 | Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a</sup>, JEV2: 48<sup>a</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
 | Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
