@@ -3,7 +3,7 @@
 // every ordinary decision with it.
 import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
-import {nodeKey,minElitesFrom,restHeal,committedEliteChain,floorOffset,withEliteChains} from './route-facts.mjs';
+import {nodeKey,minElitesFrom,restHeal,committedEliteChain,floorOffset,withEliteChains,eliteBeforeRest,eliteReadiness,ELITE_READY_NOTE} from './route-facts.mjs';
 
 export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -65,6 +65,7 @@ Fields:
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows. Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18; JEV18 took an optional elite at 75% six floors out and entered at 65%): in all four the only rest site after the last elite was the one right before the boss. rests_before_boss_rest in the route facts leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the R rooms after the elite except the last): with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine; runs with no Act 1 elite lost by the end of Act 2 (JEV5, 6, 9, 19). Two elites with no rest site between them (a route's elite_chains, given as floors) take two fights' HP with no heal: 2 of 69 logged elite fights were the second of such a pair and both runs died in it (JEV19 at 18/80; JEV22 entered its floor 9 elite at 76% and died in the floor 11 elite at 36/80, only a treasure between). route_risk asks at a branch that commits to one unless HP is at least elite_min_hp_percent + 26.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
 - elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer.
+Elite readiness (routes.elite_readiness, Acts 1 and 2): when it is not_ready (fewer than 2 potions and hallway_form at or above act_limit), code removes the map options that commit to an elite before the next rest site; a risky elite is your call, and route_risk asks once per elite at the branch that commits to it.
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact. Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
 - replan_below_hp_percent: HP percentage at which you want to be consulted again (10-60; 25 is typical).
 - allowed_option_ids: only for a non-combat screen whose current_options you were shown. On card rewards, shops, events, rest sites, treasure, runes and card selections outside combat you decide: list the option IDs in the order to take them; the first one still offered is taken directly each time (a shop list of purchases ending with leaving buys them in order, skipping any no longer offered). You are asked again if none of your IDs is offered. Use [] in combat or when no options are shown.
@@ -130,7 +131,11 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   ...(Array.isArray(p.draw_pile)&&p.draw_pile.length&&p.draw_pile.length<=10?{draw_cards:p.draw_pile.map(c=>c.name).sort()}:{})};
  if(state.battle)brief.enemies=state.battle.enemies.map(({name,hp,max_hp,block,status,intents})=>({name,hp,max_hp,block,
   status:(status??[]).map(({name,amount,description})=>({name,amount,description})),intents:(intents??[]).map(({title,label,description})=>({title,label,description}))}));
- if(routes)brief.routes=withEliteChains(routes,state.run?.floor);
+ if(routes){
+  brief.routes=withEliteChains(routes,state.run?.floor);
+  const ready=eliteReadiness(state);
+  if(ready)brief.routes={...brief.routes,elite_readiness:{...ready,note:ELITE_READY_NOTE}};
+ }
  if(reason==='route_risk'){const risk=routeRisk(state,previous,candidates);if(risk)brief.route_risk=risk;}
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
@@ -196,19 +201,50 @@ export const ELITE_CHAIN_MARGIN=26;
 // options): a single option moves without a request.
 export function routeRisk(state,plan,candidates=[]) {
  const hp=pct(state.player),min=plan?.elite_min_hp_percent??0,options=mapOptions(candidates);
- if(hp==null||!(min>0)||options.length<2||!plan.route_path?.length)return null;
+ if(options.length<2||!plan?.route_path?.length)return null;
  const next=routeOptions(candidates,plan);
  if(!next.length)return null;
  const offset=floorOffset(state.run?.floor,state.map?.current_position),floor=key=>offset==null?null:Number(key.split(',')[1])+offset;
  const node=c=>({option:c.id,node:nodeKey(c.details),type:c.details.type,floor:floor(nodeKey(c.details))});
- if(hp>=min+ELITE_CHAIN_MARGIN)return null;
- let chain=null;
- for(const c of next){const at=plan.route_path.indexOf(nodeKey(c.details)),found=committedEliteChain(state.map,plan.route_path.slice(at));if(found){chain={option:c,...found};break;}}
- const detail=kind=>({kind,hp_percent:hp,elite_min_hp_percent:min,next:(chain&&kind==='elite_chain'?[chain.option]:next).map(node),
-  ...(chain?{elite_chain:{floors:chain.nodes.map(floor),nodes:chain.nodes,rooms_between:chain.rooms_between},needs_hp_percent:min+ELITE_CHAIN_MARGIN,
-   note:`The route takes two elites with no rest site between them; route_risk asks below elite_min_hp_percent + ${ELITE_CHAIN_MARGIN} (one elite fight's HP).`}:{})});
- if(hp<min&&(next.some(c=>c.details.type==='Elite')||commitsToElite(state.map,candidates,next)))return detail('elite');
- return chain?detail('elite_chain'):null;
+ // A risky readiness at a branch where the path commits to an elite before the next rest site and
+ // another offered node does not: the strategist decides, once per elite (plan.readiness_asked).
+ const ready=eliteReadiness(state),commits=state.map?.nodes?.length?eliteBeforeRest(state.map):null;
+ const committed=commits?next.filter(c=>commits(nodeKey(c.details))):[];
+ const elite=committed.length&&options.some(c=>!commits(nodeKey(c.details)))?plannedElite(state.map,plan.route_path,nodeKey(committed[0].details)):null;
+ const readiness=ready?{elite_readiness:{...ready,...(elite?{elite:{node:elite,floor:floor(elite)}}:{})}}:{};
+ if(hp!=null&&min>0&&hp<min+ELITE_CHAIN_MARGIN){
+  let chain=null;
+  for(const c of next){const at=plan.route_path.indexOf(nodeKey(c.details)),found=committedEliteChain(state.map,plan.route_path.slice(at));if(found){chain={option:c,...found};break;}}
+  const detail=kind=>({kind,hp_percent:hp,elite_min_hp_percent:min,next:(chain&&kind==='elite_chain'?[chain.option]:next).map(node),
+   ...(chain?{elite_chain:{floors:chain.nodes.map(floor),nodes:chain.nodes,rooms_between:chain.rooms_between},needs_hp_percent:min+ELITE_CHAIN_MARGIN,
+    note:`The route takes two elites with no rest site between them; route_risk asks below elite_min_hp_percent + ${ELITE_CHAIN_MARGIN} (one elite fight's HP).`}:{}),...readiness});
+  if(hp<min&&(next.some(c=>c.details.type==='Elite')||commitsToElite(state.map,candidates,next)))return detail('elite');
+  if(chain)return detail('elite_chain');
+ }
+ if(ready?.level==='risky'&&elite&&!(plan.readiness_asked??[]).includes(elite))
+  return {kind:'elite_readiness',hp_percent:hp,next:committed.map(node),...readiness,
+   note:'Readiness is risky and the path commits to this elite before the next rest site: keep it or choose a route around it.'};
+ return null;
+}
+// The first elite on the planned path from a node, before any rest site; the node itself when the
+// path stops short of it.
+const plannedElite=(map,path,from)=>{
+ const types=new Map((map?.nodes??[]).map(n=>[nodeKey(n),n.type]));
+ for(const key of path.slice(Math.max(0,path.indexOf(from)))){const t=types.get(key);if(t==='RestSite')break;if(t==='Elite')return key;}
+ return from;
+};
+
+// elite_not_ready (claude and jev_facts_v3 modes): with fewer than 2 potions and the act's recent hallway
+// fights at or above its limit, map options that commit to an elite before the next rest site are
+// removed, while another map option remains. It runs before the plan's route, so a path through the
+// removed elite breaks (route_off).
+export function eliteReadyConstraint(state,candidates,readiness=eliteReadiness(state)) {
+ if(state.state_type!=='map'||readiness?.level!=='not_ready'||!state.map?.nodes?.length)return null;
+ const commits=eliteBeforeRest(state.map),drop=c=>c.command?.action==='choose_map_node'&&c.details?.col!=null&&commits(nodeKey(c.details));
+ const kept=candidates.filter(c=>!drop(c));
+ if(kept.length===candidates.length||!mapOptions(kept).length)return null;
+ return {candidates:kept,constraint:{kind:'elite_not_ready',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept),
+  form:readiness.hallway_form,potions:readiness.potions_held,act:readiness.act,limit:readiness.act_limit}};
 }
 
 // The first option in the plan's order that is still offered.
