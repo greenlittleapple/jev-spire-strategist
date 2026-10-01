@@ -251,6 +251,24 @@ export function eliteBeforeRest(map) {
  return commits;
 }
 
+// The row of the nearest shop reachable from a node (the node included), or null when every path from it
+// reaches the boss without one. For shop_risk (strategy.mjs).
+export function shopReach(map) {
+ const {nodes} = graph(map), memo = new Map();
+ const near = key => {
+  if (memo.has(key)) return memo.get(key);
+  const node = nodes.get(key);
+  let out = null;
+  if (node && node.type !== 'Boss') {
+   if (node.type === 'Shop') out = node.row;
+   else for (const [c,r] of node.children ?? []) { const x = near(`${c},${r}`); if (x != null && (out == null || x < out)) out = x; }
+  }
+  memo.set(key, out);
+  return out;
+ };
+ return near;
+}
+
 // Elite readiness in Acts 1 and 2. In the logs an Act 1 elite cost a mean 6.9 HP when the run held 2+
 // potions and its last three hallway fights averaged under 7 HP lost (11 fights, no deaths), and 37.5 HP
 // with fewer than 2 potions and 7+ (13 fights, 4 run-ending); Act 2 showed the same near 10.
@@ -276,6 +294,24 @@ export function eliteReadiness(state) {
 }
 
 export function mapNodeKeys(map) { return (map?.nodes ?? []).map(nodeKey); }
+
+// The runner's mapMemory after observing a state. During travel the game can still show the map with
+// the node just left as current_position; taking it would put the remembered position one row behind
+// the node travelled to, and every floor off the map one too high (JEV22 Strategist v3.18, the floor 2
+// card reward: floor_offset 2 and elite_chains [10,12] for [9,11]). Rows only increase within an act,
+// so a map screen behind the remembered node keeps the remembered position.
+export function rememberMap(memory, state) {
+ if (!state?.map?.nodes?.length || !state.run) return memory;
+ const position = state.map.current_position;
+ const same = memory && memory.runId === state.run.live_id && memory.act === state.run.act;
+ const behind = same && memory.position?.row != null && position?.row != null && position.row < memory.position.row;
+ return {runId: state.run.live_id, act: state.run.act, map: state.map, position: behind ? memory.position : position};
+}
+// After a map move is accepted, the node travelled to is the current position.
+export function travelledTo(memory, state, chosen) {
+ if (chosen?.command?.action !== 'choose_map_node' || memory?.runId !== state?.run?.live_id || chosen.details?.col == null) return memory;
+ return {...memory, position: {col: chosen.details.col, row: chosen.details.row, type: chosen.details.type}};
+}
 
 // mapMemory = {runId, act, map, position}: the act map from the last map screen.
 export function currentMap(state, mapMemory) {

@@ -1,5 +1,5 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {rewardState} from './rewards.mjs';import {actionsFor} from './actions.mjs';
+import {rewardState,unclaimedGold} from './rewards.mjs';import {actionsFor} from './actions.mjs';
 const s={state_type:'rewards',run:{act:1,floor:14},rewards:{can_proceed:true,items:[{index:0,type:'card',description:'Add a card to your deck.'}]}};
 const e=(action,state=s,args={})=>({outcome:'executed',state,chosen:{command:{action,...args}}});
 test('successful skip leaves the reward behind and permits proceeding instead of reopening it',()=>{
@@ -31,4 +31,21 @@ test('with two identical card rewards, skipping the second leaves the first offe
  const card={type:'card',description:'Add a card to your deck.'};
  const two={...s,rewards:{can_proceed:true,items:[{...card,index:0},{...card,index:1}]}};
  assert.deepEqual(rewardState(two,[e('skip_card_reward'),e('claim_reward',two,{index:1})]).rewards.items.map(x=>x.index),[0]);
+});
+
+test('gold still unclaimed on the rewards screen is known on the card reward screen it opened',()=>{
+ const run={live_id:'r',act:1,floor:7};
+ const items=[{index:0,type:'gold',description:'62 Gold',gold_amount:62},{index:1,type:'potion',description:'Fire Potion'},{index:2,type:'card',description:'Add a card to your deck.'}];
+ const rewards={state_type:'rewards',run,rewards:{items}};
+ const card={state_type:'card_reward',run,card_reward:{cards:[]}};
+ const claimed=index=>({outcome:'executed',state:rewards,chosen:{command:{action:'claim_reward',index}}});
+ assert.equal(unclaimedGold(rewards,[]),62);
+ assert.equal(unclaimedGold(card,[claimed(2)]),62);
+ // The gold was claimed first: the later rewards state no longer lists it.
+ const after={...rewards,rewards:{items:[{...items[1],index:0},{...items[2],index:1}]}};
+ assert.equal(unclaimedGold(card,[{outcome:'executed',state:after,chosen:{command:{action:'claim_reward',index:1}}},claimed(0)]),0);
+ // Another floor, no claim, or a preview: unknown.
+ assert.equal(unclaimedGold(card,[{...claimed(2),state:{...rewards,run:{...run,floor:6}}}]),null);
+ assert.equal(unclaimedGold(card,[{...claimed(2),outcome:'preview'}]),null);
+ assert.equal(unclaimedGold({state_type:'shop',run},[claimed(2)]),null);
 });

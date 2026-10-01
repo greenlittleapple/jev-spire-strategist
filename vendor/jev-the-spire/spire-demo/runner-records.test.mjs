@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { PAUSE_REASONS, pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker } from './runner-records.mjs';
+import { PAUSE_REASONS, pauseRecord, timeoutMessage, operatorCancel, writeDispatchMarker, PRE_ENQUEUE_REJECTION } from './runner-records.mjs';
 
 // server.mjs is read as text: importing it starts a runner.
 const server = await readFile(new URL('./server.mjs', import.meta.url), 'utf8');
@@ -55,4 +55,25 @@ test('the runner logs strategy events as they happen and records rule and screen
   assert.match(server, /if \(!logged\.has\(strategyEvent\)\) await onEvent\(strategyEvent\)/);
   assert.match(server, /rule:result\.rule\?\?null, screenChoice:result\.screenChoice\?\?null/);
   assert.match(server, /await writeDispatchMarker\(log, view,/);
+});
+
+test('bridge errors returned before enqueueing are game_rejected dispatches, not uncertain actions', () => {
+  // JEV23 floor 5: a second choose_map_node from a stale map state while traveling to the shop.
+  for (const message of ['Map screen is not open', 'card_index 7 out of range (5 cards)', 'Not in play phase - cannot act during enemy turn'])
+    assert.match(message, PRE_ENQUEUE_REJECTION);
+  for (const message of ['Map node index 3 out of range', 'Rewards screen is not open', 'fetch failed', 'Map screen is not open yet'])
+    assert.doesNotMatch(message, PRE_ENQUEUE_REJECTION);
+  const handler = server.slice(server.indexOf("gameRequest('/api/v1/singleplayer', chosen.command)"));
+  assert.match(handler.slice(0, 600), /if \(PRE_ENQUEUE_REJECTION\.test\(error\.message\)\) \{/);
+  assert.match(handler.slice(0, 900), /outcome: 'game_rejected'/);
+});
+
+test('the runner keeps the node travelled to, passes unclaimed reward gold and archives stale strategy requests', () => {
+  assert.match(server, /mapMemory = rememberMap\(mapMemory, s\);/);
+  assert.match(server, /mapMemory = travelledTo\(mapMemory, s, chosen\);/);
+  assert.match(server, /goldUnclaimed:unclaimedGold\(planningState,view\.events\)/);
+  const observe = server.slice(server.indexOf('async function observe('), server.indexOf('const mismatch ='));
+  assert.match(observe, /if \(id && strategist && id !== archivedFor\) \{/);
+  assert.match(observe, /strategist\.channel\.archiveOtherRun\(id\)/);
+  assert.match(observe, /kind: 'strategy_archived'/);
 });

@@ -1,7 +1,7 @@
 // Jev decides every move; Claude refreshes a persistent strategy on triggers.
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
 import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,eliteReadiness,FACTS_POLICY,FACTS_V3_POLICY,STRATEGY_FACTS_POLICY} from './route-facts.mjs';
-import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
+import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,eventNote,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown,swapPending,swapClaim,eliteReadyConstraint} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
@@ -15,7 +15,7 @@ const addUsage=(a,b)=>({input_tokens:(a?.input_tokens??0)+(b?.input_tokens??0),o
 const noUsage={input_tokens:0,output_tokens:0};
 // Constraints from code rules, not from the strategist's plan: when one leaves a single option the
 // move is labeled 'rule' (with the rule's name), not 'claude'.
-const RULE_CONSTRAINTS=new Set(['combat','exhaust_choice','rest_waste','elite_not_ready']);
+const RULE_CONSTRAINTS=new Set(['combat','exhaust_choice','rest_waste','elite_not_ready','elite_low_hp']);
 const direct=(decisionSource,model,choice,extra={})=>({decisionSource,model,usage:noUsage,deliberation:null,...extra,
  answers:{move:{type:'choice',choice:choice.id,confidence:null,probabilities:{}}}});
 
@@ -33,7 +33,9 @@ export function newStrategyStatus({enabled=false,mode='constrained',threshold=0.
 // onEvent(event) receives each strategy event when it happens (the runner logs it then), so a
 // request posted by a decision that is later cancelled, or before a runner restart, is still logged.
 // strategyEvents in the result lists the same events.
-export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},onEvent=null,strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false}) {
+// goldUnclaimed: gold rewards still unclaimed on the rewards screen a card reward was opened from
+// (rewards.mjs unclaimedGold); shown to the strategist only, not added to Jev's state.
+export async function hierarchicalDeliberate({state,candidates,ask,recent={},onStage=()=>{},onEvent=null,strategist,withFacts=false,factsVersion=withFacts?2:0,mapMemory=null,replay=null,cancelled=()=>false,goldUnclaimed=null}) {
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
  // Claude mode keeps the v3.1 facts label; jev-compact-v3.2 and later (the shop majority rule) are jev_facts_v3 only.
  const version=strategist?3:factsVersion,factsPolicy=strategist?STRATEGY_FACTS_POLICY:version>=3?FACTS_V3_POLICY:FACTS_POLICY;
@@ -121,7 +123,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    // Route nodes go into the stamp only when the brief lists routes: a consult off the map
    // (the act's opening event) must not count as having seen this act's routes.
    const routes=distinctRoutes(map,position);
-   const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts});
+   const sameFloor=status.lastEvent&&status.lastEvent.run_id===state.run?.live_id&&status.lastEvent.floor===state.run?.floor;
+   const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts,goldUnclaimed,lastEvent:!state.event&&sameFloor?status.lastEvent:null});
    const runId=state.run?.live_id;
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=planForRun(fight,runId);
     else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=planForRun(similar,runId);}
@@ -138,9 +141,12 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
    const request=await channel.post({key,instructions:STRATEGIST_INSTRUCTIONS,schema:PLAN_SCHEMA,brief,
-    stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
-     // Seen routes carry forward within an act; only a brief that lists them marks them seen.
-     route_act:routes?state.run.act:status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.route_act??null:null,
+    // An act routed by an earlier answer stays routed within the act; this answer routes it only with a
+    // non-empty route_path from the listed routes, or as a route request on a map screen (stampPlan).
+    stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map),{routesShown:Boolean(routes),
+     routeAct:status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.route_act??null:null}),encounter_key:encounter,
+     // shop_risk asks once per act.
+     shop_risk_act:reason==='shop_risk'?state.run.act:status.plan?.run_id===state.run.live_id?status.plan.shop_risk_act??null:null,
      // Elites whose risky readiness the strategist has seen at a route_risk branch this act: asked once each.
      readiness_asked:[...(status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.readiness_asked??[]:[]),
       ...(brief.route_risk?.elite_readiness?.level==='risky'&&brief.route_risk.elite_readiness.elite?[brief.route_risk.elite_readiness.elite.node]:[])],
@@ -252,5 +258,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   result={...result,usage:addUsage(first.usage,result.usage),escalatedFrom:first.answers.move};
  }
  status.potionSwap=swapPending(state,candidates.find(c=>c.id===result.answers?.move?.choice));
+ // The event option taken and the keywords its page defined, for the screens it opens on this floor (a
+ // card selection after Symbiote's "Enchant an Attack with Corrupted." had neither the event nor Corrupted).
+ if(state.event)status.lastEvent=eventNote(state,candidates.find(c=>c.id===result.answers?.move?.choice));
  return {...result,strategyEvents:events};
 }
