@@ -255,7 +255,7 @@ function compareLog() {
 test('compare joins sim forecasts to decisions and measures the next turn', () => {
   const records = compareLog().map(slimRecord);
   const result = compare(records);
-  assert.deepEqual(result.counts, {decisions: 3, with_sim: 1, chosen_not_simulated: 0, followed: 1, compared: 1, exact: 1});
+  assert.deepEqual(result.counts, {decisions: 3, with_sim: 1, chosen_not_simulated: 0, followed: 1, compared: 1, exact: 1, engine: 0});
   const a = result.agreement;
   assert.deepEqual([a.hpAfter.planner_vs_actual.rate, a.hpAfter.sim_vs_actual.rate, a.hpAfter.planner_vs_sim.rate], [0, 1, 0]);
   assert.deepEqual([a.damage.planner_vs_actual.rate, a.damage.sim_vs_actual.rate], [1, 1]);

@@ -820,13 +820,16 @@ export function decisionCandidates(s, options = {}) {
   return planCandidates(s);
 }
 
+// Added to combat requests only when some candidate carries a live engine forecast (SIM_FORECAST=live).
+export const ENGINE_FORECAST_NOTE="A forecast with source engine was played in the game's own combat code: the plan, the end of the turn, the enemy turn and the start of the next turn. quality exact: computed exactly (no draw or random effect in the line). quality sampled: draws or random effects vary; numbers are means over the samples, with min, max and survive_rate (survives null means some samples die). block and energyLeft are at the end of the plan; hpLoss and hpAfter after the enemy turn. A forecast with source planner is the hand-written estimate, with its caveats.";
 export function decisionQuestion(s,candidates) {
   s=visibleState(s);
   if(!isCombat(s)){const q=makeQuestion(s,candidates);q.state.encounter=encounterBrief(s);q.state.deck=deckSnapshot(s);q.state.spending_routes=spendingRoutes(s);return q;}
   return {
     model:'jev-latest',
     state:{game:'Slay the Spire 2',objective:'Win the run. Survive the current turn and preserve useful resources.',state:s,encounter:encounterBrief(s),deck:deckSnapshot(s),facts:factsFor(s),policy:POLICY_VERSION,setup_dependencies:setupLinks(s),mechanics_review:mechanicsReview(s),potion_timing:potionTiming(s),
-      forecast_scope:'Plans are short prefixes, not complete optimal turns. Forecasts assume ending after the prefix. Null means unknown, not zero. Partial outcomes have explicit caveats. Do not treat displayed card damage as actual damage through enemy powers.'},
+      forecast_scope:'Plans are short prefixes, not complete optimal turns. Forecasts assume ending after the prefix. Null means unknown, not zero. Partial outcomes have explicit caveats. Do not treat displayed card damage as actual damage through enemy powers.',
+      ...(candidates.some(c=>c.forecast?.source==='engine')?{forecast_engine:ENGINE_FORECAST_NOTE}:{})},
     questions:{move:{type:'choice',
       instructions:'Choose the next action or short plan that best advances winning the run. Derive tactics from visible rules, intents, cards and observations. Calculations are aids, not guaranteed outcomes; partial estimates omit stated effects and null means unknown. Evaluate tradeoffs over the encounter, not only the current turn. Only the FIRST action executes, followed by a fresh observation. Choose only among supplied IDs.',
       criteria:Object.fromEntries(candidates.map(c=>[c.id,JSON.stringify({sequence:c.plan,forecast:c.forecast,first_action_rules:c.details.description})])),

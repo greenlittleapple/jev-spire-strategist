@@ -3,10 +3,11 @@
 // are lookup keys: STRIKE_IRONCLAD deals 6, DEFEND_IRONCLAD gives 5 Block, WILD deals 4 to 6 depending
 // on (seed, sample), CHOICE stops for a card choice; each costs 1. BLOCK_POTION gives 12 Block. After the line the
 // enemies attack for their intents. Commands crash and hang test the client; STUB_PING_FAIL=1 fails
-// ping, STUB_EXIT_AT_START=1 exits at once. Like the bridge, living enemies are numbered
+// ping, STUB_EXIT_AT_START=1 exits at once. For the pool: STUB_DELAY_MS delays each simulate answer,
+// and STUB_CRASH_ONCE=<file> makes the first simulate of all workers sharing that file exit instead. Like the bridge, living enemies are numbered
 // <MONSTER>_<n> among the living and renumbered after a death; a dead one becomes <MONSTER>_dead_<n>;
 // a target may also be a numeric combat_id. A line whose combat ends early stops with "combat_ended".
-import {readFileSync} from 'node:fs';
+import {readFileSync, writeFileSync} from 'node:fs';
 import {createInterface} from 'node:readline';
 
 if (process.env.STUB_EXIT_AT_START === '1') process.exit(2);
@@ -63,7 +64,12 @@ createInterface({input: process.stdin}).on('line', line => {
   }
   if (req.cmd === 'simulate') {
     if (!loaded) return send({id: req.id, ok: false, error: 'nothing loaded'});
+    if (process.env.STUB_CRASH_ONCE) {
+      try { writeFileSync(process.env.STUB_CRASH_ONCE, 'crashed', {flag: 'wx'}); process.exit(3); } catch {}
+    }
     const results = req.lines.map(l => ({id: l.id, samples: Array.from({length: req.samples}, (_, k) => play(loaded, l.actions, req.seed, k))}));
+    const delay = Number(process.env.STUB_DELAY_MS ?? 0);
+    if (delay > 0) { setTimeout(() => send({id: req.id, ok: true, ms: delay, results}), delay); return; }
     return send({id: req.id, ok: true, ms: 2, results});
   }
   send({id: req.id, ok: false, error: `unknown cmd ${req.cmd}`});

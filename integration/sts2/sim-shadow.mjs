@@ -12,6 +12,8 @@ export const SIM_MAX_LINES = 40;
 const combatTypes = new Set(['monster', 'elite', 'boss']);
 // The forecast fields, named as in the planner's forecast() so the two compare directly.
 export const FORECAST_FIELDS = ['damage', 'block', 'hpLoss', 'hpAfter', 'survives', 'defeatedEnemies', 'energyLeft'];
+// A forecast's FORECAST_FIELDS, with the planner's list of defeated enemies as a count.
+export const pickForecast = f => f ? Object.fromEntries(FORECAST_FIELDS.map(k => [k, k === 'defeatedEnemies' && Array.isArray(f[k]) ? f[k].length : f[k] ?? null])) : null;
 
 // Lines take 4 samples when the planner's forecast stopped at a draw or a random effect, else 1.
 export const SAMPLES_RANDOM = SIM_SAMPLES, SAMPLES_FIXED = 1;
