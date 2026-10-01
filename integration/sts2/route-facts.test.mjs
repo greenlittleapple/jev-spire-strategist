@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys} from './route-facts.mjs';
+import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys,eliteReadiness} from './route-facts.mjs';
 import {efficientQuestion,isForcedChoice} from './efficient-decisions.mjs';
 import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,screenKey,ELITE_CHAIN_MARGIN,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
@@ -28,7 +28,8 @@ const candidates=[
  {id:'a0',label:'Travel to Monster (column 0)',command:{action:'choose_map_node',index:0},details:{index:0,col:0,row:1,type:'Monster'}},
  {id:'a1',label:'Travel to Elite (column 1)',command:{action:'choose_map_node',index:1},details:{index:1,col:1,row:1,type:'Elite'}}];
 const run={live_id:'run-1',act:1,floor:1,ascension:0};
-const mapState=(hp=80)=>({state_type:'map',run,map,player:{hp,max_hp:80,gold:120,potions:[{name:'Block Potion'}],max_potion_slots:3,relics:[],deck:[]}});
+// Two potions and no saved history: elite readiness is ready, so route_risk here is the HP check alone.
+const mapState=(hp=80)=>({state_type:'map',run,map,player:{hp,max_hp:80,gold:120,potions:[{name:'Block Potion'},{name:'Fire Potion'}],max_potion_slots:3,relics:[],deck:[]}});
 const plan=(extra={})=>({archetype:'x',summary:'x',priorities:[],combat:{risk_tolerance:'low',potion_policy:'x',focus:'x',hallway_potion_below_hp_percent:100,potion_reserve:0},fight:{plan:'',target_priority:[]},
  card_reward:{desired:[],avoid:[],skip_when:''},shop:{gold_reserve:0,priorities:[]},route:'x',route_path:[],elite_min_hp_percent:0,
  rest:'x',replan_below_hp_percent:25,allowed_option_ids:[],option_note:'',...extra});
@@ -280,7 +281,7 @@ test('route_risk briefs carry the chain; Jev-only requests are unchanged',async(
   let request;
   await hierarchicalDeliberate({state:jev22State(61),candidates:jev22Options,factsVersion,
    ask:async q=>{request=q;return {model:'t',answers:{move:{type:'choice',choice:'a1',confidence:.9,probabilities:{a1:.9}}},usage:{input_tokens:1,output_tokens:1}};}});
-  assert.deepEqual(request.state.computed_facts,computedFacts(jev22State(61),jev22Options,null,{version:factsVersion}));
+  assert.deepEqual(request.state.computed_facts,computedFacts(jev22State(61),jev22Options,null,{version:factsVersion,readiness:factsVersion===3?eliteReadiness(jev22State(61)):null}));
   assert.deepEqual(request.state.computed_facts.route_options,factsVersion===3?orderedOptionRoutes(jev22Map(),jev22Options):optionRoutes(jev22Map(),jev22Options));
   assert.doesNotMatch(JSON.stringify(request),/elite_chain|floor_offset/);
  }

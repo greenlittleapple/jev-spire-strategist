@@ -236,6 +236,45 @@ export function committedEliteChain(map, path) {
  return null;
 }
 
+// Map nodes from which every path reaches an elite before a rest site, the node included: the v3
+// fact min_elites_before_first_rest >= 1, computed over the whole graph rather than sampled paths.
+export function eliteBeforeRest(map) {
+ const {nodes} = graph(map), memo = new Map();
+ const commits = key => {
+  if (memo.has(key)) return memo.get(key);
+  const node = nodes.get(key);
+  const out = !node || node.type === 'Boss' || !node.children?.length || node.type === 'RestSite' ? false
+   : node.type === 'Elite' || node.children.every(([c,r]) => commits(`${c},${r}`));
+  memo.set(key, out);
+  return out;
+ };
+ return commits;
+}
+
+// Elite readiness in Acts 1 and 2. In the logs an Act 1 elite cost a mean 6.9 HP when the run held 2+
+// potions and its last three hallway fights averaged under 7 HP lost (11 fights, no deaths), and 37.5 HP
+// with fewer than 2 potions and 7+ (13 fights, 4 run-ending); Act 2 showed the same near 10.
+export const ELITE_READY_LIMITS = {1: 7, 2: 10};
+export const ELITE_READY_NOTE = 'hallway_form: mean HP lost, net of healing, in the act\'s last three monster fights (null before two). ready: 2+ potions and form under act_limit or null. not_ready: under 2 potions and form at or above act_limit; code then removes map options that commit to an elite before the next rest site while another option remains. risky: anything else.';
+// Mean net HP lost (damage_taken - hp_healed, floored at 0) over the act's last three monster rooms in
+// the saved history; null with fewer than two or no history for the act. Combat rooms are saved when
+// they end, so the fight just won is in the history at the next map screen.
+export function hallwayForm(history, act) {
+ const rooms = history?.[act - 1];
+ if (!Array.isArray(rooms)) return null;
+ const lost = rooms.filter(e => e?.rooms?.[0]?.room_type === 'monster').slice(-3)
+  .map(e => { const p = e.player_stats?.[0] ?? {}; return Math.max(0, (p.damage_taken ?? 0) - (p.hp_healed ?? 0)); });
+ return lost.length < 2 ? null : lost.reduce((a, b) => a + b, 0) / lost.length;
+}
+export function eliteReadiness(state) {
+ const act = state.run?.act, limit = ELITE_READY_LIMITS[act];
+ if (!limit || !state.player) return null;
+ const potions = state.player.potions?.length ?? 0, form = hallwayForm(state.saved_run?.map_point_history, act);
+ const level = potions >= 2 && (form == null || form < limit) ? 'ready' : potions < 2 && form != null && form >= limit ? 'not_ready' : 'risky';
+ // Means of two or three whole numbers never round across a whole-number limit.
+ return {level, hallway_form: form == null ? null : Math.round(form * 10) / 10, potions_held: potions, act, act_limit: limit};
+}
+
 export function mapNodeKeys(map) { return (map?.nodes ?? []).map(nodeKey); }
 
 // mapMemory = {runId, act, map, position}: the act map from the last map screen.
@@ -266,11 +305,13 @@ export function killCosts(state) {
   note: 'Killing these enemies triggers this damage; plan HP and block for when it resolves. Values change as the power grows.'};
 }
 
-export function computedFacts(state, candidates, mapMemory, {version=2}={}) {
+// readiness: eliteReadiness(state) for map screens (jev_facts_v3; claude mode shows it in the brief's routes).
+export function computedFacts(state, candidates, mapMemory, {version=2, readiness=null}={}) {
  const facts = {}, p = state.player ?? {};
  const {map, position} = currentMap(state, mapMemory);
  if (state.state_type === 'map' && map) {
   facts.route_options = version >= 3 ? orderedOptionRoutes(map, candidates) : optionRoutes(map, candidates);
+  if (readiness) facts.elite_readiness = {...readiness, note: ELITE_READY_NOTE};
  } else if (map && position) {
   facts.route_ahead = remainingRoute(map, position);
  }

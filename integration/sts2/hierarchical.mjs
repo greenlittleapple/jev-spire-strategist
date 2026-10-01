@@ -1,8 +1,8 @@
 // Jev decides every move; Claude refreshes a persistent strategy on triggers.
 import {efficientDeliberate,isForcedChoice} from './efficient-decisions.mjs';
-import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,FACTS_POLICY,FACTS_V3_POLICY,STRATEGY_FACTS_POLICY} from './route-facts.mjs';
+import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,eliteReadiness,FACTS_POLICY,FACTS_V3_POLICY,STRATEGY_FACTS_POLICY} from './route-facts.mjs';
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,
- strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown} from './strategy.mjs';
+ strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown,eliteReadyConstraint} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
 import {cardSummary} from './card-stats.mjs';
 import {currentEncounter,fightId,FIGHT_START_REASONS,planForRun,activeFightPlan} from './playbook.mjs';
@@ -15,7 +15,7 @@ const addUsage=(a,b)=>({input_tokens:(a?.input_tokens??0)+(b?.input_tokens??0),o
 const noUsage={input_tokens:0,output_tokens:0};
 // Constraints from code rules, not from the strategist's plan: when one leaves a single option the
 // move is labeled 'rule' (with the rule's name), not 'claude'.
-const RULE_CONSTRAINTS=new Set(['combat','exhaust_choice','rest_waste']);
+const RULE_CONSTRAINTS=new Set(['combat','exhaust_choice','rest_waste','elite_not_ready']);
 const direct=(decisionSource,model,choice,extra={})=>({decisionSource,model,usage:noUsage,deliberation:null,...extra,
  answers:{move:{type:'choice',choice:choice.id,confidence:null,probabilities:{}}}});
 
@@ -37,7 +37,12 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  if(isForcedChoice(state,candidates))return efficientDeliberate({state,candidates,ask,recent,onStage});
  // Claude mode keeps the v3.1 facts label; jev-compact-v3.2 and later (the shop majority rule) are jev_facts_v3 only.
  const version=strategist?3:factsVersion,factsPolicy=strategist?STRATEGY_FACTS_POLICY:version>=3?FACTS_V3_POLICY:FACTS_POLICY;
- const facts=version?computedFacts(state,candidates,mapMemory,{version}):null;
+ // Elite readiness (v3 facts: claude and jev_facts_v3 modes). elite_not_ready removes its options before
+ // anything else sees them, the strategist's triggers and route included.
+ const readiness=version>=3&&state.state_type==='map'?eliteReadiness(state):null;
+ const eliteRule=readiness?eliteReadyConstraint(state,candidates,readiness):null;
+ if(eliteRule)candidates=eliteRule.candidates;
+ const facts=version?computedFacts(state,candidates,mapMemory,{version,readiness:strategist?null:readiness}):null;
  // v3 also enables the potion and shop resource reviews.
  const resourceReviews=version>=3;
  const events=[];
@@ -50,7 +55,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  if(onEvent)for(const e of events)await onEvent(e);
  if(!strategist){
   if(replayed)return {...direct('replay','Reference run',replayed),strategyEvents:events};
-  return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),strategyEvents:events};
+  if(eliteRule&&candidates.length===1)return {...direct('rule','Rule',candidates[0],{constraint:eliteRule.constraint,rule:'elite_not_ready'}),strategyEvents:events};
+  return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),...(eliteRule?{constraint:eliteRule.constraint}:{}),strategyEvents:events};
  }
  const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
  const cardStats=()=>strategist.cardStats??null;
@@ -135,6 +141,9 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
     stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map)),encounter_key:encounter,
      // Seen routes carry forward within an act; only a brief that lists them marks them seen.
      route_act:routes?state.run.act:status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.route_act??null:null,
+     // Elites whose risky readiness the strategist has seen at a route_risk branch this act: asked once each.
+     readiness_asked:[...(status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.readiness_asked??[]:[]),
+      ...(brief.route_risk?.elite_readiness?.level==='risky'&&brief.route_risk.elite_readiness.elite?[brief.route_risk.elite_readiness.elite.node]:[])],
      // A choice screen inside a fight (a potion's card pick) keeps that fight as the plan's encounter,
      // so the fight-start trigger does not fire again for the same fight.
      ...(!['monster','elite','boss'].includes(state.state_type)&&status.plan?.encounter&&status.plan.floor===state.run.floor&&status.plan.run_id===state.run.live_id?{encounter:status.plan.encounter}:{})}});
@@ -159,7 +168,10 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('filtered',null,candidates[0]);
   // The plan from a consult during this fight, else the saved plan (play_first only from this run).
   const fight=encounter?activeFightPlan(state,status,playbook?await playbook.get(encounter):null):null;
-  const {candidates:options,constraint}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
+  const {candidates:options,constraint:planned}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
+  // With the plan's route also applied, both are recorded as rules in order under the plan's kind.
+  const constraint=!eliteRule?planned:!planned?eliteRule.constraint:{...planned,removed:eliteRule.constraint.removed+planned.removed,
+   removed_ids:[...eliteRule.constraint.removed_ids,...(planned.removed_ids??[])],rules:[eliteRule.constraint,planned]};
   // A single option left by a code rule is that rule's move; one left by the strategist's plan is
   // its choice. Neither needs a Jev call.
   // A rule that only recorded lifts (removed 0) did not choose; a lone option then stays single_option.
