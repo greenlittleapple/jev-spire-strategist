@@ -1,4 +1,5 @@
-import {test} from 'node:test';
+import {test as nodeTest,afterEach,after} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -24,13 +25,33 @@ const shop=(gold=200,removed=false)=>({state_type:'shop',run:run(6),player:{hp:6
  shop:{items:[...(removed?[]:[{index:0,category:'card',price:50,is_stocked:true,can_afford:true,card_name:'Anger',card_description:'Deal 6.'}]),
   {index:2,category:'card_removal',price:75,is_stocked:true,can_afford:gold>=75}]}});
 const jev=choice=>({model:'t',answers:{move:{type:'choice',choice,confidence:.9,probabilities:{[choice]:.9}}},usage:{input_tokens:1,output_tokens:1}});
+// Strategist sessions answer requests in the background. Each test's sessions are stopped when it ends
+// (withDir, afterEach, after), and a strategist wait in hierarchicalDeliberate is cancelled with them, so
+// a failed or unanswered request fails the test instead of leaving the file running.
 const sessions=[];
-async function withDir(fn){const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));try{return await fn(dir);}finally{await Promise.all(sessions.splice(0).map(s=>s()));await rm(dir,{recursive:true,force:true});}}
+let testRun=new AbortController();
+const cancelled=()=>testRun.signal.aborted;
+const haltAll=async()=>{const errors=(await Promise.all(sessions.splice(0).map(s=>s()))).filter(Boolean);if(errors.length)throw errors[0];};
+afterEach(async()=>{testRun.abort();try{await haltAll();}finally{testRun=new AbortController();}});
+after(async()=>{testRun.abort();await haltAll().catch(()=>{});});
+// A test that waits too long fails; afterEach then cancels its strategist wait.
+const test=(name,fn)=>nodeTest(name,{timeout:30000},fn);
+async function withDir(fn){const dir=await mkdtemp(join(tmpdir(),'jev-pb-'));try{return await fn(dir);}finally{try{await haltAll();}finally{await rm(dir,{recursive:true,force:true});}}}
+// Windows can refuse a read while the runner side renames request.json or answer.json into place; those
+// reads are retried. Any other error stops the session and cancels the strategist wait, and is reported.
+const RETRY=new Set(['EPERM','EACCES','EBUSY']);
 function session(channel,makePlan,seen=[]){
- let stop=false;
+ const controller=new AbortController(),{signal}=controller;
+ let failure=null;
  // The loop is awaited on halt, so the directory is never removed while an answer is being written.
- const done=(async()=>{while(!stop){const r=await channel.pending();if(r){seen.push(r);await channel.answer(r.id,makePlan(r));}await new Promise(x=>setTimeout(x,30));}})();
- const halt=async()=>{stop=true;await done.catch(()=>{});};sessions.push(halt);return halt;
+ const done=(async()=>{
+  while(!signal.aborted){
+   try{const r=await channel.pending();if(r){seen.push(r);await channel.answer(r.id,makePlan(r));}}
+   catch(error){if(!RETRY.has(error.code)&&!/was replaced by/.test(error.message)){failure=error;testRun.abort();return;}}
+   await delay(30,undefined,{signal}).catch(()=>{});
+  }
+ })();
+ const halt=async()=>{controller.abort();await done;return failure;};sessions.push(halt);return halt;
 }
 
 test('encounter keys ignore order and form suffixes, count duplicates, and stay fixed for the fight',()=>{
@@ -49,7 +70,7 @@ test('a new hallway encounter asks for a fight plan once; the saved plan is reus
  status.plan=stampPlan(plan(),requestStamp({...fightState(),state_type:'event'},[],'run_start'));
  const stop=session(channel,()=>plan({fight:{plan:'Kill the Leader; minions leave.',target_priority:['Leader']}}),seen);
  const s=fightState(),c=decisionCandidates(s),asked=[];
- const result=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
+ const result=await hierarchicalDeliberate({cancelled,state:s,candidates:c,strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
  assert.equal(seen[0].stamp.reason,'new_encounter');assert.equal(seen[0].brief.encounter,'Leader + Minion');
  assert.deepEqual((await playbook.get('Leader + Minion')).target_priority,['Leader']);
  assert.deepEqual(asked[0].state.run_strategy.fight_plan,{plan:'Kill the Leader; minions leave.',target_priority:['Leader']});
@@ -59,13 +80,13 @@ test('a new hallway encounter asks for a fight plan once; the saved plan is reus
  // The same encounter later (another floor) needs no request and still gets the plan.
  const later=fightState(1,9),before=seen.length;
  const again=[];
- await hierarchicalDeliberate({state:later,candidates:decisionCandidates(later),strategist:{channel,status,playbook},ask:async q=>{again.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
+ await hierarchicalDeliberate({cancelled,state:later,candidates:decisionCandidates(later),strategist:{channel,status,playbook},ask:async q=>{again.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
  assert.equal(seen.length,before);assert.equal(again[0].state.run_strategy.fight_plan.plan,'Kill the Leader; minions leave.');
  // A different encounter does not see it.
  const other=fightState(1,11);other.battle.enemies=[{entity_id:'x',name:'Other',hp:10,max_hp:10,block:0,status:[],intents:[]}];
  status.encountersAsked.push('run-1:1:11');
  const third=[];
- await hierarchicalDeliberate({state:other,candidates:decisionCandidates(other),strategist:{channel,status,playbook},ask:async q=>{third.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
+ await hierarchicalDeliberate({cancelled,state:other,candidates:decisionCandidates(other),strategist:{channel,status,playbook},ask:async q=>{third.push(q);return jev(Object.keys(q.questions.move.criteria)[0]);}});
  stop();
  assert.equal(third[0].state.run_strategy.fight_plan,undefined);
 }));
@@ -76,10 +97,10 @@ test('Claude decides owned screens: an ordered shop list runs without Jev and wi
  const s=shop(),c=decisionCandidates(s);
  const buy=c.find(x=>x.label.startsWith('Anger')).id,remove=c.find(x=>x.label.startsWith('Remove')).id,leave=c.find(x=>x.command.action==='proceed').id;
  const stop=session(channel,()=>plan({allowed_option_ids:[buy,remove,leave]}),seen);
- const first=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ const first=await hierarchicalDeliberate({cancelled,state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
  assert.equal(seen[0].stamp.reason,'owned_screen');assert.equal(first.decisionSource,'claude');assert.equal(first.answers.move.choice,buy);
  const s2=shop(150,true),c2=decisionCandidates(s2);
- const second=await hierarchicalDeliberate({state:s2,candidates:c2,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ const second=await hierarchicalDeliberate({cancelled,state:s2,candidates:c2,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
  stop();
  assert.equal(seen.length,1,'the list covers the next purchase');
  assert.equal(c2.find(x=>x.id===second.answers.move.choice).label.startsWith('Remove'),true);
@@ -100,11 +121,11 @@ test('a replayed owned screen skips the strategist; a changed one is logged as d
  status.plan=stampPlan(plan(),requestStamp({...shop(),state_type:'event',run:run(1)},[],'run_start'));
  const s=shop(),c=decisionCandidates(s),leave=c.find(x=>x.command.action==='proceed');
  const replay={source:'ref',table:replayTable([{kind:'decision',state:s,candidates:c,chosen:{label:leave.label}}]),used:{},diverged:new Set()};
- const r=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},replay,ask:()=>assert.fail('no Jev call')});
+ const r=await hierarchicalDeliberate({cancelled,state:s,candidates:c,strategist:{channel,status},replay,ask:()=>assert.fail('no Jev call')});
  assert.equal(r.decisionSource,'replay');assert.equal(r.answers.move.choice,leave.id);assert.equal(status.requests,0);
  const other=shop(200,true),oc=decisionCandidates(other);
  session(channel,()=>plan({allowed_option_ids:[oc.find(x=>x.command.action==='proceed').id]}));
- const d=await hierarchicalDeliberate({state:other,candidates:oc,strategist:{channel,status},replay,ask:async q=>jev(Object.keys(q.questions.move.criteria)[0])});
+ const d=await hierarchicalDeliberate({cancelled,state:other,candidates:oc,strategist:{channel,status},replay,ask:async q=>jev(Object.keys(q.questions.move.criteria)[0])});
  assert.ok(d.strategyEvents.some(e=>e.kind==='replay_diverged'));
 }));
 
@@ -127,11 +148,11 @@ test('owned screens: a confirmation is taken without asking, and a revisited sho
  status.plan=stampPlan(plan(),requestStamp({...shop(),state_type:'event',run:run(1)},[],'run_start'));
  const confirm={state_type:'card_select',run:run(6),player:{hp:60,max_hp:80,gold:100,deck:[],relics:[],potions:[],status:[]}};
  const one=[{id:'a0',label:'Confirm selected cards',command:{action:'confirm_selection'}}];
- const r=await hierarchicalDeliberate({state:confirm,candidates:one,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ const r=await hierarchicalDeliberate({cancelled,state:confirm,candidates:one,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
  assert.equal(r.answers.move.choice,'a0');assert.equal(status.requests,0);
  const s=shop(),c=decisionCandidates(s),leave=c.find(x=>x.command.action==='proceed');
  status.screenChoices={[`run-1:1:6:shop`]:[JSON.stringify({command:leave.command,label:leave.label})]};
- const back=await hierarchicalDeliberate({state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ const back=await hierarchicalDeliberate({cancelled,state:s,candidates:c,strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
  assert.equal(back.answers.move.choice,leave.id);assert.equal(status.requests,0,'the remembered list is reused');
 }));
 
@@ -168,7 +189,7 @@ test('a fight plan from a mid-fight consult applies to that fight only and is no
  session(channel,()=>plan({fight:{plan:'Block everything this turn.',target_priority:[],play_first:['Strike']}}),seen);
  const s=fightState(2);s.player.hp=10;
  const asked=[];
- await hierarchicalDeliberate({state:s,candidates:decisionCandidates(s),onEvent:e=>events.push(e),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
+ await hierarchicalDeliberate({cancelled,state:s,candidates:decisionCandidates(s),onEvent:e=>events.push(e),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
  assert.equal(seen[0].stamp.reason,'low_hp');
  assert.equal(asked[0].state.run_strategy.fight_plan.plan,'Block everything this turn.','Jev gets the mid-fight plan now');
  assert.equal(events.find(e=>e.kind==='strategy_adopted').fight_scope,'this_fight');
@@ -177,13 +198,13 @@ test('a fight plan from a mid-fight consult applies to that fight only and is no
  assert.deepEqual(status.fightPlan.play_first,['Strike']);
  // Later in the same fight the plan still applies, with its play_first enforced.
  const next=fightState(3);next.player.hp=10;const again=[];
- const r=await hierarchicalDeliberate({state:next,candidates:decisionCandidates(next),strategist:{channel,status,playbook},ask:async q=>{again.push(q);return pick(q);}});
+ const r=await hierarchicalDeliberate({cancelled,state:next,candidates:decisionCandidates(next),strategist:{channel,status,playbook},ask:async q=>{again.push(q);return pick(q);}});
  assert.equal(seen.length,1,'no new consult');
  assert.equal(again[0].state.run_strategy.fight_plan.plan,'Block everything this turn.');
  assert.ok(r.constraint.rules.some(x=>x.kind==='play_first'));
  // The next fight with the same enemies gets the saved plan.
  const later=fightState(1,9),third=[];
- await hierarchicalDeliberate({state:later,candidates:decisionCandidates(later),strategist:{channel,status,playbook},ask:async q=>{third.push(q);return pick(q);}});
+ await hierarchicalDeliberate({cancelled,state:later,candidates:decisionCandidates(later),strategist:{channel,status,playbook},ask:async q=>{third.push(q);return pick(q);}});
  assert.equal(third[0].state.run_strategy.fight_plan.plan,'Kill the Leader.');
 }));
 
@@ -195,14 +216,14 @@ test('play_first carries only within the run that saved it; a fight-start answer
  status.plan=stampPlan(plan(),requestStamp({...fightState(),state_type:'event'},[],'run_start'));
  // A normal fight in another run: plan text only, play_first is not enforced.
  const s=fightState(),asked=[];
- const r=await hierarchicalDeliberate({state:s,candidates:decisionCandidates(s),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
+ const r=await hierarchicalDeliberate({cancelled,state:s,candidates:decisionCandidates(s),strategist:{channel,status,playbook},ask:async q=>{asked.push(q);return pick(q);}});
  assert.equal(asked[0].state.run_strategy.fight_plan.plan,'Kill the Leader.');
  assert.ok(!r.constraint?.rules?.some(x=>x.kind==='play_first'));
  // An elite start is shown the saved plan without play_first and answers with its own, which is saved for this run.
  status.fightPlan={fight_id:'run-1:1:7',encounter:'Leader + Minion',plan:'stale',target_priority:[],source:'low_hp'};
  session(channel,()=>plan({fight:{plan:'Strike the Leader first.',target_priority:['Leader'],play_first:['Strike']}}),seen);
  const e=fightState(1,7,'elite'),second=[];
- const r2=await hierarchicalDeliberate({state:e,candidates:decisionCandidates(e),strategist:{channel,status,playbook},ask:async q=>{second.push(q);return pick(q);}});
+ const r2=await hierarchicalDeliberate({cancelled,state:e,candidates:decisionCandidates(e),strategist:{channel,status,playbook},ask:async q=>{second.push(q);return pick(q);}});
  assert.equal(seen[0].stamp.reason,'elite_start');
  assert.equal(seen[0].brief.saved_fight_plan.plan,'Kill the Leader.');assert.equal('play_first' in seen[0].brief.saved_fight_plan,false);
  assert.equal(seen[0].brief.current_fight_plan.plan,'stale','a mid-fight plan of this fight is shown');
