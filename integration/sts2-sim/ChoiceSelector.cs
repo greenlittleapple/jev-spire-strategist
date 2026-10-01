@@ -23,6 +23,21 @@ public sealed class ChoiceSelector : ICardSelector
 
     public void Answer(params int[] optionIndexes) => _answers.Enqueue(_ => optionIndexes);
 
+    /// <summary>
+    /// When set, a choice with no queued answer is not answered: the game is left waiting on it and
+    /// <see cref="Pending"/> is set, so a forecast can stop there instead of guessing.
+    /// </summary>
+    public bool StopOnUnanswered { get; set; }
+
+    /// <summary>Describes the choice left unanswered under <see cref="StopOnUnanswered"/>, if any.</summary>
+    public string? Pending { get; private set; }
+
+    public void Clear()
+    {
+        _answers.Clear();
+        Pending = null;
+    }
+
     /// <summary>Queues a choice as a replay recorded it; it is matched to the options when the game asks.</summary>
     public void AnswerRecorded(Player player, RunState run, NetPlayerChoiceResult recorded) =>
         _answers.Enqueue(options =>
@@ -38,6 +53,11 @@ public sealed class ChoiceSelector : ICardSelector
     public Task<IEnumerable<CardModel>> GetSelectedCards(IEnumerable<CardModel> options, int minSelect, int maxSelect)
     {
         var list = options.ToList();
+        if (StopOnUnanswered && _answers.Count == 0)
+        {
+            Pending = $"choose {minSelect}-{maxSelect} of [{string.Join(", ", list.Select(c => c.Id.Entry))}]";
+            return new TaskCompletionSource<IEnumerable<CardModel>>().Task; // never completes; the sim is rebuilt before reuse
+        }
         int[] pick = _answers.Count > 0 ? _answers.Dequeue()(list) : Enumerable.Range(0, Math.Min(Math.Max(minSelect, 1), list.Count)).ToArray();
         if (pick.Any(i => i < 0 || i >= list.Count))
             throw new InvalidOperationException($"Choice answer [{string.Join(", ", pick)}] does not fit {list.Count} options.");

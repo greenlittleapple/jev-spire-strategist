@@ -8,6 +8,8 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        // In serve mode stdout carries only responses. Redirect before sts2.dll loads: its module initializer prints.
+        if (args.FirstOrDefault(a => !a.StartsWith("--")) == "serve") Console.SetOut(Console.Error);
         GameAssemblies.Register();
         return Run(args);
     }
@@ -20,15 +22,16 @@ public static class Program
     {
         Verbose = args.Contains("--verbose");
         NoChecksums = args.Contains("--no-checksums");
+        string command = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "boot";
+        string[] rest = args.Where(a => !a.StartsWith("--")).Skip(1).ToArray();
         var clock = Stopwatch.StartNew();
         Boot.Start(echoLog: args.Contains("--log"));
         Console.WriteLine($"boot {clock.ElapsedMilliseconds} ms, {GodotHeadless.StubbedFunctions} engine functions stubbed, " +
                           $"{HeadlessPatches.PatchedEngineCalls} engine calls zeroed, {ModelDb.All.Count()} models, model id hash {ModelIdSerializationCache.Hash}");
-        string command = args.FirstOrDefault(a => !a.StartsWith("--")) ?? "boot";
-        string[] rest = args.Where(a => !a.StartsWith("--")).Skip(1).ToArray();
         return command switch
         {
             "boot" => 0,
+            "serve" => Worker.Serve(),
             "replay" => Replay(rest[0]),
             "drive" => Drive(rest[0]),
             "demo" => Demo(rest[0]),
@@ -42,7 +45,7 @@ public static class Program
 
     private static int Usage(string command)
     {
-        Console.Error.WriteLine($"unknown command {command}; commands: boot | replay <file.mcr> | drive <file.mcr> | demo <file.mcr> | bench <file.mcr> [runs] | branch <file.mcr> <actions> [runs] | states <file.mcr> <out.jsonl> | save <current_run.save>");
+        Console.Error.WriteLine($"unknown command {command}; commands: boot | serve | replay <file.mcr> | drive <file.mcr> | demo <file.mcr> | bench <file.mcr> [runs] | branch <file.mcr> <actions> [runs] | states <file.mcr> <out.jsonl> | save <current_run.save>");
         return 2;
     }
 

@@ -120,6 +120,7 @@ public sealed class Sim
         while (true)
         {
             _loop.Drain();
+            if (Choices.Pending != null) return; // the game waits on a choice the forecast left open
             CombatManager cm = CombatManager.Instance;
             bool busy = RunManager.Instance.ActionExecutor.IsRunning || cm.EndingPlayerTurnPhaseOne || cm.EndingPlayerTurnPhaseTwo
                         || (cm.IsInProgress && cm.DebugOnlyGetState()?.CurrentSide != CombatSide.Player);
