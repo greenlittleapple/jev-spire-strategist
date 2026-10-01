@@ -1,4 +1,4 @@
-import {projectSequence} from './planner.mjs';
+import {candidateProjection,engineForecasts} from './planner.mjs';
 import {deliberate} from './deliberation.mjs';
 
 // Persist Jev's executed intentions, never stale executable commands or indices.
@@ -31,8 +31,12 @@ export function benefitEvidence(state,candidates){
  for(const c of candidates){
   const key=JSON.stringify(c.command);if(seen.has(key))continue;
   let f=null;
-  try{f=projectSequence(state,[c.plan?.[0]?.label??c.label]);}catch{}
-  const comparable=f&&end&&f.quality==='calculated'&&end.quality==='calculated';
+  try{f=candidateProjection(state,[c.plan?.[0]?.label??c.label],candidates);}catch{}
+  // Both sides from one source: planner projections that are both calculated, or (live) engine
+  // forecasts that are both exact.
+  const comparable=f&&end&&(engineForecasts(candidates)
+   ?f.source==='engine'&&end.source==='engine'&&f.quality==='exact'&&end.quality==='exact'
+   :f.quality==='calculated'&&end.quality==='calculated');
   seen.set(key,{firstAction:c.command,label:c.plan?.[0]?.label??c.label,forecast:f,
    hpSavedIfEnding:comparable?end.hpLoss-f.hpLoss:null,
    note:'First-action projection only, followed by ending. A zero immediate gain does not rule out useful setup, draw, retained block, exhaust, relic triggers or a longer continuation. Null is unknown, not no benefit.'});

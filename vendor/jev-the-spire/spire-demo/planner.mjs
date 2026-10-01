@@ -702,17 +702,30 @@ function forecast(m, s) {
 function preference(m,s,kind) {
   const f=forecast(m,s);
   if(f.quality==='unknown')return -10000;
+  if(kind!=='setup')return forecastPreference(f,m.steps,kind);
   const safety=(f.survives?0:-10000)+(m.boundary==='combat_won'?20000:0);
   const potionsUsed=m.steps.filter(a=>a.command.action==='use_potion').length;
-  if(kind==='setup')return safety+m.energy*8+f.strengthGained*8+m.rage*3+f.slipperyRemoved*4-f.hpLoss*2-potionsUsed*2;
-  if(kind==='conserve')return safety+f.damage*2-f.hpLoss*8+f.slipperyRemoved*5-potionsUsed*18;
-  if(kind==='defense')return safety-f.hpLoss*20+f.damage+f.strengthGained*2;
-  return safety+f.damage*3+f.slipperyRemoved*6-f.hpLoss*5+f.strengthGained*5;
+  return safety+m.energy*8+f.strengthGained*8+m.rage*3+f.slipperyRemoved*4-f.hpLoss*2-potionsUsed*2;
+}
+// The attack, defense and conserve scores the plan selection ranks by, from a forecast and its plan
+// steps. Live engine pruning (integration/sts2/sim-live.mjs) applies the same scores to engine forecasts.
+export const SELECTION_KINDS=['attack','defense','conserve'];
+export function forecastPreference(f,plan,kind) {
+  if(f.quality==='unknown')return -10000;
+  const safety=(f.survives?0:-10000)+(f.boundary==='combat_won'?20000:0);
+  const potionsUsed=plan.filter(a=>a.command?.action==='use_potion').length;
+  const strength=f.strengthGained??0,slippery=f.slipperyRemoved??0;
+  if(kind==='conserve')return safety+f.damage*2-f.hpLoss*8+slippery*5-potionsUsed*18;
+  if(kind==='defense')return safety-f.hpLoss*20+f.damage+strength*2;
+  return safety+f.damage*3+slippery*6-f.hpLoss*5+strength*5;
 }
 
 // Bounded search proposes options; Jev alone chooses among them. Keep every
 // immediate legal action plus diverse continuations for each first action.
-export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=64 }={}) {
+// extra (live engine forecasts only): up to that many more multi-step plans, the next-best per first
+// action and selection kind after the planner's own picks, appended with extra: true. Default 0: the
+// planner's set, unchanged.
+export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=64, extra=0 }={}) {
   const roots=actionsFor(s);
   if(!s.battle || !s.player?.hand)return roots;
   const start=initial(s), singles=roots.map(a=>apply(start,a)).filter(Boolean);
@@ -744,8 +757,10 @@ export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=64 }={})
     if(!frontier.length || expanded>6000)break;
   }
   const selected=[...singles], seen=new Set(singles.map(m=>JSON.stringify(m.steps.map(a=>a.command))));
-  for(const kind of ['attack','defense','conserve']) for(const root of roots) {
+  const ranked=new Map();
+  for(const kind of SELECTION_KINDS) for(const root of roots) {
     const group=all.filter(m=>m.steps.length>1 && m.steps[0].id===root.id).toSorted((a,b)=>preference(b,s,kind)-preference(a,s,kind));
+    ranked.set(kind+'|'+root.id,group);
     for(const m of group) {
       const key=JSON.stringify(m.steps.map(a=>a.command));
       if(seen.has(key))continue;
@@ -753,11 +768,26 @@ export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=64 }={})
       seen.add(key);selected.push(m);break;
     }
   }
-  return selected.map((m,i)=>({
+  const extras=[];
+  // Round-robin over (kind, first action), taking each group's next plan not yet chosen.
+  const cursor=new Map();
+  for(let progress=true;extras.length<extra&&progress;){
+    progress=false;
+    for(const kind of SELECTION_KINDS) for(const root of roots) {
+      if(extras.length>=extra)break;
+      const group=ranked.get(kind+'|'+root.id)??[];let i=cursor.get(kind+'|'+root.id)??0;
+      while(i<group.length&&seen.has(JSON.stringify(group[i].steps.map(a=>a.command))))i++;
+      if(i<group.length){seen.add(JSON.stringify(group[i].steps.map(a=>a.command)));extras.push(group[i]);progress=true;i++;}
+      cursor.set(kind+'|'+root.id,i);
+    }
+  }
+  const candidate=(m,i,isExtra)=>({
     id:`p${i}`,command:m.steps[0].command,label:m.steps.map(a=>a.label).join(' → '),
     details:m.steps[0].details,
     plan:m.steps.map(a=>({label:a.label,command:a.command})), forecast:forecast(m,s),
-  }));
+    ...(isExtra?{extra:true}:{}),
+  });
+  return [...selected.map((m,i)=>candidate(m,i,false)),...extras.map((m,i)=>candidate(m,selected.length+i,true))];
 }
 
 // Offline opt-in: rebuild complete plans with Rage before attacks, preserving
@@ -803,6 +833,23 @@ export function projectSequence(s, labels) {
   return forecast(m,s);
 }
 
+// Projections for reviews (card order, first-action benefit). In live mode, when any candidate carries
+// an engine forecast, both sides of a comparison must come from the engine: the forecast of the
+// candidate whose plan is exactly these labels (a trailing End turn aside), never the planner's own
+// projection. Without such a candidate the projection is unknown. Otherwise, projectSequence.
+// Whether two forecasts come from the same source (live engine or planner); reviews compare only those.
+export const forecastSource=f=>f?.source==='engine'?'engine':'planner';
+export const sameForecastSource=(a,b)=>forecastSource(a)===forecastSource(b);
+export const engineForecasts=candidates=>(candidates??[]).some(c=>c.forecast?.source==='engine');
+const planLabels=c=>{const steps=c.plan??[{label:c.label,command:c.command}];return (steps.at(-1)?.command?.action==='end_turn'&&steps.length>1?steps.slice(0,-1):steps).map(p=>p.label);};
+export function candidateProjection(s,labels,candidates) {
+  if(!engineForecasts(candidates))return projectSequence(s,labels);
+  const key=JSON.stringify(labels);
+  const c=candidates.find(c=>c.forecast?.source==='engine'&&JSON.stringify(planLabels(c))===key);
+  if(!c)throw new Error('No engine forecast for this sequence');
+  return c.forecast;
+}
+
 export function decisionWarnings(s,c) {
   const notes=[]; const a=c.command;
   const playable=(s.player.hand??[]).filter(x=>x.can_play);
@@ -817,16 +864,19 @@ export function decisionCandidates(s, options = {}) {
   if(unmodeled.length)return actionsFor(s).map(action=>({...action,
     plan:[{label:action.label,command:action.command}],
     forecast:unknownRuneForecast(unmodeled)}));
-  return planCandidates(s);
+  return planCandidates(s,{extra:options.extra??0});
 }
 
+// Added to combat requests only when some candidate carries a live engine forecast (SIM_FORECAST=live).
+export const ENGINE_FORECAST_NOTE="A forecast with source engine was played in the game's own combat code: the plan, the end of the turn, the enemy turn and the start of the next turn. quality exact: computed exactly (no draw or random effect in the line). quality sampled: draws or random effects vary; numbers are means over the samples, with min, max and survive_rate (survives null means some samples die). block and energyLeft are at the end of the plan; hpLoss and hpAfter after the enemy turn. A forecast with source planner is the hand-written estimate, with its caveats.";
 export function decisionQuestion(s,candidates) {
   s=visibleState(s);
   if(!isCombat(s)){const q=makeQuestion(s,candidates);q.state.encounter=encounterBrief(s);q.state.deck=deckSnapshot(s);q.state.spending_routes=spendingRoutes(s);return q;}
   return {
     model:'jev-latest',
     state:{game:'Slay the Spire 2',objective:'Win the run. Survive the current turn and preserve useful resources.',state:s,encounter:encounterBrief(s),deck:deckSnapshot(s),facts:factsFor(s),policy:POLICY_VERSION,setup_dependencies:setupLinks(s),mechanics_review:mechanicsReview(s),potion_timing:potionTiming(s),
-      forecast_scope:'Plans are short prefixes, not complete optimal turns. Forecasts assume ending after the prefix. Null means unknown, not zero. Partial outcomes have explicit caveats. Do not treat displayed card damage as actual damage through enemy powers.'},
+      forecast_scope:'Plans are short prefixes, not complete optimal turns. Forecasts assume ending after the prefix. Null means unknown, not zero. Partial outcomes have explicit caveats. Do not treat displayed card damage as actual damage through enemy powers.',
+      ...(candidates.some(c=>c.forecast?.source==='engine')?{forecast_engine:ENGINE_FORECAST_NOTE}:{})},
     questions:{move:{type:'choice',
       instructions:'Choose the next action or short plan that best advances winning the run. Derive tactics from visible rules, intents, cards and observations. Calculations are aids, not guaranteed outcomes; partial estimates omit stated effects and null means unknown. Evaluate tradeoffs over the encounter, not only the current turn. Only the FIRST action executes, followed by a fresh observation. Choose only among supplied IDs.',
       criteria:Object.fromEntries(candidates.map(c=>[c.id,JSON.stringify({sequence:c.plan,forecast:c.forecast,first_action_rules:c.details.description})])),

@@ -100,7 +100,7 @@ export async function deliberate({state,candidates,ask:rawAsk,recent=[],onStage=
   totals.input_tokens+=final.usage?.input_tokens??0;totals.output_tokens+=final.usage?.output_tokens??0;
  }
  let orderReviewed=false,orderReview=null;
- const ordering=unsupportedRuneRules(state).length ? null : orderingEvidence(state,candidates.find(c=>c.id===final.answers.move.choice));
+ const ordering=unsupportedRuneRules(state).length ? null : orderingEvidence(state,candidates.find(c=>c.id===final.answers.move.choice),candidates);
  if(ordering){
   onStage('Jev is checking card order before acting');
   const check=reviewQuestion(state,candidates,first,recent);

@@ -12,6 +12,8 @@ export const SIM_MAX_LINES = 40;
 const combatTypes = new Set(['monster', 'elite', 'boss']);
 // The forecast fields, named as in the planner's forecast() so the two compare directly.
 export const FORECAST_FIELDS = ['damage', 'block', 'hpLoss', 'hpAfter', 'survives', 'defeatedEnemies', 'energyLeft'];
+// A forecast's FORECAST_FIELDS, with the planner's list of defeated enemies as a count.
+export const pickForecast = f => f ? Object.fromEntries(FORECAST_FIELDS.map(k => [k, k === 'defeatedEnemies' && Array.isArray(f[k]) ? f[k].length : f[k] ?? null])) : null;
 
 // Lines take 4 samples when the planner's forecast stopped at a draw or a random effect, else 1.
 export const SAMPLES_RANDOM = SIM_SAMPLES, SAMPLES_FIXED = 1;
@@ -42,22 +44,23 @@ export function workerActions(plan, targets = null) {
   return {actions};
 }
 
-// Unique action sequences, at most maxLines. Plans that end the turn come first, then longer plans:
+// Unique action sequences, at most maxLines, each with at least minSamples samples. Plans that end the turn come first, then longer plans:
 // they are full-turn outcomes, and single steps are often their prefixes. members maps each line id
 // (its first candidate in that order) to every candidate with the same sequence; skipped lists
 // candidates with no line and why.
 const endsTurn = c => Array.isArray(c.plan) && c.plan.at(-1)?.command?.action === 'end_turn' ? 1 : 0;
 // Each line has samples: the most any of its candidates needs.
-export function buildLines(candidates, {maxLines = SIM_MAX_LINES, targets = null} = {}) {
+export function buildLines(candidates, {maxLines = SIM_MAX_LINES, targets = null, minSamples = 1} = {}) {
   const lines = [], members = {}, skipped = [], byKey = new Map();
-  const ordered = (candidates ?? []).toSorted((a, b) => endsTurn(b) - endsTurn(a) || (b.plan?.length ?? 0) - (a.plan?.length ?? 0));
+  // Live mode's extra lines (candidate.extra) come after the planner's own, so a timeout cuts them first.
+  const ordered = (candidates ?? []).toSorted((a, b) => (a.extra ? 1 : 0) - (b.extra ? 1 : 0) || endsTurn(b) - endsTurn(a) || (b.plan?.length ?? 0) - (a.plan?.length ?? 0));
   for (const c of ordered) {
     const {actions, reason} = workerActions(c.plan, targets);
     if (!actions) { skipped.push({id: c.id, reason}); continue; }
     const key = JSON.stringify(actions);
-    if (byKey.has(key)) { const line = byKey.get(key); members[line.id].push(c.id); line.samples = Math.max(line.samples, samplesFor(c)); continue; }
+    if (byKey.has(key)) { const line = byKey.get(key); members[line.id].push(c.id); line.samples = Math.max(line.samples, samplesFor(c), minSamples); continue; }
     if (lines.length >= maxLines) { skipped.push({id: c.id, reason: 'line limit'}); continue; }
-    const line = {id: c.id, actions, samples: samplesFor(c)};
+    const line = {id: c.id, actions, samples: Math.max(samplesFor(c), minSamples)};
     byKey.set(key, line); members[c.id] = [c.id]; lines.push(line);
   }
   return {lines, members, skipped};

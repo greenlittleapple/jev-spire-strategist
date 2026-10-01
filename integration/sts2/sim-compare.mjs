@@ -6,24 +6,32 @@
 // 0 HP. Damage, Block, energy left and enemies defeated are measured only when the turn played
 // exactly the chosen line and then ended, from the state at that end_turn decision. Enemies are
 // matched by combat_id; the bridge lists living enemies only, so one that is missing counts as dead.
+// Live mode (SIM_FORECAST=live): the chosen forecast is the engine's, so the planner's numbers come
+// from the sim record. exact_match checks the lines with no draw or random boundary for equal
+// damage, Block and HP after the enemy turn, and lists every mismatch.
 // Logs are read from $STS2_PRIVATE_DIR/runs (default .private/sts2/runs), streamed line by line.
 import {readdir} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {createInterface} from 'node:readline';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {resolve, dirname} from 'node:path';
-import {FORECAST_FIELDS, workerActions, targetIds, enemyKey} from './sim-shadow.mjs';
+import {FORECAST_FIELDS, workerActions, targetIds, enemyKey, pickForecast, SAMPLES_RANDOM} from './sim-shadow.mjs';
 
 const combat = new Set(['monster', 'elite', 'boss']);
 // Screens that mean the fight is over; in-fight choice screens (hand_select) keep it open.
 const after = new Set(['rewards', 'card_reward', 'map', 'event', 'rest_site', 'shop', 'treasure', 'game_over']);
 const alive = e => (e?.hp ?? 0) > 0;
-const pick = f => f ? Object.fromEntries(FORECAST_FIELDS.map(k => [k, k === 'defeatedEnemies' && Array.isArray(f[k]) ? f[k].length : f[k] ?? null])) : null;
+const pick = pickForecast;
+// Fields whose engine forecast must equal the outcome exactly on a line with no draw or random effect.
+export const EXACT_FIELDS = ['damage', 'block', 'hpAfter'];
 
 // Keeps what the comparison reads. Other kinds give null.
 export function slimRecord(e) {
   if (e.kind === 'run_end') return {kind: 'run_end', time: e.time, run: e.state?.run?.live_id ?? null, hp: e.state?.player?.hp ?? 0};
-  if (e.kind === 'sim_forecast') return e.status === 'ok' ? {kind: 'sim', time: e.time, run: e.run, decision: e.decision, started: e.decision_started ?? e.time, results: e.results ?? {}} : null;
+  // Shadow records count when ok; live records whenever they carry results (a timeout can leave some).
+  // A live record keeps the planner's numbers for the candidates whose forecast the engine replaced.
+  if (e.kind === 'sim_forecast') return (e.status === 'ok' || e.mode === 'live') && Object.keys(e.results ?? {}).length
+    ? {kind: 'sim', time: e.time, run: e.run, decision: e.decision, started: e.decision_started ?? e.time, results: e.results, planner: e.planner ?? null, live: e.mode === 'live', requested: e.samples ?? null} : null;
   if (e.kind !== 'decision') return null;
   // Enemies are keyed, and targets named, by combat_id: entity_ids shift when an enemy dies.
   const s = e.state ?? {}, p = s.player ?? {}, chosen = e.chosen, targets = targetIds(s.battle?.enemies);
@@ -32,7 +40,9 @@ export function slimRecord(e) {
     round: s.battle?.round ?? null, hp: p.hp ?? null, max_hp: p.max_hp ?? null, block: p.block ?? null, energy: p.energy ?? null,
     enemies: (s.battle?.enemies ?? []).map(x => ({id: String(enemyKey(x)), hp: x.hp ?? 0})),
     command: chosen?.command ?? null, step: chosen?.command ? workerActions([{command: chosen.command}], targets).actions?.[0] ?? null : null,
-    chosenId: chosen?.id ?? null, plan: workerActions(chosen?.plan, targets).actions ?? null, planner: pick(chosen?.forecast)};
+    chosenId: chosen?.id ?? null, plan: workerActions(chosen?.plan, targets).actions ?? null,
+    // In live mode the chosen forecast is the engine's; the planner's numbers are in the sim record.
+    source: chosen?.forecast?.source ?? null, planner: chosen?.forecast?.source === 'engine' ? null : pick(chosen?.forecast)};
 }
 
 const sameFight = (a, b) => a.run === b.run && a.act === b.act && a.floor === b.floor;
@@ -95,7 +105,8 @@ export function compare(records, {since = null} = {}) {
     if (!forecast || forecast.ok === false) { counts.chosen_not_simulated++; return; }
     const actual = actualAfter(records, i);
     if (actual.followed) counts.followed++;
-    rows.push({run: d.run, act: d.act, floor: d.floor, round: d.round, time: d.time, chosen: d.chosenId, planner: d.planner ?? {}, sim: forecast, actual, exact: forecast.exact === true});
+    rows.push({run: d.run, act: d.act, floor: d.floor, round: d.round, time: d.time, chosen: d.chosenId, planner: d.planner ?? sim.planner?.[d.chosenId] ?? {}, sim: forecast, actual,
+      exact: forecast.exact === true, fixed: fixedLine(sim, d.chosenId, forecast), engine: d.source === 'engine'});
   });
   const agreement = {};
   for (const f of FORECAST_FIELDS) {
@@ -117,7 +128,30 @@ export function compare(records, {since = null} = {}) {
     if (gap) gaps.push({run: r.run, act: r.act, floor: r.floor, round: r.round, time: r.time, field: f, ...v, gap});
   }
   gaps.sort((a, b) => b.gap - a.gap);
-  return {counts: {...counts, compared: rows.length, exact: rows.filter(r => r.exact).length}, agreement, disagreements: gaps.slice(0, 20)};
+  return {counts: {...counts, compared: rows.length, exact: rows.filter(r => r.exact).length, engine: rows.filter(r => r.engine).length},
+    agreement, disagreements: gaps.slice(0, 20), exact_match: exactMatch(rows)};
+}
+
+// Lines simulated without a draw or random boundary (the planner found none): the engine's damage,
+// Block and HP after the enemy turn against the outcome, compared for equality. Every mismatch is
+// listed. engine counts the rows whose forecast Jev used (live mode).
+// A line with no draw or random effect: the samples requested for it (the record's samples per line)
+// are fewer than SAMPLES_RANDOM; 1 in shadow mode, 2 in live mode.
+const fixedLine = (sim, id, forecast) => (sim.requested?.[forecast.same_as ?? id] ?? forecast.samples) < SAMPLES_RANDOM;
+export function exactMatch(rows) {
+  const fixed = rows.filter(r => r.fixed), fields = {}, mismatches = [];
+  for (const f of EXACT_FIELDS) {
+    let n = 0, match = 0, engine = 0;
+    for (const r of fixed) {
+      const x = r.sim[f], y = r.actual[f];
+      if (x == null || y == null) continue;
+      n++; if (r.engine) engine++;
+      if (x === y) match++;
+      else mismatches.push({run: r.run, act: r.act, floor: r.floor, round: r.round, time: r.time, chosen: r.chosen, field: f, sim: x, actual: y, planner: r.planner[f] ?? null, engine: r.engine});
+    }
+    fields[f] = {n, match, engine, rate: n ? Math.round(match / n * 1000) / 1000 : null};
+  }
+  return {lines: fixed.length, fields, mismatches};
 }
 
 export function report(result) {
@@ -130,6 +164,14 @@ export function report(result) {
   if (result.disagreements.length) out.push('', 'Largest disagreements');
   for (const g of result.disagreements)
     out.push(`${g.run} a${g.act} f${g.floor} r${g.round} ${g.field}: planner ${g.planner}, sim ${g.sim}, actual ${g.actual ?? '-'}`);
+  const x = result.exact_match;
+  if (x) {
+    out.push('', `Exact match, lines with no draw or random effect (${x.lines} lines; target 100%): sim equal to actual`);
+    for (const [f, a] of Object.entries(x.fields)) out.push(`${f.padEnd(16)} ${a.n ? `${(a.rate * 100).toFixed(1)}% of ${a.n} (${a.engine} used live)` : '-'}`);
+    if (x.mismatches.length) out.push('', `Mismatches (${x.mismatches.length})`);
+    for (const m of x.mismatches)
+      out.push(`${m.run} a${m.act} f${m.floor} r${m.round} ${m.chosen} ${m.field}: sim ${m.sim}, actual ${m.actual}, planner ${m.planner ?? '-'}${m.engine ? ' (live)' : ''}`);
+  }
   return out.join('\n');
 }
 
