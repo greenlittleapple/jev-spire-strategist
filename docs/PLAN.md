@@ -2,7 +2,7 @@
 
 The current plan for the Slay the Spire 2 lab. Update this file whenever the plan changes, so any AI session (Claude or Codex) can continue from here. Results are in `docs/progress/data.json` and the README chart; setup, design and commands in [STS2.md](STS2.md); live evidence in [STS2-VERIFICATION.md](STS2-VERIFICATION.md); the strategist's brief in [STS2-STRATEGIST.md](STS2-STRATEGIST.md).
 
-Last updated: 2026-09-30.
+Last updated: 2026-10-01.
 
 ## Goal
 
@@ -14,7 +14,7 @@ Automatic Slay the Spire 2 play by Jev with a Claude strategist, first at Ascens
 |---|---|
 | Game | Slay the Spire 2 v0.111.0 from Steam with the user's other mods, except the two character mods Hornet (Workshop 3747589529) and Cloud (3752536686), disabled on 2026-09-30 at 23:50 UTC because their cards entered runs through events (41 of 44 mods load; Hextech Runes was already off). The STS2MCP bridge adapted in `integration/sts2-bridge` |
 | Setup | Custom-mode seeded runs, Ironclad, Ascension 0, no run modifiers. `npm run sts2:start` refuses anything else, and each run's `run_start` record states its setup |
-| Seeds | JEV1 to JEV20 are used. Strength claims use unseen seeds. A rerun of a seed differs from its first combat on, because the shuffle follows earlier play, so a replay tests only the non-combat choices |
+| Seeds | JEV1 to JEV25 are used; JEV21 to JEV25 are the development seeds. Strength claims use seeds no earlier run has played. From v3.19, inputs taken from earlier runs skip runs on the current seed (see [Memory across runs and seeds](#memory-across-runs-and-seeds-2026-10-01)). A rerun of a seed differs from its first combat on, because the shuffle follows earlier play, so a replay tests only the non-combat choices |
 | Model | `jev-1.13.0`, pinned (`JEV_MODEL`) |
 | Arms | `claude` (`claude-strategy-v3`: v3.1 facts, enforced combat rules, strategist-owned screens) is the main line. `jev_facts_v3` (`jev-compact-v3.2`) is the Jev-only arm. `jev` (`jev-compact-v1`) and `jev_facts` (`jev-compact-v2`) are historical baselines |
 | Score | Result (beating the Act 3 boss, or reaching The Architect, is a win), floor and act reached, share of each boss's HP removed, HP and potions at each boss, elites chosen, gold left, moves and Jev tokens. A single run is not evidence |
@@ -29,6 +29,7 @@ Automatic Slay the Spire 2 play by Jev with a Claude strategist, first at Ascens
 - Jev alone: 11 runs on unseeded maps, no wins, best floor 28; 6 of them lost at the Act 1 boss.
 - Jev with the strategist: 26 seeded runs, 3 wins (JEV4 on v3.5, JEV8 on v3.8, JEV15 on v3.13); 6 reached the final boss on floor 48. On unseen seeds (JEV3 to JEV19): 3 wins in 17, and 7 losses at the Act 1 boss.
 - The strategist version changed after nearly every run, so no strategist version has more than 3 runs and none has a win rate yet.
+- Until Strategist v3.17 the strategist was the orchestrating session itself, with earlier runs in its context; from v3.17 each run gets a fresh Medium agent. See [Memory across runs and seeds](#memory-across-runs-and-seeds-2026-10-01).
 
 ## Lessons from the BTD6 lab
 
@@ -75,6 +76,19 @@ From every logged run, 19 of them unseen-seed strategist runs from v3.5 on (3 wo
 - **Combat choices follow the forecast.** No logged Jev choice lost to another line on a complete forecast (the candidate builder already drops those); every dominated choice was on a line stopped at a draw, partial for an unmodelled mechanic, or a Power. The remaining combat errors come from what the forecast leaves out, hence step 7.
 - **Potions** were all drunk in the fatal fights, mostly on round 1; none died with a potion left.
 
+## Memory across runs and seeds (2026-10-01)
+
+Marcus had the BTD6 session ask whether to add a strategist arm that keeps notes across runs, as the BTD6 lab is doing at its CHIMPS step. Checked in the logs:
+- **The strategist arm already keeps notes across runs** (since 2026-09-28): its own encounter fight plans (`playbook.json`) and mechanic notes (`mechanics.json`), both hashed in each `run_start`; and, built from all logged runs, each enemy's moves in its last three fights (`seen_pattern`), encounter results and card stats (`past_runs`). The runner passes none of this in `jev_facts_v3`, so the Jev-only arm has no cross-run memory.
+- **Same-seed history.** Enemies' later moves partly follow the seed: on rounds 2 and later, the same enemy's moves match 87% of the time between two runs on one seed and 77% across seeds. Per enemy: Ceremonial Beast 58% against 21%, Bygone Effigy 100% against 84%; Vantom, Soul Fysh and Phrog Parasite about 98% on any seed. The memory had no seed boundary, so strategist runs on a replayed seed could see that seed's earlier fights: JEV1 v3.4, Strategist v3.17 JEV21 and JEV22, Strategist v3.18 JEV21 to JEV25. About a third of the 81 logged briefs that showed move patterns included a line from an earlier run on the same seed, among them JEV23 v3.18's Ceremonial Beast boss fight. The first plays of JEV3 to JEV20, including the three wins, had none. On JEV21 to JEV25 the strategist arm always played after the Jev-only arm, so the comparison leaned its way; no win count changes.
+- **Strategist memory.** Before v3.17 the orchestrating session (highest reasoning) answered strategy requests itself, run after run, with earlier runs in its context: JEV5's plan copied JEV4's potion reserve. This is the case the BTD6 lab tagged `strategist-memory`.
+
+Decided (main session, 2026-10-01):
+- **No separate notes arm.** The strategist arm is already one, kept in files that can be read, reset and replayed. Both arms win 0 of 5 for reasons the run analysis traced to boss damage, elite readiness and forecast gaps, so a second, free-text memory couldn't show an effect yet. A memory-free strategist arm would measure what the memory adds; that waits until a version passes the 9-of-10 test.
+- **A seed boundary in v3.19, before its first series:** `seen_pattern`, encounter results and the `review_encounter` check, card `past_runs`, and a saved fight plan written on the current seed skip runs on that seed. Mechanic notes stay, since they describe game rules rather than a fight.
+- **Tags in the progress data:** `strategist-memory` for every strategist run before v3.17, `same-seed-history` for the runs listed above. They keep counting toward win rates, marked like the other issues.
+- **Held-out seeds for the 9-of-10 test** (step 8): JEV21 to JEV25 are development seeds, played by several versions and read for every change, so they compare versions and arms but don't count toward the test.
+
 ## Next steps, in order
 
 Marcus approved these suggestions and all future runs on 2026-09-30.
@@ -94,6 +108,7 @@ Marcus approved these suggestions and all future runs on 2026-09-30.
    - `v319-elite-ready` (in progress): elite readiness in Acts 1 and 2, from the run analysis below. Not ready (fewer than 2 potions and the last three hallway fights averaging at least 7 net HP lost in Act 1, 10 in Act 2) removes elite paths as a code rule; risky asks the strategist through `route_risk`; the numbers are shown to the strategist and to Jev.
    - `v319-potion-claim`: after a strategist potion discard, the potion it made room for is claimed as a rule move (`potion_swap_claim`).
    - `v319-mods`: `run_start` records the enabled mod ids and their hash; rows mixing mod sets get no win rate; runs whose deck gained a Hornet or Cloud card are tagged with the issue `character-mod-cards` by `--refresh`.
+   - Not built yet (decided 2026-10-01, see [Memory across runs and seeds](#memory-across-runs-and-seeds-2026-10-01)): the seed boundary on inputs from earlier runs, and the `strategist-memory` and `same-seed-history` tags. Both go in before the next series.
 7. **Exact forecasts from the game's own engine** (Marcus, 2026-10-01: forecasts have no reason to be inexact except for random effects). The hand-written forecast keeps missing mechanics; the game's code defines all of them. `sts2.dll` is decompiled locally for reading (`.private/sts2-decompiled/`, never committed). The live game records every fight in memory (`CombatReplayWriter`: the run state at combat start, every action and checksums; `WriteReplay` writes it). Plan: a bridge endpoint writes the current fight's replay; a headless .NET worker loads the game's own `sts2.dll` with Godot stubbed, replays the fight to the current decision and simulates each candidate line, so every deterministic effect is exact. Hidden information stays hidden: unknown draw order, random targets and enemy moves chosen at random are re-randomized in the simulation, never read from the real seed. Prior art on v0.111.0 (MIT, read only, not run here): [sts2-bridge](https://github.com/a-recknagel/sts2-bridge) runs `sts2.dll` headless with checksum parity. Done on branches and merged into the integration branch `v319` (2026-10-01):
 - **The worker** (`integration/sts2-sim`) replays real fights with every game checksum matching (20/20 and 84/84, rechecked by the main session). It rebuilt all 43 logged states of a 10-turn fight, and matched the logged next-turn HP and block on every turn without randomness.
 - **Shadow mode** (`SIM_FORECAST=shadow`) logs engine forecasts next to the planner's, and `npm run sts2:sim-compare` compares both with what happened.
@@ -105,7 +120,7 @@ Order of work:
 1. Install the bridge after the v3.18 arm.
 2. Run shadow mode on the first v3.19 fights.
 3. Switch Jev to engine forecasts (`SIM_FORECAST=live`, worker pool, planner fallback; in progress on `sim-live`) once the bar is met.
-8. **Ascension ladder** (revised 2026-09-30 at Marcus's question: the goal is a player that almost always wins, not one that sometimes does): A0, then A5, then A10. A frozen strategist version moves up a level once it wins at least 9 of 10 unseen seeds at its current level: this series' five seeds, then five more on the same version. After a second loss it can't reach 9, so the test stops there and the losses go into the next version. Chance of passing, by true win rate: 95% passes 91% of the time, 90% passes 74%, 80% passes 38%, 70% passes 15% (the earlier bar of 2 of 5 let a 20% player through 26% of the time). Before the first step: `npm run sts2:start` and `--add` accept only Ascension 0 today, and setting the custom run's ascension through the bridge needs checking.
+8. **Ascension ladder** (revised 2026-09-30 at Marcus's question: the goal is a player that almost always wins, not one that sometimes does): A0, then A5, then A10. A frozen strategist version moves up a level once it wins at least 9 of 10 unseen seeds at its current level: seeds no earlier run has played (from JEV26), five and then five more on the same version. A version takes the test once it loses at most 1 of the 5 development seeds (JEV21 to JEV25), which don't count toward it (decided 2026-10-01). After a second loss it can't reach 9, so the test stops there and the losses go into the next version. Chance of passing, by true win rate: 95% passes 91% of the time, 90% passes 74%, 80% passes 38%, 70% passes 15% (the earlier bar of 2 of 5 let a 20% player through 26% of the time). Before the first step: `npm run sts2:start` and `--add` accept only Ascension 0 today, and setting the custom run's ascension through the bridge needs checking.
 
 ## Open items
 
@@ -125,3 +140,5 @@ On 2026-10-01 Marcus decided:
 - Medium agents make every code and test change, while the main session (highest reasoning) does the analysis and chooses the direction.
 - The per-run strategist stays a Medium agent, because it is part of the system under test.
 - Forecasts should come from the game's own code. Marcus approved decompiling `sts2.dll` locally with ilspycmd; the decompiled source is never committed or published.
+
+On 2026-10-01 Marcus left the BTD6 session's notes-arm question to the main session, which decided: no separate notes arm, a seed boundary on inputs from earlier runs, the `strategist-memory` and `same-seed-history` tags, and the 9-of-10 test on seeds no earlier run has played (see [Memory across runs and seeds](#memory-across-runs-and-seeds-2026-10-01)).
