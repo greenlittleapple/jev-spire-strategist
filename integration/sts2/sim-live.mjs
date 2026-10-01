@@ -11,8 +11,14 @@ import {SimClient, DEFAULT_SIM_EXE, simArgs} from './sim-client.mjs';
 import {SimPool, workerCount, CHUNK_COST} from './sim-pool.mjs';
 import {buildLines, aggregateForecast, candidateResults, stateDifferences, eligible, targetIds, enemyKey, pickForecast} from './sim-shadow.mjs';
 import {runeRules} from './runes.mjs';
+import {forecastPreference, SELECTION_KINDS} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
 
 export const DEFAULT_TIMEOUT_MS = 4000;
+// Every line takes at least 2 samples, so randomness the planner did not flag shows as spread; lines
+// the planner stopped at a draw or random effect take 4 (sim-shadow.mjs samplesFor).
+export const LIVE_MIN_SAMPLES = 2;
+// Extra lines beyond the planner's selection (SIM_EXTRA_LINES), forecast by the engine and then pruned.
+export const DEFAULT_EXTRA_LINES = 32;
 // Consecutive decisions with a worker, load or replay failure before live mode turns off; and
 // consecutive decisions that timed out with no engine line at all.
 export const MAX_FAILURES = 3, MAX_EMPTY_TIMEOUTS = 5;
@@ -43,7 +49,8 @@ export function defeatedFrom(observed, loaded, samples) {
 
 // The engine's forecast for one candidate, built on its planner forecast: the planner's other fields
 // stay where they still apply (boundary, incoming, lastingEffects, warnings), its "Unmodeled ..."
-// and rounding caveats and notModeled go. One sample, or all samples equal: exact values. Spread:
+// and rounding caveats and notModeled go. quality exact only when two or more samples ran and all
+// agree (aggregateForecast's exact); otherwise sampled. Spread:
 // the mean, with min, max, survive_rate and, for enemies killed in some samples only, defeated_rate.
 export function engineForecast(planner, agg, defeated) {
   const spread = Boolean(agg.min);
@@ -51,7 +58,7 @@ export function engineForecast(planner, agg, defeated) {
     damage: agg.damage, block: agg.block, hpLoss: agg.hpLoss, hpAfter: agg.hpAfter, survives: agg.survives,
     defeatedEnemies: (planner?.defeatedEnemies ?? []).filter(d => defeated.always.some(x => x.id === d.id))
       .concat(defeated.always.filter(x => !(planner?.defeatedEnemies ?? []).some(d => d.id === x.id))),
-    energyLeft: agg.energyLeft, quality: spread ? 'sampled' : 'exact', source: 'engine', samples: agg.samples,
+    energyLeft: agg.energyLeft, quality: agg.exact === true ? 'exact' : 'sampled', source: 'engine', samples: agg.samples,
     warnings: (planner?.warnings ?? []).filter(w => !PLANNER_ONLY.test(w)), notModeled: [], assumption: ENGINE_ASSUMPTION};
   delete f.fallback;
   if (spread) {
@@ -105,6 +112,33 @@ function recordResults(loaded, results, members) {
   catch { return {}; }
 }
 
+// Engine pruning, when the engine covered the decision (status ok). The planner's selection rule,
+// applied to engine forecasts: among multi-step lines with the same first action, keep the best by
+// each selection score (attack, defense, conserve; forecastPreference); ties go to the earlier line.
+// Only lines whose forecasts are both exact are compared: a sampled or planner forecast is never
+// pruned and never prunes another. Single actions always stay, as in the planner. An extra line the
+// engine did not cover is dropped, since only the planner would have judged it.
+export function enginePrune(candidates) {
+  const exact = c => c.forecast?.source === 'engine' && c.forecast.quality === 'exact';
+  const multi = c => (c.plan?.length ?? 0) > 1;
+  const best = new Set(), groups = new Map();
+  for (const c of candidates) if (multi(c) && exact(c)) {
+    const k = JSON.stringify(c.command);
+    (groups.get(k) ?? groups.set(k, []).get(k)).push(c);
+  }
+  for (const group of groups.values()) for (const kind of SELECTION_KINDS)
+    best.add(group.reduce((a, c) => forecastPreference(c.forecast, c.plan, kind) > forecastPreference(a.forecast, a.plan, kind) ? c : a));
+  const kept = [], removed = [], uncovered = [];
+  for (const c of candidates) {
+    if (c.extra && c.forecast?.source !== 'engine') uncovered.push(c.id);
+    else if (multi(c) && exact(c) && !best.has(c)) removed.push(c.id);
+    else kept.push(c);
+  }
+  return {kept, removed, uncovered,
+    removed_planner: removed.filter(id => !candidates.find(c => c.id === id).extra),
+    kept_extra: kept.filter(c => c.extra).map(c => c.id)};
+}
+
 const positiveInt = (text, fallback) => { const n = Number.parseInt(text ?? '', 10); return Number.isInteger(n) && n > 0 ? n : fallback; };
 
 // The runner's hook. decision() resolves within about SIM_TIMEOUT_MS and never rejects.
@@ -112,6 +146,7 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
   exists = existsSync, random = Math.random, now = () => new Date(), timeouts = {}, chunkCost = CHUNK_COST} = {}) {
   const enabled = env.SIM_FORECAST === 'live';
   const size = workerCount(env.SIM_WORKERS), timeoutMs = positiveInt(env.SIM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+  const extraLines = env.SIM_EXTRA_LINES === '0' ? 0 : positiveInt(env.SIM_EXTRA_LINES, DEFAULT_EXTRA_LINES);
   const t = {replay: 3000, ping: 30000, load: 15000, simulate: 15000, ...timeouts};
   const stats = {decisions: 0, engine: 0, planner: 0, timeouts: 0, errors: 0};
   let off = !enabled, offReason = enabled ? null : 'SIM_FORECAST is not live', pool = null, ready = null, replay409 = 0, failStreak = 0, emptyTimeouts = 0;
@@ -190,7 +225,7 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
     const started = performance.now();
     const head = {kind: 'sim_forecast', mode: 'live', run: state.run?.live_id ?? null, act: state.run?.act ?? null, floor: state.run?.floor ?? null,
       round: state.battle?.round ?? null, decision: decisionRef ?? null, decision_started: now().toISOString()};
-    const {lines, members, skipped} = buildLines(candidates, {maxLines: Infinity, targets: targetIds(state.battle?.enemies)});
+    const {lines, members, skipped} = buildLines(candidates, {maxLines: Infinity, targets: targetIds(state.battle?.enemies), minSamples: LIVE_MIN_SAMPLES});
     const ctx = {lines, members, skipped, plannerFields, timing: {}, results: new Map(), failures: new Map()};
     const runes = runeRules(state);
     if (off) Object.assign(ctx, {status: 'off', reason: `sim off: ${offReason}`});
@@ -213,13 +248,21 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
     const status = ctx.status ?? (ctx.timedOut ? (engine ? 'partial' : 'timeout') : 'ok');
     if (ctx.timedOut) stats.timeouts++;
     if (ctx.failure) stats.errors++;
+    // The final set: engine-pruned when the engine covered the decision, else exactly the planner's.
+    let final = candidates.filter(c => !c.extra), prune = null;
+    if (status === 'ok') {
+      const p = enginePrune(candidates);
+      final = p.kept;
+      prune = {removed: p.removed.length, removed_planner: p.removed_planner.length, kept_extra: p.kept_extra.length,
+        extra_uncovered: p.uncovered.length, extra_lines: candidates.filter(c => c.extra).length, removed_ids: p.removed, kept_extra_ids: p.kept_extra};
+    }
     const ms = Math.round(performance.now() - started);
-    const summary = {status, engine, planner, ms};
+    const summary = {status, engine, planner, ms, candidates: final, prune: prune && {removed: prune.removed, kept_extra: prune.kept_extra, removed_planner: prune.removed_planner}};
     if (!['off', 'hextech', 'no_lines'].includes(status)) {
       await record({...head, status, ...(ctx.error ? {error: ctx.error} : {}), ...(ctx.differences ? {differences: ctx.differences} : {}),
         seed: ctx.seed ?? null, known_top: ctx.knownTop ?? null, lines: lines.length, workers: ctx.workers ?? null, timeout_ms: timeoutMs,
         samples: Object.fromEntries(lines.map(l => [l.id, l.samples])), ms, timing: ctx.timing, incremental: ctx.incremental ?? null, replay: ctx.replay ?? null,
-        skipped_lines: skipped, sources, fallback,
+        skipped_lines: skipped, sources, fallback, prune,
         planner: Object.fromEntries(candidates.filter(c => sources[c.id] === 'engine').map(c => [c.id, ctx.plannerFields?.[c.id] ?? null])),
         results: recordResults(ctx.loaded, results, members)});
     }
@@ -233,8 +276,11 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
 
   return {
     get enabled() { return !off; }, get offReason() { return offReason; }, get pool() { return pool; }, stats, timeoutMs, size,
-    // Sets the candidates' forecasts in place. Resolves with {status, engine, planner, ms}, or null
-    // when live mode is not on or the decision is not a combat decision on the player's turn.
+    // Extra lines to ask the planner for (planCandidates extra); 0 when live mode is off.
+    get extraLines() { return off ? 0 : extraLines; },
+    // Sets the candidates' forecasts in place. Resolves with {status, engine, planner, ms, candidates,
+    // prune}, candidates being the set to decide on, or null when live mode is not on or the decision
+    // is not a combat decision on the player's turn (the caller then drops extra lines itself).
     async decision({state, candidates, decisionRef = null}) {
       if (!enabled || !eligible(state, candidates)) return null;
       // The planner's numbers, kept for the sim_forecast record before they are replaced.
@@ -246,7 +292,8 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
         candidates.forEach((c, i) => { c.forecast = plannerForecast(originals[i], 'sim error'); });
         stats.errors++;
         await record({kind: 'sim_forecast', mode: 'live', status: 'error', decision: decisionRef, error: String(error?.message ?? error).slice(0, 300)});
-        return {status: 'error', engine: 0, planner: candidates.filter(c => c.forecast).length, ms: null};
+        const final = candidates.filter(c => !c.extra);
+        return {status: 'error', engine: 0, planner: final.filter(c => c.forecast).length, ms: null, candidates: final, prune: null};
       }
     },
     async close() { off = true; try { await pool?.close(); } catch {} },

@@ -1,5 +1,5 @@
 // Offline experiment only: replay validation has not met the deployment gate.
-import {decisionQuestion} from './planner.mjs';
+import {decisionQuestion,sameForecastSource} from './planner.mjs';
 
 export const END_TURN_COMPARISON_VERSION = 'visible-end-turn-comparison-v1';
 const metrics = ['hpAfter','hpLoss','damage','incoming','block','endTurnCardDamage','endTurnCardHpLoss','energyLeft','survives'];
@@ -16,7 +16,8 @@ export function endTurnComparison(candidates) {
    const f=c.forecast??{};
    return {id:c.id,label:c.label,first_action:c.command,sequence:c.plan,
     estimate:Object.fromEntries(metrics.map(k=>[k,f[k]??null])),
-    change_vs_ending:{hp:delta(f.hpAfter,baseline.hpAfter),damage:delta(f.damage,baseline.damage)},
+    // Live engine forecasts: a difference only between forecasts from the same source.
+    change_vs_ending:sameForecastSource(f,baseline)?{hp:delta(f.hpAfter,baseline.hpAfter),damage:delta(f.damage,baseline.damage)}:{hp:null,damage:null},
     quality:f.quality??'unknown',boundary:f.boundary??null,warnings:f.warnings??['No forecast available'],
     defeatedEnemies:f.defeatedEnemies??[],departedMinions:f.departedMinions??[],delayedDeathEffects:f.delayedDeathEffects??[],
     facingProjection:f.facingProjection??null};

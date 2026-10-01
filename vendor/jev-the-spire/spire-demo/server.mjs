@@ -302,7 +302,10 @@ async function step(token, preview = false) {
     if(strategist){recordIntents(strategist.movesets,s);if(strategist.fightResults)recordFight(strategist.fightResults,s);}
     const planningState=markLampUsed(lampMemory,markHitsThisTurn(turnHits,facingState(s,view.events)));
     // Claude mode owns full-belt potion rewards, so it gets discard-to-swap candidates there.
-    const actions = decisionCandidates(rewardState(planningState,view.events),{potionSwaps:view.decisionMode==='claude'});
+    // Live engine forecasts ask the planner for extra lines; they are forecast and pruned by the engine
+    // (sim-live.mjs), and without it the planner's own set is used exactly.
+    const built = decisionCandidates(rewardState(planningState,view.events),{potionSwaps:view.decisionMode==='claude',extra:liveSim.extraLines});
+    let actions = built.filter(c => !c.extra);
     if (!actions.length) {
       waitingSince ||= Date.now();
       if (Date.now() - waitingSince > 45000) await stop('No playable actions for 45 seconds. Check the game screen, then resume.', 'no_actions');
@@ -341,7 +344,8 @@ async function step(token, preview = false) {
     if (!apiKey) throw new Error('Missing TYPESAFE_API_KEY or private TypeSafe configuration.');
     shadow.decision({ state: planningState, candidates: actions, decisionRef: hash });
     if (liveSim.enabled) view.message = 'Engine forecast…';
-    const simForecast = await liveSim.decision({ state: planningState, candidates: actions, decisionRef: hash }).catch(() => null);
+    const simForecast = await liveSim.decision({ state: planningState, candidates: built, decisionRef: hash }).catch(() => null);
+    if (simForecast?.candidates?.length) actions = simForecast.candidates;
     if (token !== generation) return;
     view.message = 'Jev is choosing…';
     view.pending = { startedAt: Date.now(), options: actions.length };
@@ -379,7 +383,7 @@ async function step(token, preview = false) {
     const answer = result.answers?.move;
     const chosen = actions.find(a => a.id === answer?.choice);
     if (!chosen || answer?.type !== 'choice') throw new Error('Jev returned an invalid action ID.');
-    const event = { kind: 'decision', stateHash: hash, decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, rule:result.rule??null, screenChoice:result.screenChoice??null, escalatedFrom:result.escalatedFrom??null, simForecast, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
+    const event = { kind: 'decision', stateHash: hash, decisionSource:result.decisionSource??'jev', adviser:result.adviser??null, runAdviser:view.adviser, policy: currentPolicy(), decisionMode:view.decisionMode, strategyConstraint:result.constraint??null, rule:result.rule??null, screenChoice:result.screenChoice??null, escalatedFrom:result.escalatedFrom??null, simForecast: simForecast && { status: simForecast.status, engine: simForecast.engine, planner: simForecast.planner, ms: simForecast.ms, prune: simForecast.prune }, memory, deliberation:result.deliberation, state: s, chosen, candidates: actions, answer, model: result.model, usage: result.usage, latencyMs: view.latencyMs, observeMs: view.observeMs, preview };
     if (token !== generation) { await log({ ...event, outcome: 'cancelled' }); return; }
     if (preview) { await log({ ...event, outcome: 'preview' }); view.message = `Preview: ${chosen.label}`; return; }
     const fresh = await observe();

@@ -1,6 +1,8 @@
 import {actionsFor} from './actions.mjs';
-import {projectSequence} from './planner.mjs';
-export function orderingEvidence(state,chosen){
+import {candidateProjection} from './planner.mjs';
+// candidates: the decision's candidates. With live engine forecasts both orders come from them
+// (candidateProjection), so the two sides of a pair never mix engine and planner numbers.
+export function orderingEvidence(state,chosen,candidates=[]){
  if(!state.battle||chosen?.command.action!=='play_card')return null;
  const card=state.player?.hand?.find(c=>c.index===chosen.command.card_index);
  if(!card)return null;
@@ -12,7 +14,7 @@ export function orderingEvidence(state,chosen){
  ));
  if(!setups.length)return null;
  const pairs=setups.slice(0,8).map(a=>{
-  const project=labels=>{try{return {forecast:projectSequence(state,labels)};}catch(e){return {unknown:e.message};}};
+  const project=labels=>{try{return {forecast:candidateProjection(state,labels,candidates)};}catch(e){return {unknown:e.message};}};
   return {alternativeFirst:a.label,proposedFirst:first.label,alternativeThenProposed:project([a.label,first.label]),proposedThenAlternative:project([first.label,a.label])};
  });
  return {proposedChoice:chosen.id,proposedPlan:chosen.plan??[{label:chosen.label,command:chosen.command}],pairs,note:'Ordering evidence is limited to two-action prefixes. Do not add independent forecasts together. Unknown draws, lethal targets and other boundaries prevent projection; they do not prove the alternative is bad. Only one action executes before re-observation.'};

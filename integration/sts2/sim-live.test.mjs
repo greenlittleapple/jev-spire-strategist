@@ -7,11 +7,15 @@ import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {SimClient} from './sim-client.mjs';
 import {SimPool, chunkLines, workerCount} from './sim-pool.mjs';
-import {simLive, engineForecast, defeatedFrom, applyForecasts, MAX_FAILURES} from './sim-live.mjs';
+import {simLive, engineForecast, defeatedFrom, applyForecasts, enginePrune, MAX_FAILURES} from './sim-live.mjs';
 import {buildLines, aggregateForecast} from './sim-shadow.mjs';
 import {compare, slimRecord, report} from './sim-compare.mjs';
 import {selectionState} from '../../vendor/jev-the-spire/spire-demo/selections.mjs';
-import {decisionCandidates} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
+import {decisionCandidates, candidateProjection, projectSequence, forecastPreference} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
+import {orderingEvidence} from '../../vendor/jev-the-spire/spire-demo/order-review.mjs';
+import {benefitEvidence} from '../../vendor/jev-the-spire/spire-demo/plan-benefit.mjs';
+import {endTurnComparison} from '../../vendor/jev-the-spire/spire-demo/end-turn-comparison.mjs';
+import {dangerReviewReason} from './efficient-decisions.mjs';
 import {efficientQuestion} from './efficient-decisions.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -123,19 +127,22 @@ test('a worker that cannot be restarted is retired; with none left the pool is d
   await pool.close();
 });
 
-test('engine forecast mapping: exact values, spread as mean with range, survive rate and kills', () => {
+test('engine forecast mapping: exact only when two or more samples agree; spread as mean with range, survive rate and kills', () => {
   const start = workerState();
   const sample = (hp, enemyHp, dead = false) => ({ok: true, after_line: {player: {hp: 40, max_hp: 80, block: 0, energy: 2}, enemies: [{...start.enemies[0], hp: enemyHp}]},
     after_enemy_turn: dead ? null : {player: {hp, max_hp: 80, block: 0, energy: 3}, enemies: []}, player_dead: dead, combat_won: enemyHp === 0});
-  // One sample: exact.
-  const one = [sample(32, 4)];
-  const exact = engineForecast(planner(), aggregateForecast(start, one), defeatedFrom(bridgeState(), start, one));
+  // One sample cannot show randomness the planner did not flag: sampled, not exact.
+  assert.equal(engineForecast(planner(), aggregateForecast(start, [sample(32, 4)]), {always: [], rate: {}}).quality, 'sampled');
+  // Two samples that agree: exact.
+  const two = [sample(32, 4), sample(32, 4)];
+  const exact = engineForecast(planner(), aggregateForecast(start, two), defeatedFrom(bridgeState(), start, two));
   assert.deepEqual([exact.damage, exact.block, exact.hpLoss, exact.hpAfter, exact.survives, exact.energyLeft, exact.defeatedEnemies, exact.quality, exact.source, exact.samples],
-    [6, 0, 8, 32, true, 2, [], 'exact', 'engine', 1]);
+    [6, 0, 8, 32, true, 2, [], 'exact', 'engine', 2]);
   // Planner fields that still apply stay; its Unmodeled caveat and notModeled go.
   assert.deepEqual([exact.incoming, exact.warnings, exact.notModeled, exact.min, exact.survive_rate], [8, ['Re-observe after Wild.'], [], undefined, undefined]);
-  // All samples equal: still exact.
-  assert.equal(engineForecast(planner(), aggregateForecast(start, [sample(32, 4), sample(32, 4)]), {always: [], rate: {}}).quality, 'exact');
+  // Two samples that differ (randomness the planner did not flag): sampled, with the range.
+  const differ = engineForecast(planner(), aggregateForecast(start, [sample(32, 4), sample(30, 4)]), {always: [], rate: {}});
+  assert.deepEqual([differ.quality, differ.hpAfter, differ.min.hpAfter, differ.max.hpAfter], ['sampled', 31, 30, 32]);
   // Spread: one sample kills the enemy, one dies, two survive at different HP.
   const spread = [sample(32, 0), sample(0, 4, true), sample(30, 4), sample(34, 4)];
   const s = engineForecast(planner({boundary: 'combat_won'}), aggregateForecast(start, spread), defeatedFrom(bridgeState(), start, spread));
@@ -147,11 +154,11 @@ test('engine forecast mapping: exact values, spread as mean with range, survive 
   // The planner said the line wins; the engine says it does in one sample of four.
   assert.deepEqual([s.boundary, s.combat_won_rate], [null, 0.25]);
   // A kill in every sample is listed in the planner's shape.
-  const kill = [sample(40, 0)];
+  const kill = [sample(40, 0), sample(40, 0)];
   const k = engineForecast(planner(), aggregateForecast(start, kill), defeatedFrom(bridgeState(), start, kill));
   assert.deepEqual([k.defeatedEnemies, k.boundary], [[{id: 'E_0', name: 'Enemy', combat_id: 1}], 'combat_won']);
   // No spread and no samples agreeing on death: survives false.
-  assert.equal(engineForecast(planner(), aggregateForecast(start, [sample(0, 4, true)]), {always: [], rate: {}}).survives, false);
+  assert.equal(engineForecast(planner(), aggregateForecast(start, [sample(0, 4, true), sample(0, 4, true)]), {always: [], rate: {}}).survives, false);
 });
 
 test('source marking: covered lines are engine, the rest planner with the reason, in candidate order', () => {
@@ -177,7 +184,7 @@ test('live mode: candidates carry engine forecasts and the record keeps the plan
     const summary = await live.decision({state: bridgeState(), candidates: cs, decisionRef: 'h1'});
     assert.deepEqual([summary.status, summary.engine, summary.planner], ['ok', 5, 1]);
     const by = Object.fromEntries(cs.map(c => [c.id, c.forecast]));
-    assert.deepEqual([by.p3.damage, by.p3.hpAfter, by.p3.hpLoss, by.p3.survives, by.p3.quality, by.p3.source, by.p3.samples], [6, 32, 8, true, 'exact', 'engine', 1]);
+    assert.deepEqual([by.p3.damage, by.p3.hpAfter, by.p3.hpLoss, by.p3.survives, by.p3.quality, by.p3.source, by.p3.samples], [6, 32, 8, true, 'exact', 'engine', 2]);
     assert.deepEqual([by.p1.block, by.p1.hpLoss, by.p2.hpAfter, by.p2.energyLeft], [5, 3, 32, 3]);
     assert.equal(by.p5.quality, 'sampled'); assert.ok(by.p5.min.damage < by.p5.max.damage); assert.equal(by.p5.survive_rate, 1);
     assert.deepEqual([by.p4.source, by.p4.fallback, by.p4.damage], ['planner', 'unsupported action: discard_potion', 99]);
@@ -185,6 +192,8 @@ test('live mode: candidates carry engine forecasts and the record keeps the plan
     assert.deepEqual([on.status, on.workers, on.timeout_ms], ['on', 2, 4000]);
     const f = records.find(r => r.kind === 'sim_forecast');
     assert.deepEqual([f.mode, f.status, f.workers, f.lines], ['live', 'ok', 2, 4]);
+    // At least 2 samples per line, 4 where the planner stopped at a random effect.
+    assert.deepEqual(f.samples, {p3: 2, p2: 2, p1: 2, p5: 4});
     assert.deepEqual(f.sources, {p0: 'engine', p1: 'engine', p2: 'engine', p3: 'engine', p4: 'planner', p5: 'engine'});
     assert.equal(f.planner.p3.damage, 99); assert.equal(f.results.p3.damage, 6);
     assert.ok(!JSON.stringify(records).includes('replay.json'));
@@ -280,7 +289,7 @@ test("Jev's request carries the engine values and the note only when a forecast 
   const plain = JSON.stringify(efficientQuestion(state, cs));
   assert.doesNotMatch(plain, /forecast_engine|"source":"engine"/);
   const c = cs.find(x => x.command.action === 'end_turn');
-  c.forecast = engineForecast(c.forecast, {damage: 0, block: 13, hpLoss: 4, hpAfter: 61, survives: true, defeatedEnemies: 0, energyLeft: 3, samples: 1, survive_rate: 1, combat_won_rate: 0}, {always: [], rate: {}});
+  c.forecast = engineForecast(c.forecast, {damage: 0, block: 13, hpLoss: 4, hpAfter: 61, survives: true, defeatedEnemies: 0, energyLeft: 3, samples: 2, survive_rate: 1, combat_won_rate: 0, exact: true}, {always: [], rate: {}});
   const request = efficientQuestion(state, cs);
   assert.match(request.state.forecast_engine, /game's own combat code/);
   const details = JSON.parse(request.state.candidate_details[c.id]);
@@ -297,11 +306,11 @@ const decisionRecord = (time, {round = 2, hp = 40, energy = 3, block = 0, enemyH
 
 test('compare: live records, planner numbers from the sim record, and the exact-match rate with every mismatch', () => {
   const engineChoice = {id: 'p3', command: strike.command, plan: [strike, endTurn],
-    forecast: {damage: 6, block: 0, hpLoss: 8, hpAfter: 32, survives: true, defeatedEnemies: [], energyLeft: 2, source: 'engine', quality: 'exact', samples: 1}};
+    forecast: {damage: 6, block: 0, hpLoss: 8, hpAfter: 32, survives: true, defeatedEnemies: [], energyLeft: 2, source: 'engine', quality: 'exact', samples: 2}};
   const log = [
     {time: '2026-10-01T00:00:00.9Z', kind: 'sim_forecast', mode: 'live', status: 'partial', run: 'run1', decision: 'h1', decision_started: '2026-10-01T00:00:00.5Z',
       planner: {p3: {damage: 6, block: 0, hpLoss: 6, hpAfter: 34, survives: true, defeatedEnemies: 0, energyLeft: 2}},
-      results: {p3: {damage: 6, block: 0, hpLoss: 8, hpAfter: 32, survives: true, defeatedEnemies: 0, energyLeft: 2, samples: 1}}},
+      samples: {p3: 2}, results: {p3: {damage: 6, block: 0, hpLoss: 8, hpAfter: 32, survives: true, defeatedEnemies: 0, energyLeft: 2, samples: 2, exact: true}}},
     decisionRecord('2026-10-01T00:00:01Z', {chosen: engineChoice, stateHash: 'h1'}),
     decisionRecord('2026-10-01T00:00:03Z', {energy: 2, enemyHp: 4, chosen: {id: 'p0', command: {action: 'end_turn'}, plan: [endTurn]}}),
     // The enemy hit for 9, not 8: the engine's HP after is one off.
@@ -314,4 +323,117 @@ test('compare: live records, planner numbers from the sim record, and the exact-
   assert.deepEqual([x.lines, x.fields.damage.rate, x.fields.block.rate, x.fields.hpAfter.rate, x.fields.hpAfter.engine], [1, 1, 1, 0, 1]);
   assert.deepEqual(x.mismatches.map(m => [m.field, m.sim, m.actual, m.planner, m.engine]), [['hpAfter', 32, 31, 34, true]]);
   assert.match(report(result), /Exact match[\s\S]*hpAfter\s+0\.0% of 1 \(1 used live\)[\s\S]*Mismatches \(1\)\nrun1 a1 f3 r2 p3 hpAfter: sim 32, actual 31, planner 34 \(live\)/);
+});
+
+// Engine pruning. Lines: a single (s), and three plans starting with the same card (a, b, c).
+const engineF = (hpLoss, damage, quality = 'exact') => ({damage, block: 0, hpLoss, hpAfter: 40 - hpLoss, survives: true, defeatedEnemies: [], energyLeft: 0, source: 'engine', quality, samples: 2, boundary: null});
+const line = (id, f, extra = false, plan = [strike, defend]) => ({id, command: plan[0].command, plan, forecast: f, ...(extra ? {extra: true} : {})});
+
+test('engine pruning keeps the best per selection score among exact lines with the same first action', () => {
+  const cs = [
+    line('s', engineF(8, 6), false, [strike]),
+    line('a', engineF(8, 12)),                     // best attack and conserve
+    line('b', engineF(0, 0)),                      // best defense
+    line('c', engineF(8, 6)),                      // beaten on every score
+    line('x', engineF(8, 3), true),                // extra, beaten: removed
+    line('y', engineF(0, 10), true),               // extra, now best on every score: kept
+    line('z', planner(), true),                    // extra the engine did not cover: dropped
+  ];
+  const p = enginePrune(cs);
+  assert.deepEqual(p.kept.map(c => c.id), ['s', 'y']);
+  assert.deepEqual([p.removed, p.removed_planner, p.kept_extra, p.uncovered], [['a', 'b', 'c', 'x'], ['a', 'b', 'c'], ['y'], ['z']]);
+  // Scores are the planner's: forecastPreference ranks y first on attack, defense and conserve.
+  for (const kind of ['attack', 'defense', 'conserve']) assert.ok(forecastPreference(cs[5].forecast, cs[5].plan, kind) > forecastPreference(cs[1].forecast, cs[1].plan, kind));
+});
+
+test('engine pruning never prunes by, or prunes, a sampled or planner forecast', () => {
+  const cs = [
+    line('a', engineF(0, 12)),
+    line('b', engineF(8, 0, 'sampled')),           // worse, but sampled: kept
+    line('c', {...planner(), source: 'planner', fallback: 'sample stopped: choice'}), // planner: kept
+    line('d', engineF(9, 0)),                      // exact and beaten by a: removed
+  ];
+  // A sampled line that would beat everything does not prune the exact ones.
+  const strong = line('e', engineF(0, 99, 'sampled'));
+  const p = enginePrune([...cs, strong]);
+  assert.deepEqual(p.kept.map(c => c.id), ['a', 'b', 'c', 'e']);
+  assert.deepEqual(p.removed, ['d']);
+});
+
+test('the planner set is unchanged without extras, and extras come after it', () => {
+  const state = selectionState(JSON.parse(readFileSync(new URL('./fixtures/elite-multi-hit.json', import.meta.url), 'utf8')));
+  const base = decisionCandidates(state), wide = decisionCandidates(state, {extra: 12});
+  assert.deepEqual(JSON.stringify(wide.filter(c => !c.extra)), JSON.stringify(base));
+  const extras = wide.filter(c => c.extra);
+  assert.equal(extras.length, 12);
+  assert.deepEqual(wide.slice(base.length).map(c => c.id), extras.map(c => c.id));
+  const keys = new Set(wide.map(c => JSON.stringify(c.plan.map(p => p.command))));
+  assert.equal(keys.size, wide.length);
+  assert.ok(extras.every(c => c.plan.length > 1));
+});
+
+test('live mode prunes on engine forecasts when the engine covers the decision, else keeps the planner set exactly', () => withReplay(async (dir, replay) => {
+  // Two plans starting with Defend: Defend then Strike beats Defend then Wild (exact, no random flag on it).
+  const cs = () => [
+    ...candidates(),
+    {id: 'p6', command: defend.command, plan: [defend, strike, endTurn], forecast: planner()},
+    {id: 'p7', command: defend.command, plan: [defend, step({action: 'play_card', card_index: 0, target: 'E_0'}), endTurn], forecast: planner(), extra: true},
+    {id: 'p8', command: defend.command, plan: [defend, endTurn], forecast: planner(), extra: true},
+  ];
+  const records = [];
+  const live = simLive({env: {...process.env, ...liveEnv()}, log: async e => records.push(e), fetchFn: replayFetch(replay)});
+  try {
+    const summary = await live.decision({state: bridgeState(), candidates: cs(), decisionRef: 'h1'});
+    assert.equal(summary.status, 'ok');
+    const ids = summary.candidates.map(c => c.id);
+    assert.deepEqual(ids, ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+    assert.deepEqual([records.at(-1).prune.removed_ids, records.at(-1).prune.removed_planner, records.at(-1).prune.extra_lines], [['p7', 'p8'], 0, 2]);
+    assert.deepEqual(summary.prune, {removed: records.at(-1).prune.removed, kept_extra: records.at(-1).prune.kept_extra, removed_planner: records.at(-1).prune.removed_planner});
+    // p7 is p6's line (tie: the earlier line stays); p8 (Defend, end) loses to Defend, Strike on every score.
+  } finally { await live.close(); }
+  // A timeout: exactly the planner's set, extras dropped.
+  const slow = simLive({env: {...process.env, ...liveEnv({SIM_WORKERS: '1', SIM_TIMEOUT_MS: '300', STUB_DELAY_MS: '2000'})}, log: async () => {}, fetchFn: replayFetch(replay)});
+  try {
+    const all = cs();
+    const summary = await slow.decision({state: bridgeState(), candidates: all, decisionRef: 'h2'});
+    assert.equal(summary.status, 'timeout');
+    assert.deepEqual(summary.candidates.map(c => c.id), all.filter(c => !c.extra).map(c => c.id));
+    assert.equal(summary.prune, null);
+  } finally { await slow.close(); }
+}));
+
+test('reviews compare one source: engine forecasts from the candidates in live mode, planner projections otherwise', () => {
+  const state = selectionState(JSON.parse(readFileSync(new URL('./fixtures/elite-multi-hit.json', import.meta.url), 'utf8')));
+  const base = decisionCandidates(state);
+  // Without engine forecasts the projection is the planner's, as before.
+  const single = base.find(c => c.plan.length === 1 && c.command.action === 'play_card');
+  assert.deepEqual(candidateProjection(state, [single.plan[0].label], base), projectSequence(state, [single.plan[0].label]));
+  // Live: the projection is the candidate's engine forecast, or unknown; never the planner's.
+  const live = base.map(c => ({...c, forecast: {...c.forecast, source: 'engine', quality: 'exact', marker: c.id}}));
+  const liveSingle = live.find(c => c.id === single.id);
+  assert.equal(candidateProjection(state, [single.plan[0].label], live).marker, single.id);
+  assert.throws(() => candidateProjection(state, ['No such card'], live), /No engine forecast/);
+  // A trailing End turn names the same sequence.
+  const withEnd = {...liveSingle, id: 'q', plan: [...liveSingle.plan, endTurn], forecast: {...liveSingle.forecast, marker: 'q'}};
+  assert.equal(candidateProjection(state, [single.plan[0].label], [withEnd]).marker, 'q');
+  // Order review: every projected side is an engine candidate forecast or unknown.
+  const chosen = live.find(c => orderingEvidence(state, c, live));
+  const order = orderingEvidence(state, chosen, live);
+  for (const pair of order.pairs) for (const side of [pair.alternativeThenProposed, pair.proposedThenAlternative])
+    assert.ok(side.unknown || side.forecast.source === 'engine', JSON.stringify(side));
+  // First-action benefit: compared only when both sides are exact engine forecasts.
+  const benefit = benefitEvidence(state, live);
+  assert.ok(benefit.actions.every(a => a.forecast == null || a.forecast.source === 'engine'));
+  assert.ok(benefit.actions.some(a => a.hpSavedIfEnding != null));
+  const mixed = live.map(c => c.command.action === 'end_turn' ? {...c, forecast: {...c.forecast, source: 'planner', quality: 'calculated'}} : c);
+  assert.ok(benefitEvidence(state, mixed).actions.every(a => a.hpSavedIfEnding == null));
+  // End-turn comparison and the danger review skip differences across sources.
+  assert.ok(endTurnComparison(mixed).options.filter(o => o.id !== mixed.find(c => c.command.action === 'end_turn').id).every(o => o.change_vs_ending.hp == null));
+  const hp = {...state, player: {...state.player, hp: 20, max_hp: 80}, run: {...state.run, live_id: 'danger-test'}};
+  const end = {id: 'e', command: {action: 'end_turn'}, label: 'End', forecast: {source: 'engine', quality: 'exact', hpLoss: 30, survives: true}};
+  const plannerSafe = {id: 'b', command: {action: 'play_card', card_index: 3}, label: 'Block', forecast: {quality: 'calculated', hpLoss: 0, survives: true}};
+  const engineChosen = {id: 'c', command: {action: 'play_card', card_index: 0}, label: 'Hit', forecast: {source: 'engine', quality: 'exact', hpLoss: 30, survives: true}};
+  assert.equal(dangerReviewReason(hp, [end, plannerSafe, engineChosen], engineChosen), null);
+  const engineSafe = {...plannerSafe, forecast: {...plannerSafe.forecast, source: 'engine', quality: 'exact'}};
+  assert.match(dangerReviewReason({...hp, run: {...hp.run, live_id: 'danger-test-2'}}, [end, engineSafe, engineChosen], engineChosen), /Block loses 0/);
 });

@@ -1,5 +1,5 @@
 import {actionsFor} from '../../vendor/jev-the-spire/spire-demo/actions.mjs';
-import {decisionQuestion} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
+import {decisionQuestion,sameForecastSource} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
 import {compactRequest} from '../../vendor/jev-the-spire/spire-demo/compact-request.mjs';
 import {includeHextechRules} from './runes.mjs';
 import {includePileKnowledge} from './piles.mjs';
@@ -118,7 +118,8 @@ export function dangerReviewReason(state,candidates,chosen,{fightPlan=null,repla
  const end=candidates.find(c=>c.command.action==='end_turn'),endLoss=end?.forecast?.hpLoss;
  if(end?.forecast?.quality==='unknown'||!Number.isFinite(endLoss))return null;
  if(endLoss<0.25*maxHp&&100*(hp-endLoss)/maxHp>=replanPercent)return null;
- const known=candidates.filter(c=>c.forecast?.quality!=='unknown'&&c.forecast?.survives===true&&Number.isFinite(c.forecast?.hpLoss));
+ // Live engine forecasts: the chosen line is compared only with lines whose forecast has its source.
+ const known=candidates.filter(c=>sameForecastSource(c.forecast,chosen.forecast)&&c.forecast?.quality!=='unknown'&&c.forecast?.survives===true&&Number.isFinite(c.forecast?.hpLoss));
  const mine=chosen.forecast?.hpLoss;
  if(!known.length||!Number.isFinite(mine))return null;
  const best=known.reduce((a,c)=>c.forecast.hpLoss<a.forecast.hpLoss?c:a);
@@ -136,7 +137,7 @@ export function orderReviewReason(state,candidates,chosen,{minGain=3}={}) {
  const hand=state.player?.hand??[],cardOf=c=>hand.find(h=>h.index===c.command.card_index)??hand[c.command.card_index];
  if(cardOf(chosen)?.type!=='Attack')return null;
  const key=c=>JSON.stringify(c.command),best=new Map();
- for(const c of candidates){const d=c.forecast?.damage;if(typeof d==='number')best.set(key(c),Math.max(best.get(key(c))??-1,d));}
+ for(const c of candidates){if(!sameForecastSource(c.forecast,chosen.forecast))continue;const d=c.forecast?.damage;if(typeof d==='number')best.set(key(c),Math.max(best.get(key(c))??-1,d));}
  const mine=best.get(key(chosen));
  if(mine==null)return null;
  const setups=candidates.filter(c=>c.command.action==='play_card'&&cardOf(c)&&cardOf(c).type!=='Attack'&&(best.get(key(c))??-1)>=mine+minGain);
