@@ -102,15 +102,18 @@ public static class ReplayRunner
     /// game generates them itself; a ready-to-begin-enemy-turn action becomes an end-turn request.
     /// Recorded card choices are handed to the Sim's choice selector.
     /// </summary>
-    public static Result Driven(CombatReplay replay, Action<Sim, CombatReplayEvent>? afterAction = null)
+    public static Result Driven(CombatReplay replay, Action<Sim, CombatReplayEvent>? afterAction = null, Action? onStarted = null, bool checksums = true,
+        int maxPlayerActions = int.MaxValue)
     {
         ChecksumParity? parity = null;
-        var sim = Sim.Start(replay.serializableRun, replay, rm => parity = ChecksumParity.Attach(rm, replay));
+        var sim = Sim.Start(replay.serializableRun, replay, rm => parity = checksums ? ChecksumParity.Attach(rm, replay) : new ChecksumParity());
+        onStarted?.Invoke();
         int skipped = 0, endTurns = 0;
         for (int i = 0; i < replay.events.Count; i++)
         {
             CombatReplayEvent e = replay.events[i];
             if (e.eventType != CombatReplayEventType.GameAction) { skipped++; continue; }
+            if (maxPlayerActions-- <= 0) break;
             // Choices recorded right after this action belong to it; queue them before the action asks.
             for (int j = i + 1; j < replay.events.Count && replay.events[j].eventType != CombatReplayEventType.GameAction; j++)
                 if (replay.events[j].eventType == CombatReplayEventType.PlayerChoice)

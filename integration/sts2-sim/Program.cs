@@ -13,11 +13,13 @@ public static class Program
     }
 
     private static bool Verbose;
+    private static bool NoChecksums;
 
     // Kept separate so no game type is touched before the assembly resolver is registered.
     private static int Run(string[] args)
     {
         Verbose = args.Contains("--verbose");
+        NoChecksums = args.Contains("--no-checksums");
         var clock = Stopwatch.StartNew();
         Boot.Start(echoLog: args.Contains("--log"));
         Console.WriteLine($"boot {clock.ElapsedMilliseconds} ms, {GodotHeadless.StubbedFunctions} engine functions stubbed, " +
@@ -30,13 +32,16 @@ public static class Program
             "replay" => Replay(rest[0]),
             "drive" => Drive(rest[0]),
             "demo" => Demo(rest[0]),
+            "branch" => Branch(rest[0], int.Parse(rest[1]), rest.Length > 2 ? int.Parse(rest[2]) : 20),
+            "states" => States(rest[0], rest[1]),
+            "bench" => Bench(rest[0], rest.Length > 1 ? int.Parse(rest[1]) : 20),
             _ => Usage(command),
         };
     }
 
     private static int Usage(string command)
     {
-        Console.Error.WriteLine($"unknown command {command}; commands: boot | replay <file.mcr> | drive <file.mcr> | demo <file.mcr>");
+        Console.Error.WriteLine($"unknown command {command}; commands: boot | replay <file.mcr> | drive <file.mcr> | demo <file.mcr> | bench <file.mcr> [runs] | branch <file.mcr> <actions> [runs] | states <file.mcr> <out.jsonl>");
         return 2;
     }
 
@@ -108,6 +113,83 @@ public static class Program
             if (run == 1) { Console.Write(text); first = text; }
             else Console.WriteLine(text == first ? "second run: identical output" : "second run: DIFFERENT output\n" + text);
         }
+        return 0;
+    }
+
+    /// <summary>
+    /// Timing. Replays the fight in driven mode repeatedly in one process and reports the cold first run and the
+    /// median of the rest: setup (enter combat from the snapshot), per player action, and per end turn (which
+    /// includes the whole enemy turn and the next turn's start). Also checks that every run gives the same checksums.
+    /// </summary>
+    private static int Bench(string path, int runs)
+    {
+        var replay = ReplayRunner.Read(path);
+        var totals = new List<double>(); var setups = new List<double>(); var actions = new List<double>(); var endTurns = new List<double>();
+        List<uint>? firstSequence = null; bool allSame = true;
+        for (int run = 0; run < runs; run++)
+        {
+            var clock = Stopwatch.StartNew();
+            var setup = Stopwatch.StartNew();
+            double runActions = 0, runEnds = 0; int nActions = 0, nEnds = 0;
+            var last = Stopwatch.StartNew();
+            var result = ReplayRunner.Driven(replay, (sim, e) =>
+            {
+                double ms = last.Elapsed.TotalMilliseconds;
+                if (e.action is MegaCrit.Sts2.Core.GameActions.NetReadyToBeginEnemyTurnAction) { runEnds += ms; nEnds++; }
+                else { runActions += ms; nActions++; }
+                last.Restart();
+            }, onStarted: () => { setups.Add(setup.Elapsed.TotalMilliseconds); last.Restart(); }, checksums: !NoChecksums);
+            totals.Add(clock.Elapsed.TotalMilliseconds);
+            actions.Add(runActions / Math.Max(1, nActions)); endTurns.Add(runEnds / Math.Max(1, nEnds));
+            if (firstSequence == null) firstSequence = result.Parity.Sequence;
+            else allSame &= firstSequence.SequenceEqual(result.Parity.Sequence);
+            if (result.Parity.Mismatches > 0) Console.WriteLine($"run {run}: {result.Parity.Summary(replay.checksumData.Count)}");
+        }
+        static string Med(List<double> v) => v.Count < 2 ? "n/a" : $"{v.Skip(1).OrderBy(x => x).ElementAt((v.Count - 1) / 2):0.00}";
+        Console.WriteLine($"{runs} runs of {Path.GetFileName(path)} ({replay.events.Count} events, {replay.checksumData.Count} checksums)");
+        Console.WriteLine($"  whole fight ms: cold {totals[0]:0.0}, warm median {Med(totals)}");
+        Console.WriteLine($"  enter combat ms: cold {setups[0]:0.00}, warm median {Med(setups)}");
+        Console.WriteLine($"  per player action ms: cold {actions[0]:0.00}, warm median {Med(actions)}");
+        Console.WriteLine($"  per end turn incl. enemy turn ms: cold {endTurns[0]:0.00}, warm median {Med(endTurns)}");
+        Console.WriteLine(NoChecksums ? "  checksums off (game's checksum tracker disabled, as in test mode)"
+            : $"  checksum sequences identical across runs: {allSame} ({firstSequence!.Count} checksums each)");
+        return allSame ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Mid-fight branching by re-execution: the game has no way to copy or serialize a combat in progress, so a
+    /// mid-fight state is rebuilt from the combat-start snapshot plus the first N player actions. Measures that cost
+    /// and checks the rebuilt state is identical every time.
+    /// </summary>
+    private static int Branch(string path, int actions, int runs)
+    {
+        var replay = ReplayRunner.Read(path);
+        var times = new List<double>(); string? first = null; bool same = true;
+        for (int run = 0; run < runs; run++)
+        {
+            var clock = Stopwatch.StartNew();
+            Sim? sim = null;
+            ReplayRunner.Driven(replay, (s, _) => sim = s, checksums: false, maxPlayerActions: actions);
+            times.Add(clock.Elapsed.TotalMilliseconds);
+            string state = StateView.Json(StateView.Read(sim!.Combat));
+            if (first == null) { first = state; Console.WriteLine($"state after {actions} player actions: {state}"); }
+            else same &= state == first;
+        }
+        var warm = times.Skip(1).OrderBy(x => x).ToList();
+        Console.WriteLine($"rebuild after {actions} player actions: cold {times[0]:0.0} ms, warm median {warm[warm.Count / 2]:0.0} ms, min {warm[0]:0.0} ms; identical state every run: {same}");
+        return same ? 0 : 1;
+    }
+
+    /// <summary>Writes the combat state at the start and after every player action of a replay, one JSON line each.</summary>
+    private static int States(string path, string outPath)
+    {
+        var replay = ReplayRunner.Read(path);
+        using var writer = new StreamWriter(outPath);
+        int step = 0;
+        var result = ReplayRunner.Driven(replay, (sim, e) =>
+            writer.WriteLine($"{{\"step\":{++step},\"after\":{System.Text.Json.JsonSerializer.Serialize(e.action?.ToString())},\"state\":{StateView.Json(StateView.Read(sim.Combat))}}}"),
+            onStarted: () => writer.WriteLine($"{{\"step\":0,\"after\":null,\"state\":{StateView.Json(StateView.Read(StateView.Combat))}}}"));
+        Console.WriteLine($"wrote {step + 1} states; {result.Parity.Summary(replay.checksumData.Count)}");
         return 0;
     }
 }
