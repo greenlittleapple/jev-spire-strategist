@@ -277,6 +277,24 @@ export function eliteReadiness(state) {
 
 export function mapNodeKeys(map) { return (map?.nodes ?? []).map(nodeKey); }
 
+// The runner's mapMemory after observing a state. During travel the game can still show the map with
+// the node just left as current_position; taking it would put the remembered position one row behind
+// the node travelled to, and every floor off the map one too high (JEV22 Strategist v3.18, the floor 2
+// card reward: floor_offset 2 and elite_chains [10,12] for [9,11]). Rows only increase within an act,
+// so a map screen behind the remembered node keeps the remembered position.
+export function rememberMap(memory, state) {
+ if (!state?.map?.nodes?.length || !state.run) return memory;
+ const position = state.map.current_position;
+ const same = memory && memory.runId === state.run.live_id && memory.act === state.run.act;
+ const behind = same && memory.position?.row != null && position?.row != null && position.row < memory.position.row;
+ return {runId: state.run.live_id, act: state.run.act, map: state.map, position: behind ? memory.position : position};
+}
+// After a map move is accepted, the node travelled to is the current position.
+export function travelledTo(memory, state, chosen) {
+ if (chosen?.command?.action !== 'choose_map_node' || memory?.runId !== state?.run?.live_id || chosen.details?.col == null) return memory;
+ return {...memory, position: {col: chosen.details.col, row: chosen.details.row, type: chosen.details.type}};
+}
+
 // mapMemory = {runId, act, map, position}: the act map from the last map screen.
 export function currentMap(state, mapMemory) {
  if (state.map?.nodes?.length) return {map: state.map, position: state.map.current_position};

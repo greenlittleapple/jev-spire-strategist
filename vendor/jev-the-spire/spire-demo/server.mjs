@@ -3,7 +3,7 @@ import {selectionState} from './selections.mjs';
 import {encounterBrief,encounterMemory} from './encounters.mjs';
 import http from 'node:http';
 import { unlinkSync } from 'node:fs';
-import {rewardState} from './rewards.mjs';
+import {rewardState,unclaimedGold} from './rewards.mjs';
 import {efficientDeliberate,EFFICIENT_POLICY} from '../../../integration/sts2/efficient-decisions.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from '../../../integration/sts2/hierarchical.mjs';
 import {filePlaybook} from '../../../integration/sts2/playbook.mjs';
@@ -16,7 +16,7 @@ import {replayer} from '../../../integration/sts2/replay.mjs';
 import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
 import {STRATEGY_POLICY} from '../../../integration/sts2/strategy.mjs';
-import {FACTS_POLICY,FACTS_V3_POLICY} from '../../../integration/sts2/route-facts.mjs';
+import {FACTS_POLICY,FACTS_V3_POLICY,rememberMap,travelledTo} from '../../../integration/sts2/route-facts.mjs';
 import {planBenefitDeliberate,persistentPlan} from './plan-benefit.mjs';
 const planBenefitEnabled=process.env.SPIRE_PLAN_BENEFIT==='1';
 import {assistedDeliberate} from './experiment/assisted.mjs';
@@ -101,6 +101,8 @@ if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
 if(strategist)strategist.status.enabled=view.decisionMode==='claude';
 // The act map is only in map-screen observations; remember it and the node travelled to.
 let mapMemory=null;
+// The run whose stale strategy requests were last archived (observe).
+let archivedFor=null;
 view.planBenefitEnabled=planBenefitEnabled;
 view.adviser=lunaEnabled?'gpt-5.6-luna:max':null;
 // Fixed waits for bridges without a readiness report; a reported "ready" replaces them.
@@ -204,6 +206,13 @@ async function observe(retries = 2) {
     view.events = []; lastExecuted = ''; checkpoint = null;
   }
   if (id) view.runId = id;
+  // A strategy request left for another run (an earlier runner session, an abandoned run) is archived on
+  // the first observation and whenever the run changes, so the next strategist does not answer it.
+  if (id && strategist && id !== archivedFor) {
+    archivedFor = id;
+    const archived = await strategist.channel.archiveOtherRun(id).catch(() => null);
+    if (archived) await log({ kind: 'strategy_archived', request_id: archived.id, reason: archived.stamp?.reason ?? null, run_id: archived.stamp?.run_id ?? null, current_run: id, file: archived.archivedAs });
+  }
   const mismatch = checkpoint?.checkpoint?.run_id !== id
     || checkpoint?.checkpoint?.current_act_index + 1 !== live.run?.act;
   if (live.run && (mismatch || Date.now() - checkpointCheckedAt > 5000)) {
@@ -232,7 +241,8 @@ async function observe(retries = 2) {
     view.save = {available:false,reason:error.message};
   }
   const s = selectionState(joined,view.events);
-  if (s.map?.nodes?.length && s.run) mapMemory = {runId:s.run.live_id, act:s.run.act, map:s.map, position:s.map.current_position};
+  // A stale map shown during travel does not move the remembered node back (rememberMap).
+  mapMemory = rememberMap(mapMemory, s);
   latestState = s; view.state = s; view.connected = true;
   return s;
 }
@@ -341,7 +351,7 @@ async function step(token, preview = false) {
     const logged = new Set();
     const onEvent = async strategyEvent => { logged.add(strategyEvent); await log(strategyEvent); addToHistory(view.strategyHistory, strategyEvent); };
     const result = await (lunaEnabled?assistedDeliberate:planBenefitEnabled?planBenefitDeliberate:hierarchicalDeliberate)({state:planningState,candidates:actions,onEvent,
-      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,replay:await replaySource.forState(planningState),cancelled:()=>token!==generation,
+      recent:memory,strategist:view.decisionMode==='claude'?strategist:null,factsVersion:{jev:0,jev_facts:2,jev_facts_v3:3,claude:3}[view.decisionMode],mapMemory,replay:await replaySource.forState(planningState),cancelled:()=>token!==generation,goldUnclaimed:unclaimedGold(planningState,view.events),
       onStage:stage=>{view.message=stage;view.pending.stage=stage;},
       ask:async payload=>{
         if(token!==generation)throw Error('Decision cancelled.');
@@ -393,8 +403,7 @@ async function step(token, preview = false) {
     }
     view.uncertainAction = null;
     lastExecuted = hash; view.actions++;
-    if (chosen.command.action === 'choose_map_node' && mapMemory?.runId === s.run?.live_id && chosen.details?.col != null)
-      mapMemory.position = {col:chosen.details.col, row:chosen.details.row, type:chosen.details.type};
+    mapMemory = travelledTo(mapMemory, s, chosen);
     if(result.decisionSource==='forced')view.forcedActions++;
     view.message = token === generation ? chosen.label : 'Paused. The last dispatched move was accepted; wait for its animation before taking over.';
     nextDecisionAt = Date.now() + (s.ready === true ? 0 : COOLDOWN_MS);

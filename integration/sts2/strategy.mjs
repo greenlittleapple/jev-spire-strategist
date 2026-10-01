@@ -64,7 +64,7 @@ Fields:
 - shop.gold_reserve: gold to keep unspent for a concrete later need; 0 if none. Purchases that would drop gold below it are removed from Jev's options, so be deliberate.
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows. Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18; JEV18 took an optional elite at 75% six floors out and entered at 65%): in all four the only rest site after the last elite was the one right before the boss. rests_before_boss_rest in the route facts leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the R rooms after the elite except the last): with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine; runs with no Act 1 elite lost by the end of Act 2 (JEV5, 6, 9, 19). Two elites with no rest site between them (a route's elite_chains, given as floors) take two fights' HP with no heal: 2 of 69 logged elite fights were the second of such a pair and both runs died in it (JEV19 at 18/80; JEV22 entered its floor 9 elite at 76% and died in the floor 11 elite at 36/80, only a treasure between). route_risk asks at a branch that commits to one unless HP is at least elite_min_hp_percent + 26.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
-- elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer.
+- elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer. With route_path [] (Jev routing), code removes map options that commit to an elite before the next rest site while HP is below this value and another option remains (elite_low_hp).
 Elite readiness (routes.elite_readiness, Acts 1 and 2): when it is not_ready (fewer than 2 potions and hallway_form at or above act_limit), code removes the map options that commit to an elite before the next rest site; a risky elite is your call, and route_risk asks once per elite at the branch that commits to it.
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact. Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
 - replan_below_hp_percent: HP percentage at which you want to be consulted again (10-60; 25 is typical).
@@ -97,11 +97,24 @@ const matchKey = (candidates,key) => {
 };
 const relicIds = s => (s.player?.relics ?? []).map(r => r.id).sort();
 
+// A card's enchantment or affliction (Imbued on The Bomb, Sharp on Bash, Hexed) reaches the state only as
+// a keyword whose name the card's text does not contain. Common keywords are left out.
+const COMMON_KEYWORDS=new Set(['exhaust','block','energy','ethereal','retain','innate','unplayable','strength','dexterity','vulnerable','weak','frail']);
+const letters=t=>String(t??'').toLowerCase().replace(/[^a-z0-9']+/g,' ').trim();
+export function cardModifiers(card) {
+ const text=` ${letters(card?.description??card?.card_description)} `;
+ const out=(card?.keywords??[]).filter(k=>k?.name&&k.description&&!COMMON_KEYWORDS.has(letters(k.name))&&!text.includes(` ${letters(k.name)} `))
+  .map(k=>`${k.name}: ${k.description}`);
+ return out.length?out:null;
+}
+const withModifiers=card=>{const m=cardModifiers(card);return m?{modifiers:m}:{};};
+
 function deckSummary(deck=[]) {
  const byName=new Map();
  for(const c of deck){
-  const key=`${c.name}|${c.cost}|${c.description}`;
-  const row=byName.get(key)??{name:c.name,cost:c.cost,...(c.star_cost!=null?{star_cost:c.star_cost}:{}),...(c.type?{type:c.type}:{}),description:c.description,count:0};
+  const mods=cardModifiers(c);
+  const key=`${c.name}|${c.cost}|${c.description}|${mods??''}`;
+  const row=byName.get(key)??{name:c.name,cost:c.cost,...(c.star_cost!=null?{star_cost:c.star_cost}:{}),...(c.type?{type:c.type}:{}),description:c.description,...(mods?{modifiers:mods}:{}),count:0};
   row.count++;byName.set(key,row);
  }
  return [...byName.values()];
@@ -109,15 +122,23 @@ function deckSummary(deck=[]) {
 
 // Compact, stable projection for the strategist. Current combat hands and piles
 // are left to Jev; the strategist needs the run's shape.
-export function strategistBrief(state,candidates,reason,previous,{routes=null,facts=null}={}) {
+// goldUnclaimed: unclaimed gold on the rewards screen a card reward came from (the runner's memory);
+// lastEvent: eventNote of the event option taken on this floor, for the screens it opens.
+export function strategistBrief(state,candidates,reason,previous,{routes=null,facts=null,goldUnclaimed=null,lastEvent=null}={}) {
  const p=state.player??{};
+ const unclaimed=state.state_type==='rewards'?rewardsGold(state):goldUnclaimed;
+ const samePlan=previous&&previous.run_id===state.run?.live_id;
  const brief={
   trigger:reason,
   run:{...state.run,character:p.character},
-  player:{hp:p.hp,max_hp:p.max_hp,gold:p.gold,max_energy:p.max_energy,
+  player:{hp:p.hp,max_hp:p.max_hp,gold:p.gold,...(unclaimed>0?{gold_unclaimed:unclaimed}:{}),max_energy:p.max_energy,
    potions:(p.potions??[]).map(({name,description})=>({name,description})),max_potion_slots:p.max_potion_slots},
   deck:deckSummary(p.deck),
   relics:(p.relics??[]).map(({name,description,counter})=>({name,description,...(counter!=null?{counter}:{})})),
+  // Relics gained since the plan in force was written: new_relic fires only when no other trigger does,
+  // so a relic gained just before an owned screen was never flagged.
+  ...(samePlan&&Array.isArray(previous.relic_ids)&&(p.relics??[]).some(r=>!previous.relic_ids.includes(r.id))
+   ?{new_relics:(p.relics??[]).filter(r=>!previous.relic_ids.includes(r.id)).map(({name,description})=>({name,description}))}:{}),
   active_rune_rules:runeRules(state).map(({name,description,owner,kind,tier,counter})=>({name,description,owner,kind,...(tier!=null?{tier}:{}),...(counter!=null?{counter}:{})})),
   history:summarizeHistory(state.saved_run)?.history_summary ?? null,
   screen:state.state_type,
@@ -125,7 +146,7 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
  // In combat the strategist also needs the player's side: energy, block, powers and hand.
  if(state.battle)brief.combat_state={round:state.battle.round,energy:p.energy,max_energy:p.max_energy,block:p.block??0,
   status:(p.status??[]).map(({name,amount,description})=>({name,amount,description})),
-  hand:(p.hand??[]).map(({name,cost,type,description})=>({name,cost,type,description})),
+  hand:(p.hand??[]).map(c=>({name:c.name,cost:c.cost,type:c.type,description:c.description,...withModifiers(c)})),
   draw_pile:p.draw_pile_count??null,discard_pile:p.discard_pile_count??null,exhaust_pile:p.exhaust_pile_count??null,
   // A small draw pile's contents (sorted, order unknown) tell what next turn can hold (JEV11: when to kill the Waterfall Giant).
   ...(Array.isArray(p.draw_pile)&&p.draw_pile.length&&p.draw_pile.length<=10?{draw_cards:p.draw_pile.map(c=>c.name).sort()}:{})};
@@ -140,23 +161,53 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
  if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
- if(!combatScreens.has(state.state_type))brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c)}));
- const keywords=cardKeywords(state,combatScreens.has(state.state_type)?[]:candidates);
+ // A screen opened by an event option on this floor (a card selection to enchant, transform or remove).
+ if(lastEvent)brief.from_event={name:lastEvent.name,option:lastEvent.option};
+ const prompt=state.card_select?.prompt??state.hand_select?.prompt;
+ if(prompt&&!combatScreens.has(state.state_type))brief.selection_prompt=prompt;
+ if(!combatScreens.has(state.state_type))brief.current_options=candidates.map(c=>({id:c.id,label:c.label,...optionText(c),...shopItem(c,p),...(isCard(c.details)?withModifiers(c.details):{})}));
+ const keywords=cardKeywords(state,combatScreens.has(state.state_type)?[]:candidates,lastEvent?.keywords);
  if(keywords)brief.keywords=keywords;
  // A plan from another run (another seed) is not shown: cross-run knowledge comes from the playbook,
  // the mechanics registry and card stats, and an old plan's combat section was copied into new runs.
- if(previous&&previous.run_id===state.run?.live_id)brief.previous_plan=planFields(previous);
+ if(samePlan)brief.previous_plan=planFields(previous);
  return brief;
+}
+
+// Gold rewards on a rewards screen, unclaimed until taken (a claim removes the item).
+export const rewardsGold=state=>(state.rewards?.items??[]).filter(i=>i?.type==='gold')
+ .reduce((n,i)=>n+(Number.isFinite(i.gold_amount)?i.gold_amount:Number(String(i.description??'').match(/(\d+)\s*Gold/i)?.[1]??0)),0);
+
+// Shop options carry their item type, and potions the free potion slots: "Fysh Oil — 78 gold: Gain 1
+// Strength and 1 Dexterity" read like a relic, and buying it filled the last slot.
+const SHOP_TYPES={card:'card',relic:'relic',potion:'potion',card_removal:'removal'};
+function shopItem(c,p) {
+ if(c.command?.action!=='shop_purchase'||!c.details?.category)return {};
+ const type=SHOP_TYPES[c.details.category]??c.details.category;
+ return {item_type:type,...(type==='potion'?{free_potion_slots:Math.max(0,(p.max_potion_slots??3)-(p.potions?.length??0))}:{})};
+}
+const isCard=d=>Boolean(d&&(d.card_type||['Attack','Skill','Power','Status','Curse'].includes(d.type)));
+
+// The event page's option keywords and the option taken, kept for the screens it opens on this floor.
+export function eventNote(state,chosen) {
+ const keywords={};
+ for(const o of state.event?.options??[])for(const k of o?.keywords??[])if(k?.name&&k.description&&!(k.name in keywords))keywords[k.name]=k.description;
+ const d=chosen?.details??{};
+ return {run_id:state.run?.live_id??null,floor:state.run?.floor??null,name:state.event?.event_name??null,
+  option:chosen?[chosen.label,d.description&&d.description!==chosen.label?d.description:null].filter(Boolean).join(': '):null,keywords};
 }
 
 // Keyword definitions for the offered options and the deck and hand card text (Exhaust, Ethereal,
 // Tainted...). A definition that only repeats its own name ("Tainted: Gain 2 Tainted when played.",
 // JEV21 f27, left undefined until an unknown_mechanic request) is replaced by the text of a power
 // with that name visible now, if any; the glossary lookup may replace it later (makeGlossary).
-function cardKeywords(state,candidates) {
+// Event pages: every option's keywords, offered or locked; extra: definitions carried from the event option
+// taken on this floor (eventNote).
+function cardKeywords(state,candidates,extra=null) {
  const p=state.player??{},keywords=new Map();
  const powers=[...(p.status??[]),...(state.battle?.enemies??[]).flatMap(e=>e.status??[])];
- for(const c of [...candidates.map(c=>c.details??{}),...(p.deck??[]),...(p.hand??[])])for(const k of c?.keywords??[]){
+ const carried=Object.entries(extra??{}).map(([name,description])=>({keywords:[{name,description}]}));
+ for(const c of [...candidates.map(c=>c.details??{}),...(state.event?.options??[]),...carried,...(p.deck??[]),...(p.hand??[])])for(const k of c?.keywords??[]){
   if(!k?.name||!k.description||keywords.has(k.name))continue;
   const power=selfNamed(k)&&powers.find(x=>x?.name===k.name&&x.description);
   keywords.set(k.name,power?power.description:k.description);
@@ -247,6 +298,21 @@ export function eliteReadyConstraint(state,candidates,readiness=eliteReadiness(s
   form:readiness.hallway_form,potions:readiness.potions_held,act:readiness.act,limit:readiness.act_limit}};
 }
 
+// elite_low_hp (claude mode): with no route_path in force (Jev routing) and HP below the plan's
+// elite_min_hp_percent, map options that commit to an elite before the next rest site are removed while
+// another map option remains. route_risk's HP check needs a route_path, so JEV22 (Strategist v3.18)
+// answered [] for Act 2 and Jev entered an elite at 26% HP with no potions.
+export function eliteLowHpConstraint(state,candidates,plan) {
+ const min=plan?.elite_min_hp_percent??0,hp=pct(state.player);
+ if(state.state_type!=='map'||!state.map?.nodes?.length||!(min>0)||hp==null||hp>=min)return null;
+ if(plan.route_path?.length&&plan.route_act===state.run?.act)return null;
+ const commits=eliteBeforeRest(state.map),drop=c=>c.command?.action==='choose_map_node'&&c.details?.col!=null&&commits(nodeKey(c.details));
+ const kept=candidates.filter(c=>!drop(c));
+ if(kept.length===candidates.length||!mapOptions(kept).length)return null;
+ return {candidates:kept,constraint:{kind:'elite_low_hp',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept),
+  hp_percent:hp,elite_min_hp_percent:min}};
+}
+
 // The first option in the plan's order that is still offered.
 const orderedAllowed=(candidates,plan,list=plan.allowed_options)=>{
  for(const key of list??[]){const c=matchKey(candidates,key);if(c)return c;}
@@ -270,10 +336,11 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true,screenCho
  // A screen with one option (such as a confirmation) needs no decision.
  if(ownScreens&&isOwnedScreen(state)&&candidates.length>1&&!orderedAllowed(candidates,plan,screenChoices[screenKey(state)]))return 'owned_screen';
  if(!ownScreens&&state.state_type==='shop'&&(state.player?.gold??0)>=150&&plan.screen!==screenKey(state))return 'rich_shop';
- if(state.state_type==='map'&&state.map?.nodes?.length&&plan.screen!==screenKey(state)){
-  // The first map screen of an act is where the whole route is visible.
+ if(state.state_type==='map'&&state.map?.nodes?.length){
+  // The first map screen of an act is where the whole route is visible. It asks even right after
+  // another answer on this screen (new_act on the map) that did not choose a route.
   if(plan.route_act!==run.act)return 'route_plan';
-  if(plan.route_path?.length){
+  if(plan.screen!==screenKey(state)&&plan.route_path?.length){
    const next=routeOptions(candidates,plan);
    if(!next.length)return 'route_off';
    if(routeRisk(state,plan,candidates))return 'route_risk';
@@ -291,19 +358,29 @@ export function escalationReason(state,answer,plan,threshold) {
  return 'jev_uncertain';
 }
 
+// Requests that ask for the act's route: on a map screen their answer is the route choice, [] included.
+export const ROUTE_REASONS=new Set(['route_plan','route_off','route_risk']);
 // Captured when the request is made, so a late answer only constrains its own screen.
-export function requestStamp(state,candidates,reason,routeNodes=[]) {
- // route_act marks that the strategist saw this act's routes.
- return {route_nodes:routeNodes,route_act:routeNodes.length?state.run.act:null,run_id:state.run.live_id,act:state.run.act,floor:state.run.floor,reason,
+// route_act: the act already routed by an earlier answer (carried forward within an act), or null.
+// routes_shown: the brief lists this act's routes. route_request: a route request on a map screen.
+// stampPlan decides from these and the answer whether the act counts as routed.
+export function requestStamp(state,candidates,reason,routeNodes=[],{routesShown=routeNodes.length>0,routeAct=null}={}) {
+ return {route_nodes:routeNodes,route_act:routeAct,routes_shown:routesShown,route_request:state.state_type==='map'&&ROUTE_REASONS.has(reason),
+  run_id:state.run.live_id,act:state.run.act,floor:state.run.floor,reason,
   hp_percent:pct(state.player),relic_ids:relicIds(state),screen:screenKey(state),
   encounter:combatScreens.has(state.state_type)?screenKey(state):null,
   option_keys:combatScreens.has(state.state_type)?{}:Object.fromEntries(candidates.map(c=>[c.id,optionKey(c)]))};
 }
 
+// An act counts as routed (route_act) only when the answer sets a non-empty route_path from listed routes,
+// or the request was itself a route request on a map screen. JEV22 (Strategist v3.18) was asked new_act on
+// Act 2's opening event, whose brief listed the routes; it answered route_path [] and the act counted as
+// routed, so route_plan never fired and Jev routed the act with no HP check into an elite at 26% HP.
 export function stampPlan(plan,stamp,meta={}) {
- const {option_keys,route_nodes,...fields}=stamp;
+ const {option_keys,route_nodes,routes_shown,route_request,...fields}=stamp;
  const allowed=plan.allowed_option_ids.filter(id=>option_keys[id]);
- return {...plan,...fields,allowed_options:allowed.map(id=>option_keys[id]),
+ const routed=route_request||(routes_shown&&plan.route_path?.length>0);
+ return {...plan,...fields,route_act:routed?stamp.act:fields.route_act??null,allowed_options:allowed.map(id=>option_keys[id]),
   recommended_options:allowed.map(id=>JSON.parse(option_keys[id]).label),
   createdAt:new Date().toISOString(),...meta};
 }
@@ -612,6 +689,8 @@ export function constrainCandidates(state,candidates,plan,mode='constrained',{fi
   const kept=routeOptions(candidates,plan);
   if(kept.length)return {candidates:kept,constraint:{kind:'route',removed:candidates.length-kept.length,removed_ids:removedIds(candidates,kept)}};
  }
+ const lowHp=eliteLowHpConstraint(state,candidates,plan);
+ if(lowHp)return lowHp;
  if(state.state_type==='shop'&&plan.shop?.gold_reserve>0){
   const gold=state.player?.gold??0,items=state.shop?.items??[];
   const kept=candidates.filter(c=>{

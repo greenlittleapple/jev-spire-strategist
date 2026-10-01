@@ -43,6 +43,18 @@ export function fileChannel(dir) {
    await unlink(answerFile).catch(()=>{});
    return answer;
   },
+  // A request left from another run (an earlier runner session, or a run since abandoned) is moved to
+  // request.stale-<id>.json, with its answer if one was written, so no strategist answers it. Returns the
+  // archived request, or null. The runner calls it on its first observation and when the run changes.
+  async archiveOtherRun(runId) {
+   const request=await readJson(requestFile);
+   const other=request?.stamp?.run_id;
+   if(!runId||!other||other===runId)return null;
+   const name=`request.stale-${String(request.id).slice(0,8)}.json`;
+   await rename(requestFile,resolve(dir,name)).catch(error=>{if(error.code!=='ENOENT')throw error;});
+   if((await readJson(answerFile))?.id===request.id)await unlink(answerFile).catch(()=>{});
+   return {...request,archivedAs:name};
+  },
   // Session side: answer only the request that was read.
   async answer(id,plan) {
    const request=await readJson(requestFile);

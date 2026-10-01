@@ -6,7 +6,7 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {hallwayForm,eliteReadiness,eliteBeforeRest,orderedOptionRoutes,ELITE_READY_LIMITS} from './route-facts.mjs';
-import {eliteReadyConstraint,routeRisk,replanReason,requestStamp,stampPlan,strategistBrief,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
+import {eliteReadyConstraint,eliteLowHpConstraint,routeRisk,replanReason,requestStamp,stampPlan,strategistBrief,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
@@ -170,4 +170,41 @@ test('claude mode: a risky elite on the path asks route_risk once, with the read
 test('the strategist instructions say code removes not_ready elites and risky ones are the strategist\'s call',()=>{
  const line=STRATEGIST_INSTRUCTIONS.split(/\r?\n/).find(l=>l.startsWith('Elite readiness'));
  assert.match(line,/not_ready/);assert.match(line,/code removes/);assert.match(line,/risky elite is your call/);
+});
+
+// elite_low_hp: route_risk's HP check needs a route_path. JEV22 (Strategist v3.18) answered route_path []
+// for Act 2 and Jev routed into an elite at 26% HP with no potions. With Jev routing and HP below the
+// plan's elite_min_hp_percent, code removes the options that commit to an elite before the next rest.
+const ready=()=>mapState({potions:2,losses:[1,2]});
+const jevRouting=(state,extra={})=>({...routed(state,[]),elite_min_hp_percent:80,screen:'other',...extra});
+test('elite_low_hp removes elite-committing options below elite_min_hp_percent when Jev routes',()=>{
+ const r=eliteLowHpConstraint(ready(),options,jevRouting(ready()));
+ assert.deepEqual(r.candidates.map(c=>c.id),['a1','a3']);
+ assert.deepEqual(r.constraint,{kind:'elite_low_hp',removed:2,removed_ids:['a0','a2'],hp_percent:75,elite_min_hp_percent:80});
+ assert.equal(eliteLowHpConstraint(ready(),options,jevRouting(ready(),{elite_min_hp_percent:75})),null,'HP at the value');
+ assert.equal(eliteLowHpConstraint(ready(),options,jevRouting(ready(),{elite_min_hp_percent:0})),null,'0 turns it off');
+ assert.equal(eliteLowHpConstraint(ready(),[options[0],options[2]],jevRouting(ready())),null,'not when it would leave no option');
+ assert.equal(eliteLowHpConstraint(ready(),options,{...routed(ready(),['0,6','0,7','0,8']),elite_min_hp_percent:80}),null,'a route in force uses route_risk instead');
+});
+
+test('claude mode: elite_low_hp is a rule; with elite_not_ready the readiness rule removes first',async()=>{
+ const status=newStrategyStatus({enabled:true}),channel={current:async()=>null};
+ status.plan=jevRouting(ready());
+ const seen=[];
+ const result=await hierarchicalDeliberate({state:ready(),candidates:options,strategist:{channel,status},ask:jevAnswer(seen,'a1')});
+ assert.deepEqual(result.constraint,{kind:'elite_low_hp',removed:2,removed_ids:['a0','a2'],hp_percent:75,elite_min_hp_percent:80});
+ const one=await hierarchicalDeliberate({state:ready(),candidates:options.slice(0,3),strategist:{channel,status},ask:()=>assert.fail('no Jev call')});
+ assert.equal(one.decisionSource,'rule');assert.equal(one.rule,'elite_low_hp');assert.equal(one.answers.move.choice,'a1');
+ // not_ready already removed the same options: one rule record, not two.
+ status.plan=jevRouting(notReady());
+ const both=await hierarchicalDeliberate({state:notReady(),candidates:options,strategist:{channel,status},ask:jevAnswer([],'a1')});
+ assert.equal(both.constraint.kind,'elite_not_ready');assert.deepEqual(both.constraint.removed_ids,['a0','a2']);
+ // Not in jev_facts_v3 (no plan).
+ const jevOnly=await hierarchicalDeliberate({state:ready(),candidates:options,factsVersion:3,ask:jevAnswer([],'a0')});
+ assert.equal(jevOnly.constraint,undefined);
+});
+
+test('the strategist instructions describe elite_low_hp under elite_min_hp_percent',()=>{
+ const line=STRATEGIST_INSTRUCTIONS.split(/\r?\n/).find(l=>l.startsWith('- elite_min_hp_percent'));
+ assert.match(line,/route_path \[\] \(Jev routing\)/);assert.match(line,/elite_low_hp/);
 });

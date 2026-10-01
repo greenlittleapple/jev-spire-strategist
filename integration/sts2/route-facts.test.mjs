@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys,eliteReadiness} from './route-facts.mjs';
+import {readFileSync} from 'node:fs';
+import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys,eliteReadiness,rememberMap,travelledTo,currentMap} from './route-facts.mjs';
 import {efficientQuestion,isForcedChoice} from './efficient-decisions.mjs';
-import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,screenKey,ELITE_CHAIN_MARGIN,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
+import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,screenKey,strategistBrief,ELITE_CHAIN_MARGIN,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
@@ -291,4 +292,80 @@ test('the route instructions give the elite chain evidence and the route_risk ma
  const route=STRATEGIST_INSTRUCTIONS.split(/\r?\n/).find(l=>l.startsWith('- route:'));
  assert.match(route,/elite_chains/);assert.match(route,/JEV22/);assert.match(route,/2 of 69 logged elite fights/);
  assert.ok(route.includes(`elite_min_hp_percent + ${ELITE_CHAIN_MARGIN}`));
+});
+
+// JEV22 (Strategist v3.18), Act 2: the new_act request came on the act's opening event, and its brief
+// already listed the routes. The answer had route_path [], the act counted as routed and route_plan never
+// fired. An act is routed only by a non-empty route_path from listed routes, or by a route request on a map screen.
+const act2=(floor=18)=>({...run,act:2,floor});
+const act2Map=(extra={})=>({...mapState(),run:act2(),...extra});
+const act2Event=()=>({...act2Map(),state_type:'event',event:{event_name:'Orobas',options:[]}});
+const eventOptions=[{id:'a0',command:{action:'choose_event_option',index:0},label:'A'},{id:'a1',command:{action:'choose_event_option',index:1},label:'B'}];
+const act1Routed=()=>stampPlan(plan({route_path:['1,1','1,2','0,3']}),requestStamp(mapState(),candidates,'route_plan',keys));
+
+test('a new_act answer with routes listed and route_path [] leaves the act unrouted, so route_plan fires on its first map screen',()=>{
+ const stamp=requestStamp(act2Event(),eventOptions,'new_act',keys,{routesShown:true,routeAct:null});
+ const unrouted=stampPlan(plan(),stamp);
+ assert.equal(unrouted.route_act,null);
+ assert.equal(replanReason(act2Map(),unrouted,candidates),'route_plan');
+ // A non-empty route_path from the listed routes routes the act.
+ const routed=stampPlan(plan({route_path:['0,1','0,2','0,3']}),stamp);
+ assert.equal(routed.route_act,2);
+ assert.equal(replanReason(act2Map({run:act2(19)}),routed,candidates),null);
+ // Without listed routes, a carried route_path does not route a new act.
+ assert.equal(stampPlan(plan({route_path:['0,1']}),requestStamp(act2Event(),eventOptions,'new_act',keys,{routesShown:false})).route_act,null);
+});
+
+test('new_act on the map screen with route_path [] asks route_plan on that same screen; a route request routes the act',()=>{
+ const onMap=stampPlan(plan(),requestStamp(act2Map(),candidates,'new_act',keys));
+ assert.equal(onMap.route_act,null);assert.equal(onMap.screen,screenKey(act2Map()));
+ assert.equal(replanReason(act2Map(),onMap,candidates),'route_plan');
+ // route_plan answered [] (Jev routes) counts as routed: no further route request this act.
+ const jevRoutes=stampPlan(plan(),requestStamp(act2Map(),candidates,'route_plan',keys));
+ assert.equal(jevRoutes.route_act,2);
+ assert.equal(replanReason(act2Map(),jevRoutes,candidates),null);
+ assert.equal(replanReason(act2Map({run:act2(19)}),jevRoutes,candidates),null);
+});
+
+test('the runner asks route_plan after a new_act answered on the opening event with routes listed',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'jev-route-'));
+ try{
+  const channel=fileChannel(dir),status=newStrategyStatus({enabled:true,waitMs:5000});
+  status.plan=act1Routed();
+  const answer=(async()=>{for(;;){const r=await channel.current();if(r){await channel.answer(r.id,plan());return r;}await new Promise(x=>setTimeout(x,50));}})();
+  await hierarchicalDeliberate({state:act2Event(),candidates:eventOptions,strategist:{channel,status},
+   ask:async()=>({answers:{move:{type:'choice',choice:'a0',confidence:0.9}},usage:{input_tokens:1}})});
+  const seen=await answer;
+  assert.equal(seen.stamp.reason,'new_act');assert.ok(seen.brief.routes,'the opening event brief lists the routes');
+  assert.equal(seen.stamp.route_act,null,'Act 1 routing does not carry into Act 2');
+  assert.equal(status.plan.route_act,null);
+  assert.equal(replanReason(act2Map(),status.plan,candidates),'route_plan');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+// JEV22 (Strategist v3.18), floor 2 card reward: the brief's routes had floor_offset 2 and elite chains
+// one floor late. The runner remembered the node travelled to (2,1), then a map screen shown during the
+// travel still had the node just left (3,0) as current_position and replaced it.
+const jev22Act1=JSON.parse(readFileSync(new URL('./fixtures/jev22-act1-map.json',import.meta.url),'utf8')).map;
+test('a stale map screen during travel does not move the remembered node back; off-map floors stay right',()=>{
+ const live={live_id:'run-jev22',act:1,floor:1,ascension:0};
+ const atMap={state_type:'map',run:live,map:jev22Act1};
+ let memory=rememberMap(null,atMap);
+ assert.deepEqual(memory.position,{col:3,row:0,type:'Ancient'});
+ memory=travelledTo(memory,atMap,{command:{action:'choose_map_node',index:0},details:{index:0,col:2,row:1,type:'Monster'}});
+ memory=rememberMap(memory,atMap);
+ assert.deepEqual(memory.position,{col:2,row:1,type:'Monster'},'the stale map keeps the node travelled to');
+ const reward={state_type:'card_reward',run:{...live,floor:2},player:{hp:80,max_hp:80,gold:99,potions:[],relics:[],deck:[]}};
+ const {map:m,position}=currentMap(reward,memory);
+ const routes=strategistBrief(reward,[],'owned_screen',null,{routes:distinctRoutes(m,position)}).routes;
+ assert.equal(routes.from,'2,1');assert.equal(routes.floor_offset,1);
+ const chains=r=>[...new Set(r.routes.filter(x=>x.elite_chains).map(x=>JSON.stringify(x.elite_chains)))];
+ // The same chain floors as the floor 1 route_plan brief, which listed [9,11] and [11,14].
+ assert.deepEqual(chains(routes),['[[11,14]]']);
+ assert.deepEqual(chains(withEliteChains(distinctRoutes(jev22Act1,jev22Act1.current_position),1)),['[[9,11]]','[[11,14]]']);
+ // The logged brief: from the stale node, every floor one too high.
+ assert.deepEqual(chains(withEliteChains(distinctRoutes(jev22Act1,{col:3,row:0}),2)),['[[10,12]]','[[12,15]]']);
+ // A new act's map replaces the memory; a later map screen moves it forward.
+ assert.deepEqual(rememberMap(memory,{...atMap,run:{...live,act:2,floor:18}}).position,{col:3,row:0,type:'Ancient'});
+ assert.deepEqual(rememberMap(memory,{...atMap,run:{...live,floor:3},map:{...jev22Act1,current_position:{col:1,row:2,type:'Monster'}}}).position,{col:1,row:2,type:'Monster'});
 });

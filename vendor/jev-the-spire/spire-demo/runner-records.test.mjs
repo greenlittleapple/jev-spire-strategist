@@ -67,3 +67,13 @@ test('bridge errors returned before enqueueing are game_rejected dispatches, not
   assert.match(handler.slice(0, 600), /if \(PRE_ENQUEUE_REJECTION\.test\(error\.message\)\) \{/);
   assert.match(handler.slice(0, 900), /outcome: 'game_rejected'/);
 });
+
+test('the runner keeps the node travelled to, passes unclaimed reward gold and archives stale strategy requests', () => {
+  assert.match(server, /mapMemory = rememberMap\(mapMemory, s\);/);
+  assert.match(server, /mapMemory = travelledTo\(mapMemory, s, chosen\);/);
+  assert.match(server, /goldUnclaimed:unclaimedGold\(planningState,view\.events\)/);
+  const observe = server.slice(server.indexOf('async function observe('), server.indexOf('const mismatch ='));
+  assert.match(observe, /if \(id && strategist && id !== archivedFor\) \{/);
+  assert.match(observe, /strategist\.channel\.archiveOtherRun\(id\)/);
+  assert.match(observe, /kind: 'strategy_archived'/);
+});
