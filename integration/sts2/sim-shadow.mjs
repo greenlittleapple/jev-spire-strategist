@@ -27,11 +27,15 @@ export function workerActions(plan) {
   return {actions};
 }
 
-// Unique action sequences, at most maxLines. members maps each line id (its first candidate) to every
-// candidate with the same sequence; skipped lists candidates with no line and why.
+// Unique action sequences, at most maxLines. Plans that end the turn come first, then longer plans:
+// they are full-turn outcomes, and single steps are often their prefixes. members maps each line id
+// (its first candidate in that order) to every candidate with the same sequence; skipped lists
+// candidates with no line and why.
+const endsTurn = c => Array.isArray(c.plan) && c.plan.at(-1)?.command?.action === 'end_turn' ? 1 : 0;
 export function buildLines(candidates, {maxLines = SIM_MAX_LINES} = {}) {
   const lines = [], members = {}, skipped = [], byKey = new Map();
-  for (const c of candidates ?? []) {
+  const ordered = (candidates ?? []).toSorted((a, b) => endsTurn(b) - endsTurn(a) || (b.plan?.length ?? 0) - (a.plan?.length ?? 0));
+  for (const c of ordered) {
     const {actions, reason} = workerActions(c.plan);
     if (!actions) { skipped.push({id: c.id, reason}); continue; }
     const key = JSON.stringify(actions);
@@ -99,15 +103,18 @@ export function candidateResults(start, response, members) {
   return results;
 }
 
-const baseName = name => String(name ?? '').replace(/\+\d*$/, '').trim().toLowerCase();
 // Differences between the observed decision state and the worker's loaded state that would make the
 // card indexes or entity ids mean something else (a replay written after the next action, say).
+// Cards and potions are compared by the bridge's ids: the worker has no localization, so its names
+// are lookup keys.
 export function stateDifferences(observed, loaded) {
   const diffs = [], p = observed?.player ?? {}, q = loaded?.player ?? {};
   if (observed?.battle?.round != null && loaded?.round != null && observed.battle.round !== loaded.round) diffs.push('round');
   for (const k of ['hp', 'energy', 'block']) if (p[k] != null && q[k] != null && p[k] !== q[k]) diffs.push(`player.${k}`);
-  const hand = h => (h ?? []).map(c => baseName(c.name)).join('|');
+  const hand = h => JSON.stringify((h ?? []).map(c => c.id ?? null));
   if (hand(p.hand) !== hand(q.hand)) diffs.push('hand');
+  const potions = list => JSON.stringify((list ?? []).filter(x => x?.id).map(x => [x.slot, x.id]).sort((a, b) => a[0] - b[0]));
+  if (potions(p.potions) !== potions(q.potions)) diffs.push('potions');
   const enemies = list => JSON.stringify((list ?? []).filter(alive).map(e => [e.entity_id, e.hp]).sort());
   if (enemies(observed?.battle?.enemies) !== enemies(loaded?.enemies)) diffs.push('enemies');
   return diffs;

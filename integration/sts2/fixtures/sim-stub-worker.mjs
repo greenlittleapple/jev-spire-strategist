@@ -1,6 +1,7 @@
 // A stand-in for the headless sim worker, speaking the same JSON-lines protocol, for tests.
-// load reads {state} from the replay file. Cards: Strike deals 6, Defend gives 5 Block, Wild deals
-// 4 to 6 depending on (seed, sample); each costs 1. Block Potion gives 12 Block. After the line the
+// load reads {state} from the replay file. Cards and potions act by id, as names in the real worker
+// are lookup keys: STRIKE_IRONCLAD deals 6, DEFEND_IRONCLAD gives 5 Block, WILD deals 4 to 6 depending
+// on (seed, sample), CHOICE stops for a card choice; each costs 1. BLOCK_POTION gives 12 Block. After the line the
 // enemies attack for their intents. Commands crash and hang test the client; STUB_PING_FAIL=1 fails
 // ping, STUB_EXIT_AT_START=1 exits at once.
 import {readFileSync} from 'node:fs';
@@ -16,16 +17,16 @@ function play(state, actions, seed, sample) {
     if (a.action === 'play_card') {
       const card = s.player.hand[a.card_index];
       if (!card || s.player.energy < 1) return {ok: false, stopped_at: i, reason: 'illegal'};
-      if (card.name === 'Choice') return {ok: false, stopped_at: i, reason: 'choice'};
+      if (card.id === 'CHOICE') return {ok: false, stopped_at: i, reason: 'choice'};
       const target = s.enemies.find(e => e.entity_id === a.target) ?? s.enemies.find(e => e.hp > 0);
-      const damage = card.name === 'Strike' ? 6 : card.name === 'Wild' ? 4 + (seed + sample) % 3 : 0;
+      const damage = card.id === 'STRIKE_IRONCLAD' ? 6 : card.id === 'WILD' ? 4 + (seed + sample) % 3 : 0;
       if (target) target.hp = Math.max(0, target.hp - damage);
-      if (card.name === 'Defend') s.player.block += 5;
+      if (card.id === 'DEFEND_IRONCLAD') s.player.block += 5;
       s.player.energy -= 1; s.player.hand.splice(a.card_index, 1);
     } else if (a.action === 'use_potion') {
       const k = s.player.potions.findIndex(p => p.slot === a.slot);
       if (k < 0) return {ok: false, stopped_at: i, reason: 'illegal'};
-      if (s.player.potions[k].name === 'Block Potion') s.player.block += 12;
+      if (s.player.potions[k].id === 'BLOCK_POTION') s.player.block += 12;
       s.player.potions.splice(k, 1);
     } else return {ok: false, stopped_at: i, reason: 'illegal'};
   }

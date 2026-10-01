@@ -15,13 +15,14 @@ const client = (env = {}, opts = {}) => new SimClient({exe: process.execPath, ar
 
 // The worker's view of a fight: 40 HP, 3 energy, one enemy with 10 HP attacking for 8.
 const workerState = (extra = {}) => ({round: 2, player: {hp: 40, max_hp: 80, block: 0, energy: 3, status: [],
-  hand: [{id: 'STRIKE', name: 'Strike', upgraded: false, cost: 1}, {id: 'DEFEND', name: 'Defend', upgraded: false, cost: 1}, {id: 'WILD', name: 'Wild', upgraded: false, cost: 1}],
-  draw_count: 5, discard_count: 0, exhaust_count: 0, potions: [{slot: 0, id: 'BLOCK_POTION', name: 'Block Potion'}]},
+  hand: [{id: 'STRIKE_IRONCLAD', name: 'STRIKE_IRONCLAD', upgraded: false, cost: 1}, {id: 'DEFEND_IRONCLAD', name: 'DEFEND_IRONCLAD', upgraded: false, cost: 1}, {id: 'WILD', name: 'WILD', upgraded: false, cost: 1}],
+  draw_count: 5, discard_count: 0, exhaust_count: 0, potions: [{slot: 0, id: 'BLOCK_POTION', name: 'BLOCK_POTION'}]},
   enemies: [{entity_id: 'E_0', name: 'Enemy', hp: 10, max_hp: 30, block: 0, status: [], intents: [{type: 'Attack', damage: 8, hits: 1}]}], ...extra});
 // The bridge's view of the same moment.
 const bridgeState = () => ({state_type: 'monster', run: {live_id: 'run1', act: 1, floor: 3},
   player: {hp: 40, max_hp: 80, block: 0, energy: 3, known_draw_top: [{name: 'Strike'}],
-    hand: ['Strike', 'Defend', 'Wild'].map((name, index) => ({name, index}))},
+    hand: [['STRIKE_IRONCLAD', 'Strike'], ['DEFEND_IRONCLAD', 'Defend+'], ['WILD', 'Wild']].map(([id, name], index) => ({id, name, index})),
+    potions: [{slot: 0, id: 'BLOCK_POTION', name: 'Block Potion'}]},
   battle: {round: 2, turn: 'player', is_play_phase: true, enemies: [{entity_id: 'E_0', name: 'Enemy', hp: 10}]}});
 const step = command => ({label: command.action, command});
 const strike = step({action: 'play_card', card_index: 0, target: 'E_0'});
@@ -87,13 +88,17 @@ test('plans become worker actions; duplicates share a line and others are skippe
   assert.match(workerActions([endTurn, strike]).reason, /end_turn before/);
   assert.match(workerActions(undefined).reason, /no plan/);
   const {lines, members, skipped} = buildLines(candidates);
-  assert.deepEqual(lines.map(l => l.id), ['p0', 'p1', 'p2', 'p5']);
-  assert.deepEqual(members.p0, ['p0', 'p3']);
+  // Plans that end the turn first, then longer ones: p0 is the prefix of p3 and shares its line.
+  assert.deepEqual(lines.map(l => l.id), ['p3', 'p2', 'p1', 'p5']);
+  assert.deepEqual(members.p3, ['p3', 'p0']);
   assert.deepEqual(skipped, [{id: 'p4', reason: 'unsupported action: discard_potion'}]);
   const many = Array.from({length: 45}, (_, i) => ({id: `q${i}`, plan: [step({action: 'play_card', card_index: i})]}));
-  const capped = buildLines(many);
+  const full = {id: 'full', plan: [step({action: 'play_card', card_index: 0}), step({action: 'play_card', card_index: 50}), endTurn]};
+  const long = {id: 'long', plan: [step({action: 'play_card', card_index: 0}), step({action: 'play_card', card_index: 51})]};
+  const capped = buildLines([...many, long, full]);
   assert.equal(capped.lines.length, 40);
-  assert.deepEqual(capped.skipped.map(s => s.reason), Array(5).fill('line limit'));
+  assert.deepEqual(capped.lines.slice(0, 3).map(l => l.id), ['full', 'long', 'q0']);
+  assert.deepEqual(capped.skipped.map(s => [s.id, s.reason]), [38, 39, 40, 41, 42, 43, 44].map(i => [`q${i}`, 'line limit']));
 });
 
 test('samples map to the planner forecast fields with mean, range, survive rate and exact', () => {
@@ -117,8 +122,11 @@ test('the loaded state must match the observed decision state', () => {
   assert.deepEqual(stateDifferences(bridgeState(), workerState()), []);
   const moved = workerState(); moved.player.hand.shift(); moved.player.energy = 2;
   assert.deepEqual(stateDifferences(bridgeState(), moved), ['player.energy', 'hand']);
-  const upgraded = bridgeState(); upgraded.player.hand[0].name = 'Strike+';
-  assert.deepEqual(stateDifferences(upgraded, workerState()), []);
+  // Ids, not names: the worker's names are lookup keys, and a different card with the same name differs.
+  const otherCard = bridgeState(); otherCard.player.hand[0].id = 'STRIKE_SILENT';
+  assert.deepEqual(stateDifferences(otherCard, workerState()), ['hand']);
+  const usedPotion = workerState(); usedPotion.player.potions = [];
+  assert.deepEqual(stateDifferences(bridgeState(), usedPotion), ['potions']);
 });
 
 async function withReplay(fn) {
@@ -156,8 +164,8 @@ test('a shadow forecast is logged per decision without the replay path, with a l
     assert.deepEqual([f.run, f.act, f.floor, f.round, f.decision, f.seed, f.samples, f.known_top, f.lines], ['run1', 1, 3, 2, 'hash1', 2 ** 30, 4, 1, 4]);
     assert.ok(!JSON.stringify(records).includes(replay) && !JSON.stringify(records).includes('replay.json'));
     assert.deepEqual(f.skipped_lines, [{id: 'p4', reason: 'unsupported action: discard_potion'}]);
-    assert.deepEqual([f.results.p0.damage, f.results.p0.hpAfter, f.results.p0.exact], [6, 32, true]);
-    assert.equal(f.results.p3.same_as, 'p0');
+    assert.deepEqual([f.results.p3.damage, f.results.p3.hpAfter, f.results.p3.exact], [6, 32, true]);
+    assert.equal(f.results.p0.same_as, 'p3');
     assert.deepEqual([f.results.p1.block, f.results.p1.hpLoss], [5, 3]);
     assert.deepEqual([f.results.p2.hpAfter, f.results.p2.energyLeft], [32, 3]);
     // Wild deals 4 to 6 depending on the sample: a distribution, not exact.
