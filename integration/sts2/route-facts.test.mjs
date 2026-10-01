@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {readFileSync} from 'node:fs';
 import {optionRoutes,orderedOptionRoutes,remainingRoute,distinctRoutes,computedFacts,withEliteChains,mapNodeKeys,eliteReadiness,rememberMap,travelledTo,currentMap} from './route-facts.mjs';
 import {efficientQuestion,isForcedChoice} from './efficient-decisions.mjs';
-import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,screenKey,strategistBrief,ELITE_CHAIN_MARGIN,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
+import {replanReason,constrainCandidates,requestStamp,stampPlan,validatePlan,routeRisk,shopRisk,screenKey,strategistBrief,ELITE_CHAIN_MARGIN,SHOP_RISK_GOLD,STRATEGIST_INSTRUCTIONS} from './strategy.mjs';
 import {hierarchicalDeliberate,newStrategyStatus} from './hierarchical.mjs';
 import {fileChannel} from './strategy-channel.mjs';
 
@@ -368,4 +368,48 @@ test('a stale map screen during travel does not move the remembered node back; o
  // A new act's map replaces the memory; a later map screen moves it forward.
  assert.deepEqual(rememberMap(memory,{...atMap,run:{...live,act:2,floor:18}}).position,{col:3,row:0,type:'Ancient'});
  assert.deepEqual(rememberMap(memory,{...atMap,run:{...live,floor:3},map:{...jev22Act1,current_position:{col:1,row:2,type:'Monster'}}}).position,{col:1,row:2,type:'Monster'});
+});
+
+// shop_risk: JEV23 (Strategist v3.18) died with 449 gold after one shop in 23 floors, JEV24 with 374 and no
+// shop after floor 3. Here a0 (0,1) leads to the shop on row 2 (floor 3); a1, the elite, reaches no shop.
+const rich=(gold=300,floor=1)=>({...mapState(),run:{...run,floor},player:{...mapState().player,gold}});
+const elitePath=()=>({...stampPlan(plan({route_path:['1,1','1,2','0,3']}),requestStamp(mapState(),candidates,'route_plan',keys)),screen:'other'});
+test('shop_risk asks once per act when 250+ gold has no shop on the route and an offered node still reaches one',()=>{
+ assert.equal(SHOP_RISK_GOLD,250);
+ const risk=shopRisk(rich(),elitePath(),candidates);
+ assert.deepEqual(risk.options,[{option:'a0',node:'0,1',shop_floor:3}]);
+ assert.equal(risk.gold,300);assert.match(risk.route,/reaches no shop/);
+ assert.equal(replanReason(rich(),elitePath(),candidates),'shop_risk');
+ assert.equal(shopRisk(rich(249),elitePath(),candidates),null,'under 250 gold');
+ assert.equal(replanReason(rich(249),elitePath(),candidates),null);
+ const viaShop={...elitePath(),route_path:['0,1','0,2','0,3']};
+ assert.equal(shopRisk(rich(),viaShop,candidates),null,'the route has a shop ahead');
+ assert.equal(shopRisk(rich(),elitePath(),[candidates[1]]),null,'no offered node reaches a shop');
+ assert.equal(replanReason(rich(),{...elitePath(),shop_risk_act:1},candidates),null,'asked already this act');
+ // Jev routing (route_path []) asks too.
+ const jevRoutes={...stampPlan(plan(),requestStamp(mapState(),candidates,'route_plan',keys)),screen:'other'};
+ assert.match(shopRisk(rich(),jevRoutes,candidates).route,/Jev routing/);
+ assert.equal(replanReason(rich(),jevRoutes,candidates),'shop_risk');
+});
+
+test('the shop_risk request shows the shop options and is not asked again in the act',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'jev-shop-'));
+ try{
+  const channel=fileChannel(dir),status=newStrategyStatus({enabled:true,waitMs:5000});
+  status.plan=elitePath();
+  const answer=(async()=>{for(;;){const r=await channel.current();if(r){await channel.answer(r.id,plan({route_path:['1,1','1,2','0,3']}));return r;}await new Promise(x=>setTimeout(x,50));}})();
+  const result=await hierarchicalDeliberate({state:rich(),candidates,strategist:{channel,status},ask:()=>assert.fail('the route leaves one option')});
+  const seen=await answer;
+  assert.equal(seen.stamp.reason,'shop_risk');
+  assert.deepEqual(seen.brief.shop_risk.options,[{option:'a0',node:'0,1',shop_floor:3}]);
+  assert.equal(seen.stamp.shop_risk_act,1);assert.equal(status.plan.shop_risk_act,1);
+  assert.equal(result.answers.move.choice,'a1','the answer kept the elite route');
+  assert.equal(replanReason(rich(),{...status.plan,screen:'other'},candidates),null,'once per act');
+  assert.equal(replanReason({...rich(),run:{...run,act:2,floor:18}},{...status.plan,act:2,screen:'other',route_act:2},candidates),'shop_risk','a new act asks again');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('the strategist instructions say gold only turns into strength at a shop',()=>{
+ const line=STRATEGIST_INSTRUCTIONS.split(/\r?\n/).find(l=>l.startsWith('Gold only turns into strength at a shop'));
+ for(const text of ['JEV23 449','JEV24 374','323, 353, 233 and 235','With 150+ gold, pick a route with a shop before the boss','shop_risk asks once per act when gold is 250+'])assert.ok(line.includes(text),text);
 });

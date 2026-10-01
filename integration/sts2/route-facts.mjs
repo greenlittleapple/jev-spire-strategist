@@ -251,6 +251,24 @@ export function eliteBeforeRest(map) {
  return commits;
 }
 
+// The row of the nearest shop reachable from a node (the node included), or null when every path from it
+// reaches the boss without one. For shop_risk (strategy.mjs).
+export function shopReach(map) {
+ const {nodes} = graph(map), memo = new Map();
+ const near = key => {
+  if (memo.has(key)) return memo.get(key);
+  const node = nodes.get(key);
+  let out = null;
+  if (node && node.type !== 'Boss') {
+   if (node.type === 'Shop') out = node.row;
+   else for (const [c,r] of node.children ?? []) { const x = near(`${c},${r}`); if (x != null && (out == null || x < out)) out = x; }
+  }
+  memo.set(key, out);
+  return out;
+ };
+ return near;
+}
+
 // Elite readiness in Acts 1 and 2. In the logs an Act 1 elite cost a mean 6.9 HP when the run held 2+
 // potions and its last three hallway fights averaged under 7 HP lost (11 fights, no deaths), and 37.5 HP
 // with fewer than 2 potions and 7+ (13 fights, 4 run-ending); Act 2 showed the same near 10.

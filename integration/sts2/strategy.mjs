@@ -3,7 +3,8 @@
 // every ordinary decision with it.
 import {summarizeHistory} from './efficient-decisions.mjs';
 import {runeRules} from './runes.mjs';
-import {nodeKey,minElitesFrom,restHeal,committedEliteChain,floorOffset,withEliteChains,eliteBeforeRest,eliteReadiness,ELITE_READY_NOTE} from './route-facts.mjs';
+import {repeatsName,genericText} from './glossary.mjs';
+import {nodeKey,minElitesFrom,restHeal,committedEliteChain,floorOffset,withEliteChains,eliteBeforeRest,eliteReadiness,shopReach,ELITE_READY_NOTE} from './route-facts.mjs';
 
 export const STRATEGY_POLICY = 'claude-strategy-v3';
 const combatScreens = new Set(['monster','elite','boss']);
@@ -65,6 +66,7 @@ Fields:
 - route: map-route policy in words for the rest of the act (used when the planned path cannot be followed). Weigh unspent gold against reachable shops; gold left at the boss buys nothing (JEV11 reached it with 323). Elites give the relics a deck needs by Act 2 (JEV5, JEV6 and JEV9 took no Act 1 elite and all lost by the Act 2 boss): take one or two while HP allows. Act 1 bosses (Waterfall Giant aside) were beaten in 9 of 9 runs entered at 87% HP or more and 0 of 4 entered at 77% or less (JEV12, 14, 16, 18; JEV18 took an optional elite at 75% six floors out and entered at 65%): in all four the only rest site after the last elite was the one right before the boss. rests_before_boss_rest in the route facts leaves that rest out, so for an elite that is the next map option it counts the other rests after it (on a listed route, count the R rooms after the elite except the last): with 0, take an optional Act 1 elite only near full HP; with 1 or more, the elite is fine; runs with no Act 1 elite lost by the end of Act 2 (JEV5, 6, 9, 19). Two elites with no rest site between them (a route's elite_chains, given as floors) take two fights' HP with no heal: 2 of 69 logged elite fights were the second of such a pair and both runs died in it (JEV19 at 18/80; JEV22 entered its floor 9 elite at 76% and died in the floor 11 elite at 36/80, only a treasure between). route_risk asks at a branch that commits to one unless HP is at least elite_min_hp_percent + 26.
 - route_path: when the brief includes routes, the node IDs ("col,row") of the path you choose, in order, copied from one listed route (you may stop before the boss). Jev's map options are limited to the next node on this path. Use [] to leave routing to Jev.
 - elite_min_hp_percent: if HP is below this percentage when the next node on route_path is an elite, or leads through more elites than another offered node must, you are consulted again (route_risk) (0 = never). JEV13 and JEV14 lost after routes that committed to an elite at 33-39% HP while an elite-free path was offered. To keep such a route, lower this value in the answer. With route_path [] (Jev routing), code removes map options that commit to an elite before the next rest site while HP is below this value and another option remains (elite_low_hp).
+Gold only turns into strength at a shop: two of the first four Strategist v3.18 runs died holding 370+ unspent gold (JEV23 449 with one shop in 23 floors, JEV24 374 with no shop after floor 3), and earlier losses held 323, 353, 233 and 235. With 150+ gold, pick a route with a shop before the boss; shop_risk asks once per act when gold is 250+, route_path reaches no shop before the boss and an offered node still can (brief.shop_risk lists those nodes and the shop floor).
 Elite readiness (routes.elite_readiness, Acts 1 and 2): when it is not_ready (fewer than 2 potions and hallway_form at or above act_limit), code removes the map options that commit to an elite before the next rest site; a risky elite is your call, and route_risk asks once per elite at the branch that commits to it.
 - rest: rest-site policy (heal versus upgrade). The facts field gives exact heal and waste; route and gold counts are also exact. Before a boss, rest unless most of the heal would be wasted (JEV11 upgraded at 66/80 and lost to the Waterfall Giant with it on 18 HP).
 - replan_below_hp_percent: HP percentage at which you want to be consulted again (10-60; 25 is typical).
@@ -158,6 +160,7 @@ export function strategistBrief(state,candidates,reason,previous,{routes=null,fa
   if(ready)brief.routes={...brief.routes,elite_readiness:{...ready,note:ELITE_READY_NOTE}};
  }
  if(reason==='route_risk'){const risk=routeRisk(state,previous,candidates);if(risk)brief.route_risk=risk;}
+ if(reason==='shop_risk'){const risk=shopRisk(state,previous,candidates);if(risk)brief.shop_risk=risk;}
  if(facts)brief.facts=facts;
  // The event's own text often explains what its options really do.
  if(state.event)brief.event={name:state.event.event_name??null,...(state.event.body?{text:state.event.body}:{})};
@@ -200,7 +203,8 @@ export function eventNote(state,chosen) {
 // Keyword definitions for the offered options and the deck and hand card text (Exhaust, Ethereal,
 // Tainted...). A definition that only repeats its own name ("Tainted: Gain 2 Tainted when played.",
 // JEV21 f27, left undefined until an unknown_mechanic request) is replaced by the text of a power
-// with that name visible now, if any; the glossary lookup may replace it later (makeGlossary).
+// with that name visible now, if any, with its amounts as N; the glossary lookup may replace it later
+// (makeGlossary). Other definitions are the bridge's hover text, which carries no live amount.
 // Event pages: every option's keywords, offered or locked; extra: definitions carried from the event option
 // taken on this floor (eventNote).
 function cardKeywords(state,candidates,extra=null) {
@@ -209,12 +213,11 @@ function cardKeywords(state,candidates,extra=null) {
  const carried=Object.entries(extra??{}).map(([name,description])=>({keywords:[{name,description}]}));
  for(const c of [...candidates.map(c=>c.details??{}),...(state.event?.options??[]),...carried,...(p.deck??[]),...(p.hand??[])])for(const k of c?.keywords??[]){
   if(!k?.name||!k.description||keywords.has(k.name))continue;
-  const power=selfNamed(k)&&powers.find(x=>x?.name===k.name&&x.description);
-  keywords.set(k.name,power?power.description:k.description);
+  const power=repeatsName(k.name,k.description)&&powers.find(x=>x?.name===k.name&&x.description);
+  keywords.set(k.name,power?genericText(power.description):k.description);
  }
  return keywords.size?Object.fromEntries(keywords):null;
 }
-const selfNamed=k=>String(k.description).toLowerCase().includes(String(k.name).toLowerCase());
 
 // Every description the bridge sends for an option: shop items carry card_, relic_ or
 // potion_description; event options may name a relic with its own description. A reward
@@ -277,6 +280,25 @@ export function routeRisk(state,plan,candidates=[]) {
    note:'Readiness is risky and the path commits to this elite before the next rest site: keep it or choose a route around it.'};
  return null;
 }
+// shop_risk (claude mode): gold of at least SHOP_RISK_GOLD, no shop ahead on the route_path in force (or
+// no route in force: Jev routing), and an offered map option that can still reach a shop before the boss.
+// JEV23 died with 449 gold after one shop in 23 floors, JEV24 with 374 and no shop after floor 3.
+// Returns the brief's details or null; replanReason asks it once per act (plan.shop_risk_act).
+export const SHOP_RISK_GOLD=250;
+export function shopRisk(state,plan,candidates=[]) {
+ const gold=state.player?.gold??0;
+ if(state.state_type!=='map'||!state.map?.nodes?.length||gold<SHOP_RISK_GOLD)return null;
+ const at=state.map.current_position?.row??-1,byKey=new Map(state.map.nodes.map(n=>[nodeKey(n),n]));
+ const routed=plan?.route_path?.length>0&&plan.route_act===state.run?.act;
+ if(routed&&plan.route_path.some(k=>byKey.get(k)?.type==='Shop'&&byKey.get(k).row>at))return null;
+ const near=shopReach(state.map),offset=floorOffset(state.run?.floor,state.map.current_position);
+ const options=mapOptions(candidates).map(c=>({option:c.id,node:nodeKey(c.details),row:near(nodeKey(c.details))})).filter(o=>o.row!=null)
+  .map(({option,node,row})=>({option,node,shop_floor:offset==null?null:row+offset}));
+ if(!options.length)return null;
+ return {gold,route:routed?'route_path reaches no shop before the boss':'no route_path (Jev routing)',options,
+  note:'options: offered map nodes that can still reach a shop before the boss, with the floor of the nearest one. Gold left at the boss buys nothing.'};
+}
+
 // The first elite on the planned path from a node, before any rest site; the node itself when the
 // path stops short of it.
 const plannedElite=(map,path,from)=>{
@@ -345,6 +367,7 @@ export function replanReason(state,plan,candidates=[],{ownScreens=true,screenCho
    if(!next.length)return 'route_off';
    if(routeRisk(state,plan,candidates))return 'route_risk';
   }
+  if(plan.screen!==screenKey(state)&&plan.shop_risk_act!==run.act&&shopRisk(state,plan,candidates))return 'shop_risk';
  }
  // Relic/rune pickups can change the plan: consult at the first screen outside combat after one.
  if(!combatScreens.has(state.state_type)&&relicIds(state).some(id=>!plan.relic_ids?.includes(id)))return 'new_relic';

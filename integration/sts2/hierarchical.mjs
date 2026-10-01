@@ -145,6 +145,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
     // non-empty route_path from the listed routes, or as a route request on a map screen (stampPlan).
     stamp:{...requestStamp(state,candidates,reason,mapNodeKeys(map),{routesShown:Boolean(routes),
      routeAct:status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.route_act??null:null}),encounter_key:encounter,
+     // shop_risk asks once per act.
+     shop_risk_act:reason==='shop_risk'?state.run.act:status.plan?.run_id===state.run.live_id?status.plan.shop_risk_act??null:null,
      // Elites whose risky readiness the strategist has seen at a route_risk branch this act: asked once each.
      readiness_asked:[...(status.plan?.act===state.run.act&&status.plan?.run_id===state.run.live_id?status.plan.readiness_asked??[]:[]),
       ...(brief.route_risk?.elite_readiness?.level==='risky'&&brief.route_risk.elite_readiness.elite?[brief.route_risk.elite_readiness.elite.node]:[])],

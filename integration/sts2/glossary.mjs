@@ -10,7 +10,19 @@ const KEYWORDS = new Set(['add','obtain','gain','lose','deal','apply','replace',
  'relic','relics','card','cards','gold','all','the','a','an','at','each','whenever','if','upon','every','this','your','it',
  'enemies','enemy','turn','combat','ethereal','innate','retain','unplayable','neow','random']);
 
-const selfNamed = (name, description) => String(description ?? '').toLowerCase().includes(String(name).toLowerCase());
+// A keyword definition that only repeats its own name with an amount ("Tainted: Gain 2 Tainted when
+// played."), as opposed to a definition that names it ("Strength adds additional damage to Attacks.").
+// Only such a definition is replaced by a power's text: JEV24's brief replaced Strength's hover text
+// with a live power ("Increases attack damage by 4." while Strength was -3).
+const FILLER = /\b(?:gain|gains|apply|applies|lose|loses|add|adds|give|gives|when|played|this|card|is|a|an|to|your|you|stack|stacks|of|and|the)\b/g;
+export const repeatsName = (name, description) => {
+ const n = String(name ?? '').toLowerCase(), d = String(description ?? '').toLowerCase();
+ return Boolean(n) && d.includes(n) && d.split(n).join(' ').replace(/[\d.,;:!()+\-]/g, ' ').replace(FILLER, ' ').trim() === '';
+};
+// A live power's text without its amount: whole numbers that are not percentages become N
+// ("Receive 50% more damage from Attacks for 93 turns." -> "... for N turns."). JEV24 was shown the
+// Queen fight's 99-stack Vulnerable from JEV21 as a keyword definition.
+export const genericText = text => String(text ?? '').replace(/\d+(?:\.\d+)?%?/g, m => m.endsWith('%') ? m : 'N');
 const normalize = name => String(name ?? '').trim().toLowerCase().replace(/^the\s+/, '');
 const stripPrice = label => String(label ?? '').replace(/\s+[—-]\s+\d+\s+gold$/i, '').trim();
 
@@ -33,8 +45,9 @@ export function candidateNames(text) {
 // notes: the mechanics registry (fileMechanics), whose saved power notes define such keywords too.
 export function makeGlossary(lookup, {notes = null} = {}) {
  const cache = new Map();
- // Power texts seen in earlier briefs (yours and enemies'), by name: a keyword that only repeats its
- // own name ("Tainted: Gain 2 Tainted when played.") is defined by the power's text once it has been seen.
+ // Power texts seen in earlier briefs (yours and enemies'), by name, without their amounts: a keyword that
+ // only repeats its own name ("Tainted: Gain 2 Tainted when played.") is defined by the power's text once
+ // it has been seen. Amounts are never kept: they belong to one fight.
  const powers = new Map();
  const exact = async name => {
   const key = normalize(name);
@@ -70,9 +83,9 @@ export function makeGlossary(lookup, {notes = null} = {}) {
   }
   if (entries.length) brief.glossary = entries;
   for (const x of [...(brief.combat_state?.status ?? []), ...(brief.enemies ?? []).flatMap(e => e.status ?? [])])
-   if (x?.name && x.description) powers.set(normalize(x.name), x.description);
+   if (x?.name && x.description) powers.set(normalize(x.name), genericText(x.description));
   for (const [name, description] of Object.entries(brief.keywords ?? {})) {
-   if (!selfNamed(name, description)) continue;
+   if (!repeatsName(name, description)) continue;
    const note = async () => { try { return Object.values(await notes?.all() ?? {}).find(e => normalize(e?.name) === normalize(name) && /power|any/.test(e.kind ?? ''))?.note; } catch { return null; } };
    const found = powers.get(normalize(name)) ?? (await exact(name))?.description ?? await note();
    if (found) brief.keywords[name] = found;

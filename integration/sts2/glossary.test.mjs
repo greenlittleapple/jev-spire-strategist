@@ -68,7 +68,7 @@ test('keywords in deck and hand card text are defined, in combat too',()=>{
  assert.deepEqual(strategistBrief(state,[],'route_plan',null).keywords,{Tainted:tainted.description,Block:'Until next turn, prevents damage.',Vulnerable:'Takes 50% more damage.'});
  // With the power on you, its text defines a keyword that only repeats its name.
  const fight={...state,state_type:'elite',player:{...state.player,deck:[],hand:[defend],status:[{name:'Tainted',amount:2,description:'Take 2 additional damage from Attacks this turn.'}]},battle:{round:2,enemies:[]}};
- assert.equal(strategistBrief(fight,[],'unknown_mechanic',null).keywords.Tainted,'Take 2 additional damage from Attacks this turn.');
+ assert.equal(strategistBrief(fight,[],'unknown_mechanic',null).keywords.Tainted,'Take N additional damage from Attacks this turn.','without the live amount');
 });
 
 test('the glossary defines a keyword that repeats its name from a power seen earlier or the lookup',async()=>{
@@ -76,7 +76,7 @@ test('the glossary defines a keyword that repeats its name from a power seen ear
  const later={deck:[],relics:[],keywords:{Tainted:tainted.description,Block:'Until next turn, prevents damage.'}};
  await glossary({deck:[],relics:[],combat_state:{status:[{name:'Tainted',amount:2,description:'Take 2 additional damage from Attacks this turn.'}]}});
  await glossary(later);
- assert.equal(later.keywords.Tainted,'Take 2 additional damage from Attacks this turn.');
+ assert.equal(later.keywords.Tainted,'Take N additional damage from Attacks this turn.');
  assert.equal(later.keywords.Block,'Until next turn, prevents damage.','a real definition is kept');
  const unseen={deck:[],relics:[],keywords:{Dazed:'Dazed. Unplayable.'}};
  await makeGlossary(async()=>[])(unseen);
@@ -85,4 +85,25 @@ test('the glossary defines a keyword that repeats its name from a power seen ear
  const fresh={deck:[],relics:[],keywords:{Tainted:tainted.description}};
  await makeGlossary(async()=>[],{notes:{all:async()=>({'player power: Tainted':{name:'Tainted',kind:'player power',note:'Each stack adds 1 damage to every enemy attack hit this turn.'}})}})(fresh);
  assert.equal(fresh.keywords.Tainted,'Each stack adds 1 damage to every enemy attack hit this turn.');
+});
+
+// JEV24 (Strategist v3.18): the brief defined Strength as "Increases attack damage by 4." while Strength
+// was -3, and Vulnerable as "... for 93 turns.", the Queen fight's stacks from JEV21 kept by the glossary.
+test('keyword definitions carry no live amounts, now or from an earlier fight',async()=>{
+ const strength={name:'Strength',description:'Strength adds additional damage to Attacks.'};
+ const vulnerable={name:'Vulnerable',description:'Vulnerable creatures take 50% more damage from Attacks.'};
+ const inflame={name:'Inflame',type:'Power',cost:'1',description:'Gain 2 Strength.',keywords:[strength]};
+ const bash={name:'Bash',type:'Attack',cost:'2',description:'Deal 8 damage. Apply 2 Vulnerable.',keywords:[vulnerable]};
+ const fight={state_type:'boss',run:{live_id:'r',act:3,floor:48},battle:{round:4,enemies:[{name:'Queen',hp:300,max_hp:400,status:[{name:'Vulnerable',amount:93,description:'Receive 50% more damage from Attacks for 93 turns.'}],intents:[]}]},
+  player:{hp:40,max_hp:80,deck:[],relics:[],potions:[],hand:[inflame,bash],status:[{name:'Strength',amount:4,description:'Increases attack damage by 4.'}]}};
+ const brief=strategistBrief(fight,[],'low_hp',null);
+ assert.equal(brief.keywords.Strength,strength.description,'the hover text, not the live power');
+ assert.equal(brief.keywords.Vulnerable,vulnerable.description);
+ // The glossary keeps power texts across briefs only without amounts.
+ const glossary=makeGlossary(async()=>[]);
+ await glossary(brief);
+ const repeats={deck:[],relics:[],keywords:{Vulnerable:'Apply 2 Vulnerable.'}};
+ await glossary(repeats);
+ assert.equal(repeats.keywords.Vulnerable,'Receive 50% more damage from Attacks for N turns.');
+ assert.doesNotMatch(JSON.stringify(repeats.keywords),/\b(?:93|4)\b/);
 });
