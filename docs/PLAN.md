@@ -2,7 +2,7 @@
 
 The current plan for the Slay the Spire 2 lab. Update this file whenever the plan changes, so any AI session (Claude or Codex) can continue from here. Results are in `docs/progress/data.json` and the README chart; setup, design and commands in [STS2.md](STS2.md); live evidence in [STS2-VERIFICATION.md](STS2-VERIFICATION.md); the strategist's brief in [STS2-STRATEGIST.md](STS2-STRATEGIST.md).
 
-Last updated: 2026-10-01.
+Last updated: 2026-10-07 (method review; the order of next steps).
 
 ## Goal
 
@@ -30,6 +30,32 @@ Automatic Slay the Spire 2 play by Jev with a Claude strategist, first at Ascens
 - Jev with the strategist: 26 seeded runs, 3 wins (JEV4 on v3.5, JEV8 on v3.8, JEV15 on v3.13); 6 reached the final boss on floor 48. On unseen seeds (JEV3 to JEV19): 3 wins in 17, and 7 losses at the Act 1 boss.
 - The strategist version changed after nearly every run, so no strategist version has more than 3 runs and none has a win rate yet.
 - Until Strategist v3.17 the strategist was the orchestrating session itself, with earlier runs in its context; from v3.17 each run gets a fresh Medium agent. See [Memory across runs and seeds](#memory-across-runs-and-seeds-2026-10-01).
+
+## Method review (2026-10-07)
+
+Marcus asked for changes to how both labs work. Where runs end, over every logged run in `docs/progress/data.json` (all versions; died / reached):
+
+| Stretch | Strategist (33 runs) | Jev alone (21 runs) |
+|---|---|---|
+| Act 1 before the boss | 1 / 33 (3%) | 8 / 21 (38%) |
+| Act 1 boss (floor 17) | 12 / 32 (38%) | 8 / 13 (62%) |
+| Act 2 before the boss | 5 / 20 (25%) | 4 / 5 |
+| Act 2 boss (floor 33) | 7 / 15 (47%) | 1 / 1 |
+| Act 3 before the boss | 1 / 8 | none reached |
+| Act 3 boss (floor 48) | 4 / 7 (57%) | none reached |
+
+The product of the strategist arm's survival rates is about 10%, in line with its 3 wins in 33 runs.
+
+1. **Versions changed faster than they were measured.** 54 runs went to 26 versions, and 18 strategist versions had 1 to 5 runs each, most of them one. At a 10% win rate a version wins none of 5 runs about 59% of the time, so 0 of 5 against 0 of 5 can't separate two versions, and a change made after a single loss usually answers that run's particulars.
+2. **No fight ends every run, so every act matters.** Unlike the BTD6 lab's round 95, which ended all 43 matches that reached it, the Act 1 boss, the Act 2 hallways and elites, and the Act 2 and 3 bosses each end 25 to 57% of the runs that reach them.
+3. **The release stalled.** Since 2026-10-01 the next version (integration branch `v319`: 35 commits ahead of main, merged from ten branches, plus uncommitted label and plan-cap work in the `w7-release` and `w6-live` worktrees) has waited unreleased. Main's bridge pin (0.4.0-jev.1) no longer matches the installed bridge (0.4.0-jev.2), so a run on main pauses at its first check.
+4. **The game's own engine runs offline.** The headless worker replays real fights with every game checksum matching (step 7), so fights can be played many times from logged start states without the live game.
+
+**Changes (decided 2026-10-07):**
+- **Score runs continuously.** Next to wins, give each run a score: the floor reached plus the share of the fatal fight's enemy HP removed. Report per-act hazards with Wilson intervals, as the BTD6 lab's `btd6:walls` does, and compare versions on the score with a bootstrap interval. The 9-of-10 test stays the bar for the ascension ladder.
+- **Fewer, larger versions.** Batch fixes into one version, fix its series rule (the score bar, the hazards it targets, the number of runs) before the first run, and play at least 10 runs before changing it, except for fixes to bugs that stop runs.
+- **An offline fight benchmark** on the engine worker: logged boss and elite fights replayed from their start states, several samples each with hidden information re-randomized, played by the combat policy (planner and forecasts, with Jev or a fixed tie-break), reporting the win rate and HP lost per fight. Combat changes are judged there before any live series. A later use: compare card rewards by playing the next boss fight with each candidate deck, since the run analysis traced boss losses to damage dealt rather than defence.
+- **Limit work in progress.** One integration branch at a time, released before new branches start.
 
 ## Lessons from the BTD6 lab
 
@@ -90,6 +116,14 @@ Decided (main session, 2026-10-01):
 - **Held-out seeds for the 9-of-10 test** (step 8): JEV21 to JEV25 are development seeds, played by several versions and read for every change, so they compare versions and arms but don't count toward the test.
 
 ## Next steps, in order
+
+**Order from 2026-10-07** (work has been paused since Marcus's word on 2026-10-01; every step that touches the runner or the game waits for him):
+1. **Release v3.19.** Finish the labels (`w7-release`: `jev-compact-v3.4`, the `+engine` policy suffix, the progress rows and README) and the 64-plan cap (`w6-live`), review both diffs, merge main into `v319`, fast-forward main to it, build `integration/sts2-sim` (Release) in the main checkout, restart the runner (it restores paused), and stop there. Then remove the merged worktrees.
+2. **Continuous score and per-act hazards** in `sts2:progress` and the scorecard (Medium agent), reported for every logged run so far.
+3. **Offline fight benchmark** on the engine worker (Medium agents), with the logged boss and elite fights as its first set.
+4. **The v3.19 series** under a rule fixed before its first run (step 4 below, with the continuous score), shadow mode on (step 7), then the ascension ladder (step 8).
+
+The items below are the plan as it stood on 2026-10-01; steps 1 to 5 are done or superseded by the order above.
 
 Marcus approved these suggestions and all future runs on 2026-09-30.
 
