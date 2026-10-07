@@ -17,6 +17,7 @@ import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-histo
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
 import {STRATEGY_POLICY} from '../../../integration/sts2/strategy.mjs';
 import {FACTS_POLICY,FACTS_V3_POLICY,rememberMap,travelledTo} from '../../../integration/sts2/route-facts.mjs';
+import {policyLabel} from '../../../integration/sts2/policy-label.mjs';
 import {planBenefitDeliberate,persistentPlan} from './plan-benefit.mjs';
 const planBenefitEnabled=process.env.SPIRE_PLAN_BENEFIT==='1';
 import {assistedDeliberate} from './experiment/assisted.mjs';
@@ -250,8 +251,9 @@ async function observe(retries = 2) {
   return s;
 }
 let lastEventId = null;
-// The policy label for the current decision mode, logged on run_start and every decision.
-const currentPolicy = () => planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY;
+// The policy label for the current decision mode, logged on run_start and every decision; "+engine"
+// is added with live engine forecasts (SIM_FORECAST=live).
+const currentPolicy = () => policyLabel(planBenefitEnabled||lunaEnabled?POLICY_VERSION:view.decisionMode==='claude'?STRATEGY_POLICY:view.decisionMode==='jev_facts'?FACTS_POLICY:view.decisionMode==='jev_facts_v3'?FACTS_V3_POLICY:EFFICIENT_POLICY);
 async function step(token, preview = false) {
   if (busy || Date.now() < nextDecisionAt) return;
   busy = true;

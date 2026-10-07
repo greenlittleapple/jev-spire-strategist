@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {scoreRuns} from './scorecard.mjs';
+import {basePolicy} from './policy-label.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -33,9 +34,10 @@ export async function readLogs({logDir, seriesFile} = logPaths()) {
 }
 
 // The decision mode a policy runs under, for runs logged before decisions recorded their mode.
-// jev_facts_v3 has logged jev-compact-v3, v3.1 and (with the shop majority rule) v3.2.
-const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3'};
-const policyMode = p => POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null);
+// jev_facts_v3 has logged jev-compact-v3, v3.1, (with the shop majority rule) v3.2, v3.3 and v3.4. A policy
+// recorded with live engine forecasts ("+engine") maps as the policy without it.
+const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3', 'jev-compact-v3.4': 'jev_facts_v3'};
+const policyMode = policy => { const p = basePolicy(policy); return POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null); };
 
 // Cards from the Hornet and Cloud character mods (CARD.HORNET_MOD_CARD_*, CARD.CLOUD-*). Neow and events
 // offered them in Ironclad runs until both mods were disabled in the game's mod settings on 2026-09-30.
@@ -83,7 +85,7 @@ export function versionFor(data, s) {
   const v = data.versions.find(v => v.name === named);
   return v ? {version: v} : {reason: `its series label names ${named}, which has no version in data.json yet`};
  }
- const byPolicy = data.versions.filter(v => v.policy === s.policy);
+ const byPolicy = data.versions.filter(v => v.policy === basePolicy(s.policy));
  if (byPolicy.length === 1) return {version: byPolicy[0]};
  return {reason: byPolicy.length ? `${byPolicy.length} versions share policy ${s.policy} and its series label names none`
   : `no version has policy ${s.policy ?? '(none)'}`};
