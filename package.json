@@ -14,6 +14,7 @@
     "sts2:start": "node integration/sts2/start-run.mjs",
     "sts2:series": "node integration/sts2/series.mjs",
     "sts2:scorecard": "node integration/sts2/scorecard.mjs",
+    "sts2:walls": "node integration/sts2/walls.mjs",
     "sts2:rules-audit": "node integration/sts2/rules-audit.mjs",
     "sts2:progress": "node integration/sts2/progress-chart.mjs",
     "sts2:sim-compare": "node integration/sts2/sim-compare.mjs",
