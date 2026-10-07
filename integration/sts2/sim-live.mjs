@@ -11,7 +11,7 @@ import {SimClient, DEFAULT_SIM_EXE, simArgs} from './sim-client.mjs';
 import {SimPool, workerCount, CHUNK_COST} from './sim-pool.mjs';
 import {buildLines, aggregateForecast, candidateResults, stateDifferences, eligible, targetIds, enemyKey, pickForecast} from './sim-shadow.mjs';
 import {runeRules} from './runes.mjs';
-import {forecastPreference, SELECTION_KINDS} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
+import {forecastPreference, SELECTION_KINDS, MAX_PLANS} from '../../vendor/jev-the-spire/spire-demo/planner.mjs';
 
 export const DEFAULT_TIMEOUT_MS = 4000;
 // Every line takes at least 2 samples, so randomness the planner did not flag shows as spread; lines
@@ -118,7 +118,12 @@ function recordResults(loaded, results, members) {
 // Only lines whose forecasts are both exact are compared: a sampled or planner forecast is never
 // pruned and never prunes another. Single actions always stay, as in the planner. An extra line the
 // engine did not cover is dropped, since only the planner would have judged it.
-export function enginePrune(candidates) {
+// Then the planner's cap: at most max(maxPlans, single actions) lines, filled in the planner's order:
+// single actions, then per selection score and first action (in the singles' order) that action's
+// best line on the score (the engine's best among exact lines; for an action with no exact line, its
+// next kept line in candidate order), then any other kept line in candidate order. Lines past the cap
+// are dropped (capped). The kept lines stay in candidate order.
+export function enginePrune(candidates, {maxPlans = MAX_PLANS} = {}) {
   const exact = c => c.forecast?.source === 'engine' && c.forecast.quality === 'exact';
   const multi = c => (c.plan?.length ?? 0) > 1;
   const best = new Set(), groups = new Map();
@@ -126,15 +131,28 @@ export function enginePrune(candidates) {
     const k = JSON.stringify(c.command);
     (groups.get(k) ?? groups.set(k, []).get(k)).push(c);
   }
-  for (const group of groups.values()) for (const kind of SELECTION_KINDS)
-    best.add(group.reduce((a, c) => forecastPreference(c.forecast, c.plan, kind) > forecastPreference(a.forecast, a.plan, kind) ? c : a));
-  const kept = [], removed = [], uncovered = [];
+  const bestFor = new Map();
+  for (const [k, group] of groups) for (const kind of SELECTION_KINDS) {
+    const top = group.reduce((a, c) => forecastPreference(c.forecast, c.plan, kind) > forecastPreference(a.forecast, a.plan, kind) ? c : a);
+    best.add(top); bestFor.set(kind + '|' + k, top);
+  }
+  const survivors = [], removed = [], uncovered = [];
   for (const c of candidates) {
     if (c.extra && c.forecast?.source !== 'engine') uncovered.push(c.id);
     else if (multi(c) && exact(c) && !best.has(c)) removed.push(c.id);
-    else kept.push(c);
+    else survivors.push(c);
   }
-  return {kept, removed, uncovered,
+  // The planner's order, then the cap.
+  const singles = survivors.filter(c => !multi(c)), order = [...singles], placed = new Set(singles);
+  const roots = [...new Set([...singles, ...survivors].map(c => JSON.stringify(c.command)))];
+  for (const kind of SELECTION_KINDS) for (const k of roots) {
+    const pick = bestFor.get(kind + '|' + k) ?? survivors.find(c => multi(c) && !placed.has(c) && !exact(c) && JSON.stringify(c.command) === k);
+    if (pick && !placed.has(pick)) { order.push(pick); placed.add(pick); }
+  }
+  for (const c of survivors) if (!placed.has(c)) { order.push(c); placed.add(c); }
+  const limit = Math.max(maxPlans, singles.length), within = new Set(order.slice(0, limit));
+  const kept = survivors.filter(c => within.has(c)), capped = order.slice(limit).map(c => c.id);
+  return {kept, removed, uncovered, capped,
     removed_planner: removed.filter(id => !candidates.find(c => c.id === id).extra),
     kept_extra: kept.filter(c => c.extra).map(c => c.id)};
 }
@@ -254,10 +272,10 @@ export function simLive({env = process.env, bridge = 'http://127.0.0.1:15526', l
       const p = enginePrune(candidates);
       final = p.kept;
       prune = {removed: p.removed.length, removed_planner: p.removed_planner.length, kept_extra: p.kept_extra.length,
-        extra_uncovered: p.uncovered.length, extra_lines: candidates.filter(c => c.extra).length, removed_ids: p.removed, kept_extra_ids: p.kept_extra};
+        extra_uncovered: p.uncovered.length, capped: p.capped.length, capped_ids: p.capped, extra_lines: candidates.filter(c => c.extra).length, removed_ids: p.removed, kept_extra_ids: p.kept_extra};
     }
     const ms = Math.round(performance.now() - started);
-    const summary = {status, engine, planner, ms, candidates: final, prune: prune && {removed: prune.removed, kept_extra: prune.kept_extra, removed_planner: prune.removed_planner}};
+    const summary = {status, engine, planner, ms, candidates: final, prune: prune && {removed: prune.removed, kept_extra: prune.kept_extra, removed_planner: prune.removed_planner, capped: prune.capped}};
     if (!['off', 'hextech', 'no_lines'].includes(status)) {
       await record({...head, status, ...(ctx.error ? {error: ctx.error} : {}), ...(ctx.differences ? {differences: ctx.differences} : {}),
         seed: ctx.seed ?? null, known_top: ctx.knownTop ?? null, lines: lines.length, workers: ctx.workers ?? null, timeout_ms: timeoutMs,
