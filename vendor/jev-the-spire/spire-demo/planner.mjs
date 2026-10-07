@@ -725,7 +725,8 @@ export function forecastPreference(f,plan,kind) {
 // extra (live engine forecasts only): up to that many more multi-step plans, the next-best per first
 // action and selection kind after the planner's own picks, appended with extra: true. Default 0: the
 // planner's set, unchanged.
-export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=64, extra=0 }={}) {
+export const MAX_PLANS=64;
+export function planCandidates(s, { maxDepth=6, beamWidth=256, maxPlans=MAX_PLANS, extra=0 }={}) {
   const roots=actionsFor(s);
   if(!s.battle || !s.player?.hand)return roots;
   const start=initial(s), singles=roots.map(a=>apply(start,a)).filter(Boolean);

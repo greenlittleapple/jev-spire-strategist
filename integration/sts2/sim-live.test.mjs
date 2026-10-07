@@ -332,9 +332,9 @@ const line = (id, f, extra = false, plan = [strike, defend]) => ({id, command: p
 test('engine pruning keeps the best per selection score among exact lines with the same first action', () => {
   const cs = [
     line('s', engineF(8, 6), false, [strike]),
-    line('a', engineF(8, 12)),                     // best attack and conserve
-    line('b', engineF(0, 0)),                      // best defense
-    line('c', engineF(8, 6)),                      // beaten on every score
+    line('a', engineF(8, 12)),                     // planner lines, all beaten by y
+    line('b', engineF(0, 0)),                      //   on every score
+    line('c', engineF(8, 6)),
     line('x', engineF(8, 3), true),                // extra, beaten: removed
     line('y', engineF(0, 10), true),               // extra, now best on every score: kept
     line('z', planner(), true),                    // extra the engine did not cover: dropped
@@ -388,7 +388,7 @@ test('live mode prunes on engine forecasts when the engine covers the decision, 
     const ids = summary.candidates.map(c => c.id);
     assert.deepEqual(ids, ['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
     assert.deepEqual([records.at(-1).prune.removed_ids, records.at(-1).prune.removed_planner, records.at(-1).prune.extra_lines], [['p7', 'p8'], 0, 2]);
-    assert.deepEqual(summary.prune, {removed: records.at(-1).prune.removed, kept_extra: records.at(-1).prune.kept_extra, removed_planner: records.at(-1).prune.removed_planner});
+    assert.deepEqual(summary.prune, {removed: records.at(-1).prune.removed, kept_extra: records.at(-1).prune.kept_extra, removed_planner: records.at(-1).prune.removed_planner, capped: 0});
     // p7 is p6's line (tie: the earlier line stays); p8 (Defend, end) loses to Defend, Strike on every score.
   } finally { await live.close(); }
   // A timeout: exactly the planner's set, extras dropped.
@@ -436,4 +436,26 @@ test('reviews compare one source: engine forecasts from the candidates in live m
   assert.equal(dangerReviewReason(hp, [end, plannerSafe, engineChosen], engineChosen), null);
   const engineSafe = {...plannerSafe, forecast: {...plannerSafe.forecast, source: 'engine', quality: 'exact'}};
   assert.match(dangerReviewReason({...hp, run: {...hp.run, live_id: 'danger-test-2'}}, [end, engineSafe, engineChosen], engineChosen), /Block loses 0/);
+});
+
+test("engine pruning re-applies the planner's cap in the planner's order", () => {
+  const potion = step({action: 'use_potion', slot: 0});
+  // Singles s1, s2; first action Strike: exact a (best attack/conserve), b (best defense), sampled c;
+  // first action Defend: planner-only d, e.
+  const cs = [
+    line('s1', engineF(8, 6), false, [strike]),
+    line('s2', engineF(8, 0), false, [defend]),
+    line('a', engineF(2, 12)),
+    line('b', engineF(0, 0)),
+    line('c', engineF(4, 4, 'sampled')),
+    line('d', planner(), false, [defend, strike]),
+    line('e', planner(), false, [defend, potion]),
+  ];
+  // No cap reached: everything survives the prune.
+  assert.deepEqual(enginePrune(cs).kept.map(x => x.id), ['s1', 's2', 'a', 'b', 'c', 'd', 'e']);
+  // Order: s1, s2; attack: a (Strike), d (Defend); defense: b, e; conserve: (a placed), then c last.
+  const p = enginePrune(cs, {maxPlans: 5});
+  assert.deepEqual([p.kept.map(x => x.id), p.capped], [['s1', 's2', 'a', 'b', 'd'], ['e', 'c']]);
+  // Singles are never cut: the cap is at least their number.
+  assert.deepEqual(enginePrune(cs, {maxPlans: 1}).kept.map(x => x.id), ['s1', 's2']);
 });
