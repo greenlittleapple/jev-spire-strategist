@@ -52,9 +52,9 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a,g</sup>, JEV2: 48<sup>a,g</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
 | Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a,g</sup>, JEV2: 48<sup>a,g</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
 | Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a,g</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
-| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g</sup> | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
-| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g</sup> | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
-| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay)<sup>a,g</sup> | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
+| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g,h</sup> | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
+| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g,h</sup> | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
+| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay)<sup>a,g,h</sup> | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
 | Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48<sup>g,h</sup> | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
 | Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33<sup>g</sup>, **JEV4: won (floor 48)**<sup>g</sup>, JEV5: 17<sup>b,g</sup> | A second look when Jev's line loses far more HP than the best surviving line |
 | Strategist v3.6 (`claude-strategy-v3`) | JEV6: 17<sup>f,g</sup> | Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP |
@@ -70,7 +70,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30<sup>g</sup> | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
 | Strategist v3.17 (`claude-strategy-v3`) | JEV21: 33<sup>h</sup>, JEV22: 11<sup>h</sup> | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
 | Strategist v3.18 (`claude-strategy-v3`) | **0 of 5 won, median floor 24**: JEV21: 48<sup>h</sup>, JEV22: 24<sup>h</sup>, JEV23: 23<sup>h</sup>, JEV24: 17<sup>h</sup>, JEV25: 33<sup>h</sup> | Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes |
-| Strategist v3.19 (`claude-strategy-v3`) | - | Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for |
+| Strategist v3.19 (`claude-strategy-v3`) | - | Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for; memory of earlier runs skips the current seed |
 
 - <sup>a</sup> Multi-hit attack intents such as "3x7 (21)" were not parsed, so incoming damage and survival forecasts were unknown on those turns. Fixed in 8db3d55.
 - <sup>b</sup> The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP. Fixed in 470cf3c.
@@ -79,7 +79,7 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 - <sup>e</sup> The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.
 - <sup>f</sup> A card from the Hornet or Cloud character mod entered the deck. Fixed: both mods were disabled in the game's mod settings on 2026-09-30.
 - <sup>g</sup> The strategist was the orchestrating session, which had earlier runs in its context. Fixed: from Strategist v3.17 each run gets a new strategist agent.
-- <sup>h</sup> The strategist's brief could show fights from an earlier run on the same seed.
+- <sup>h</sup> The strategist's inputs could show fights or fight plans from an earlier run on the same seed. Fixed: v3.19: the strategist's inputs from earlier runs (enemy move patterns, encounter results and the review check, card stats, saved fight plans) skip runs on the current seed; strategy_request events record what was removed.
 
 <!-- progress-table:end -->
 </details>

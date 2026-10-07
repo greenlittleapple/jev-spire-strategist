@@ -18,7 +18,7 @@
   {"id": "game-crash", "label": "The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.", "fixed": "-"},
   {"id": "character-mod-cards", "label": "A card from the Hornet or Cloud character mod entered the deck.", "fixed": "both mods were disabled in the game's mod settings on 2026-09-30"},
   {"id": "strategist-memory", "label": "The strategist was the orchestrating session, which had earlier runs in its context.", "fixed": "from Strategist v3.17 each run gets a new strategist agent"},
-  {"id": "same-seed-history", "label": "The strategist's brief could show fights from an earlier run on the same seed.", "fixed": "-"}
+  {"id": "same-seed-history", "label": "The strategist's inputs could show fights or fight plans from an earlier run on the same seed.", "fixed": "v3.19: the strategist's inputs from earlier runs (enemy move patterns, encounter results and the review check, card stats, saved fight plans) skip runs on the current seed; strategy_request events record what was removed"}
  ],
  "versions": [
   {
@@ -127,7 +127,7 @@
    "mode": "claude",
    "added": "Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken",
    "runs": [
-    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226, "tokens": 1429430, "issues": ["multi-hit-intents", "strategist-memory"]}
+    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226, "tokens": 1429430, "issues": ["multi-hit-intents", "strategist-memory", "same-seed-history"]}
    ]
   },
   {
@@ -137,7 +137,7 @@
    "mode": "claude",
    "added": "No ending a turn with a playable Beckon; least HP loss while enemies are Intangible",
    "runs": [
-    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209, "tokens": 1306588, "issues": ["multi-hit-intents", "strategist-memory"]}
+    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209, "tokens": 1306588, "issues": ["multi-hit-intents", "strategist-memory", "same-seed-history"]}
    ]
   },
   {
@@ -147,7 +147,7 @@
    "mode": "claude",
    "added": "Moves wait for the game's ready signal instead of fixed delays (about 4x faster)",
    "runs": [
-    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444, "tokens": 2961920, "issues": ["multi-hit-intents", "strategist-memory"]}
+    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444, "tokens": 2961920, "issues": ["multi-hit-intents", "strategist-memory", "same-seed-history"]}
    ]
   },
   {
@@ -310,7 +310,7 @@
     {"run": "1790817197", "seed": "JEV25", "result": "lost", "act": 2, "floor": 33, "moves": 439, "tokens": 2927586, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]}
    ]
   },
-  {"name": "Strategist v3.19", "policy": "claude-strategy-v3", "group": "strategist", "mode": "claude", "added": "Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for", "runs": []}
+  {"name": "Strategist v3.19", "policy": "claude-strategy-v3", "group": "strategist", "mode": "claude", "added": "Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for; memory of earlier runs skips the current seed", "runs": []}
  ],
  "excluded": [
   {"run": "1790713810", "reason": "JEV20 (Strategist v3.16), abandoned at Act 1 floor 3 after 33 moves on 2026-09-30, when the code moved to v3.17"}
