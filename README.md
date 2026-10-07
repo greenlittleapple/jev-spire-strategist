@@ -46,35 +46,40 @@ Each row of the chart and the table is one version, named after it ("Strategist 
 | Jev v1 (`jev-compact-v1`) | **0 of 6 won, median floor 17**: 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup>, 17<sup>a</sup> | One compact question per screen, no call for forced moves, reviews on risky end turns |
 | Jev v2 (`jev-compact-v2`) | 14<sup>a</sup>, 28<sup>a</sup> | Route and resource facts from code: elites, rests, shops, heal, potions and gold ahead |
 | Jev v3 (`jev-compact-v3`) | 15<sup>a</sup>, 7, 23<sup>a</sup> | Ordered route facts; second looks at hallway potion use and leaving a shop with gold |
-| Jev v3.2 (`jev-compact-v3.2`) | **0 of 5 won, median floor 14**: JEV21: 14, JEV22: 17, JEV23: 31, JEV24: 8, JEV25: 8 | Leaves a shop only when Jev puts at least half its probability on leaving; log-review fixes |
+| Jev v3.2 (`jev-compact-v3.2`) | **0 of 5 won, median floor 14**: JEV21: 14, JEV22: 17, JEV23: 31<sup>f</sup>, JEV24: 8, JEV25: 8 | Leaves a shop only when Jev puts at least half its probability on leaving; log-review fixes |
 | Jev v3.3 (`jev-compact-v3.3`) | **0 of 5 won, median floor 17**: JEV21: 17, JEV22: 24, JEV23: 33, JEV24: 8, JEV25: 12 | The forecast models Slow, Flutter, Tender, Vigor and Expect a Fight, and flags powers it doesn't handle |
-| Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a</sup>, JEV2: 48<sup>a</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
-| Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a</sup>, JEV2: 48<sup>a</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
-| Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
-| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a</sup> | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
-| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a</sup> | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
-| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay)<sup>a</sup> | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
-| Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48 | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
-| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33, **JEV4: won (floor 48)**, JEV5: 17<sup>b</sup> | A second look when Jev's line loses far more HP than the best surviving line |
-| Strategist v3.6 (`claude-strategy-v3`) | JEV6: 17 | Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP |
-| Strategist v3.7 (`claude-strategy-v3`) | JEV7: 33 | No healing potion that would mostly overheal; route plans start fresh each run |
-| Strategist v3.8 (`claude-strategy-v3`) | **JEV8: won (floor 48)**, JEV9: 33 | Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield |
-| Strategist v3.9 (`claude-strategy-v3`) | JEV10: 42 | Frantic Escape forecast; a forced escape yields when it dies and a block line survives |
-| Strategist v3.10 (`claude-strategy-v3`) | JEV11: 17 | Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast |
-| Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17<sup>c,d</sup> | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
-| Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25 | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
-| Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17, **JEV15: won (floor 48)** | Orichalcum forecast; route facts give the fewest elites before the first rest |
-| Strategist v3.14 (`claude-strategy-v3`) | JEV16: 17 | Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting |
-| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27<sup>e</sup>, JEV18: 17 | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
-| Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30 | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
-| Strategist v3.17 (`claude-strategy-v3`) | JEV21: 33, JEV22: 11 | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
-| Strategist v3.18 (`claude-strategy-v3`) | **0 of 5 won, median floor 24**: JEV21: 48, JEV22: 24, JEV23: 23, JEV24: 17, JEV25: 33 | Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes |
+| Jev v3.4 (`jev-compact-v3.4`) | - | 17 more forecast mechanics; elite paths removed when recent hallway losses and few potions show an elite is not ready |
+| Strategist v2 (`claude-strategy-v2`) | JEV1: 33<sup>a,g</sup>, JEV2: 48<sup>a,g</sup> | Claude writes the run plan at key moments; map moves follow its chosen act route |
+| Strategist v2.1 (`claude-strategy-v2.1`) | JEV1: 17<sup>a,g</sup>, JEV2: 48<sup>a,g</sup> | Enforced combat rules: no fatal play if one survives, potion HP floor, focus target |
+| Strategist v3 (`claude-strategy-v3`) | JEV1: 17<sup>a,g</sup> | Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter |
+| Strategist v3.1 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g</sup> | Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken |
+| Strategist v3.2 (`claude-strategy-v3`) | JEV1: 17 (replay)<sup>a,g</sup> | No ending a turn with a playable Beckon; least HP loss while enemies are Intangible |
+| Strategist v3.3 (`claude-strategy-v3`) | JEV1: 33 (replay)<sup>a,g</sup> | Moves wait for the game's ready signal instead of fixed delays (about 4x faster) |
+| Strategist v3.4 (`claude-strategy-v3`) | JEV1: 48<sup>g,h</sup> | Briefs add enemy patterns, past card picks and fight results; potions saved for bosses |
+| Strategist v3.5 (`claude-strategy-v3`) | JEV3: 33<sup>g</sup>, **JEV4: won (floor 48)**<sup>g</sup>, JEV5: 17<sup>b,g</sup> | A second look when Jev's line loses far more HP than the best surviving line |
+| Strategist v3.6 (`claude-strategy-v3`) | JEV6: 17<sup>f,g</sup> | Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP |
+| Strategist v3.7 (`claude-strategy-v3`) | JEV7: 33<sup>g</sup> | No healing potion that would mostly overheal; route plans start fresh each run |
+| Strategist v3.8 (`claude-strategy-v3`) | **JEV8: won (floor 48)**<sup>g</sup>, JEV9: 33<sup>g</sup> | Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield |
+| Strategist v3.9 (`claude-strategy-v3`) | JEV10: 42<sup>g</sup> | Frantic Escape forecast; a forced escape yields when it dies and a block line survives |
+| Strategist v3.10 (`claude-strategy-v3`) | JEV11: 17<sup>g</sup> | Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast |
+| Strategist v3.11 (`claude-strategy-v3`) | JEV12: 17<sup>c,d,g</sup> | Potions with effects the forecast can't show stay usable; briefs name a small draw pile |
+| Strategist v3.12 (`claude-strategy-v3`) | JEV13: 25<sup>g</sup> | Fixes for multi-page events and transform screens; no play that starves a held Beckon |
+| Strategist v3.13 (`claude-strategy-v3`) | JEV14: 17<sup>g</sup>, **JEV15: won (floor 48)**<sup>g</sup> | Orichalcum forecast; route facts give the fewest elites before the first rest |
+| Strategist v3.14 (`claude-strategy-v3`) | JEV16: 17<sup>g</sup> | Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting |
+| Strategist v3.15 (`claude-strategy-v3`) | JEV17: 27<sup>e,g</sup>, JEV18: 17<sup>g</sup> | Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming |
+| Strategist v3.16 (`claude-strategy-v3`) | JEV19: 30<sup>g</sup> | In the last 6 floors before the Act 1 boss, an optional elite only near full HP |
+| Strategist v3.17 (`claude-strategy-v3`) | JEV21: 33<sup>h</sup>, JEV22: 11<sup>h</sup> | Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes |
+| Strategist v3.18 (`claude-strategy-v3`) | **0 of 5 won, median floor 24**: JEV21: 48<sup>h</sup>, JEV22: 24<sup>h</sup>, JEV23: 23<sup>h</sup>, JEV24: 17<sup>h</sup>, JEV25: 33<sup>h</sup> | Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes |
+| Strategist v3.19 (`claude-strategy-v3`) | - | Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for |
 
 - <sup>a</sup> Multi-hit attack intents such as "3x7 (21)" were not parsed, so incoming damage and survival forecasts were unknown on those turns. Fixed in 8db3d55.
 - <sup>b</sup> The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP. Fixed in 470cf3c.
 - <sup>c</sup> The runner stalled for 12 minutes on a card transform screen whose preview kept changing; the run then continued where it stopped. Fixed in b04c7ae.
 - <sup>d</sup> An event answer carried over to the event's later pages: at Abyssal Baths the runner chose Linger eight times, from 69 to 25 HP. Fixed in d658e6f.
 - <sup>e</sup> The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.
+- <sup>f</sup> A card from the Hornet or Cloud character mod entered the deck. Fixed: both mods were disabled in the game's mod settings on 2026-09-30.
+- <sup>g</sup> The strategist was the orchestrating session, which had earlier runs in its context. Fixed: from Strategist v3.17 each run gets a new strategist agent.
+- <sup>h</sup> The strategist's brief could show fights from an earlier run on the same seed.
 
 <!-- progress-table:end -->
 </details>

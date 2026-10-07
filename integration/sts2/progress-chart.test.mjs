@@ -112,13 +112,13 @@ test('compact JSON keeps a run with issues on one line', () => {
  assert.match(text, /"notes": \[\n {2}"No run has won yet."\n \]/);
 });
 
-test('--refresh warns about a row whose runs record more than one mod set, and tags runs that gained a mod card', async () => {
+test('--refresh warns about a row whose runs record more than one mod set, and tags runs that gained a mod card and strategist runs before v3.17', async () => {
  const d = structuredClone(data); d.issues = []; d.versions[1].mode = 'claude';
  const events = [...moves('modded:profile1:2', [0, 1, 2], {policy: 'claude-strategy-v3'}), ...moves('modded:profile1:3', [0, 1, 2], {policy: 'claude-strategy-v3'})];
  events[0].state.saved_run = {map_point_history: [[{map_point_type: 'ancient', rooms: [{model_id: 'EVENT.NEOW'}], player_stats: [{cards_gained: [{id: 'CARD.CLOUD-BLIZZARA'}]}]}]]};
  const starts = [{kind: 'run_start', run: 'modded:profile1:2', mods_hash: 'aaaaaaaaaaaa'}, {kind: 'run_start', run: 'modded:profile1:3', mods_hash: 'bbbbbbbbbbbb'}];
  const {warnings} = await refresh(d, {logs: {events: [...moves('1', [0, 1]), ...events], series: [], starts}});
  assert.deepEqual(warnings, ['Strategist v3 mixes runs with mod sets aaaaaaaaaaaa, bbbbbbbbbbbb; it gets no win rate until they are split into versions.']);
- assert.deepEqual(d.versions[1].runs.map(r => [r.mods_hash, r.issues]), [['aaaaaaaaaaaa', ['character-mod-cards']], ['bbbbbbbbbbbb', undefined]]);
- assert.deepEqual(d.issues.map(i => i.id), ['character-mod-cards']);
+ assert.deepEqual(d.versions[1].runs.map(r => [r.mods_hash, r.issues]), [['aaaaaaaaaaaa', ['character-mod-cards', 'strategist-memory']], ['bbbbbbbbbbbb', ['strategist-memory']]]);
+ assert.deepEqual(d.issues.map(i => i.id), ['character-mod-cards', 'strategist-memory']);
 });

@@ -3,8 +3,9 @@
 export const FACTS_POLICY = 'jev-compact-v2';
 // jev_facts_v3 mode's label. v3.2 adds the majority rule for leaving a shop (efficient-decisions.mjs).
 // jev_facts_v3: v3.2 added the shop majority rule; v3.3 is the same questions with the forecast's wider
-// power coverage (Slow, Flutter, Tender, Vigor, Duplication, Expect a Fight's current text).
-export const FACTS_V3_POLICY = 'jev-compact-v3.3';
+// power coverage (Slow, Flutter, Tender, Vigor, Duplication, Expect a Fight's current text); v3.4 adds the
+// elite_readiness fact and rule and more forecast mechanics.
+export const FACTS_V3_POLICY = 'jev-compact-v3.4';
 // The v3 facts inside claude strategy mode keep their earlier label; the shop rule does not apply there.
 export const STRATEGY_FACTS_POLICY = 'jev-compact-v3.1';
 // A rest option's heal: the base "(N)" plus relic bonuses written as "+N HP from Regal Pillow".

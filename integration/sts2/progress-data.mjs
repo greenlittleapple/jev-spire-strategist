@@ -6,6 +6,7 @@ import {createInterface} from 'node:readline';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {scoreRuns} from './scorecard.mjs';
+import {basePolicy} from './policy-label.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
@@ -33,15 +34,50 @@ export async function readLogs({logDir, seriesFile} = logPaths()) {
 }
 
 // The decision mode a policy runs under, for runs logged before decisions recorded their mode.
-// jev_facts_v3 has logged jev-compact-v3, v3.1 and (with the shop majority rule) v3.2.
-const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3'};
-const policyMode = p => POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null);
+// jev_facts_v3 has logged jev-compact-v3, v3.1, (with the shop majority rule) v3.2, v3.3 and v3.4. A policy
+// recorded with live engine forecasts ("+engine") maps as the policy without it.
+const POLICY_MODES = {'jev-compact-v1': 'jev', 'jev-compact-v2': 'jev_facts', 'jev-compact-v3': 'jev_facts_v3', 'jev-compact-v3.1': 'jev_facts_v3', 'jev-compact-v3.2': 'jev_facts_v3', 'jev-compact-v3.3': 'jev_facts_v3', 'jev-compact-v3.4': 'jev_facts_v3'};
+const policyMode = policy => { const p = basePolicy(policy); return POLICY_MODES[p] ?? (/^claude-strategy-/.test(p ?? '') ? 'claude' : null); };
 
 // Cards from the Hornet and Cloud character mods (CARD.HORNET_MOD_CARD_*, CARD.CLOUD-*). Neow and events
 // offered them in Ironclad runs until both mods were disabled in the game's mod settings on 2026-09-30.
 export const MOD_CARD = /^CARD\.(?:HORNET_MOD_|CLOUD-)/;
 export const MOD_CARD_ISSUE = {id: 'character-mod-cards', label: 'A card from the Hornet or Cloud character mod entered the deck.',
  fixed: "both mods were disabled in the game's mod settings on 2026-09-30"};
+
+// Strategist runs with memory beyond their brief. Until Strategist v3.17 the orchestrating session answered
+// strategy requests itself, run after run, with earlier runs in its context. From Strategist v3.4 (enemy move
+// patterns, past card picks and fight results in the brief) to before v3.19 (which skips earlier runs on the
+// current seed) the brief's cross-run inputs had no seed boundary, so a run on a seed an earlier logged run had
+// played could see that seed's fights. Both tags keep counting toward win rates.
+export const STRATEGIST_MEMORY_ISSUE = {id: 'strategist-memory', label: 'The strategist was the orchestrating session, which had earlier runs in its context.',
+ fixed: 'from Strategist v3.17 each run gets a new strategist agent'};
+export const SAME_SEED_ISSUE = {id: 'same-seed-history', label: "The strategist's brief could show fights from an earlier run on the same seed.", fixed: '-'};
+export const MEMORY_ISSUES = [STRATEGIST_MEMORY_ISSUE, SAME_SEED_ISSUE];
+const FRESH_AGENT_FROM = [3, 17], SEED_HISTORY_FROM = [3, 4], SEED_BOUNDARY_FROM = [3, 19];
+// A version name's number ("Strategist v3.17" -> [3, 17]) and an ordering of such numbers.
+export const versionNumber = name => /v(\d+(?:\.\d+)*)/.exec(name ?? '')?.[1].split('.').map(Number) ?? null;
+const before = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] ?? 0) - (b[i] ?? 0); if (d) return d < 0; } return false; };
+
+// Tags the claude-mode runs in data with strategist-memory and same-seed-history, from each version's name and
+// the scored runs' seeds and start times (any earlier logged run counts, whatever its mode or listing).
+// Clears both tags first, so a refresh recomputes them. Mutates data.
+export function memoryIssues(data, scored) {
+ const ids = new Set(MEMORY_ISSUES.map(i => i.id)), all = [...scored.values()];
+ for (const v of data.versions) {
+  const n = versionNumber(v.name);
+  for (const r of v.runs) {
+   const issues = (r.issues ?? []).filter(id => !ids.has(id)), s = scored.get(r.run);
+   if ((r.mode ?? v.mode) === 'claude' && n) {
+    if (before(n, FRESH_AGENT_FROM)) issues.push(STRATEGIST_MEMORY_ISSUE.id);
+    const seed = s?.seed ?? r.seed;
+    if (seed && s?.started && !before(n, SEED_HISTORY_FROM) && before(n, SEED_BOUNDARY_FROM)
+     && all.some(o => o.id !== r.run && o.seed === seed && String(o.started) < String(s?.started))) issues.push(SAME_SEED_ISSUE.id);
+   }
+   delete r.issues; if (issues.length) r.issues = issues;
+  }
+ }
+}
 
 // Mod cards gained in a saved run's map history (the deck itself is logged by card name only), each with
 // the floor where it first entered the deck and the room that gave it: an event, an encounter or a shop.
@@ -83,7 +119,7 @@ export function versionFor(data, s) {
   const v = data.versions.find(v => v.name === named);
   return v ? {version: v} : {reason: `its series label names ${named}, which has no version in data.json yet`};
  }
- const byPolicy = data.versions.filter(v => v.policy === s.policy);
+ const byPolicy = data.versions.filter(v => v.policy === basePolicy(s.policy));
  if (byPolicy.length === 1) return {version: byPolicy[0]};
  return {reason: byPolicy.length ? `${byPolicy.length} versions share policy ${s.policy} and its series label names none`
   : `no version has policy ${s.policy ?? '(none)'}`};
@@ -132,7 +168,8 @@ export function addRuns(data, scored) {
 export function addToolIssues(data) {
  const named = new Set(data.versions.flatMap(v => v.runs.flatMap(r => r.issues ?? [])));
  data.issues ??= [];
- if (named.has(MOD_CARD_ISSUE.id) && !data.issues.some(i => i.id === MOD_CARD_ISSUE.id)) data.issues.push({...MOD_CARD_ISSUE});
+ for (const issue of [MOD_CARD_ISSUE, ...MEMORY_ISSUES])
+  if (named.has(issue.id) && !data.issues.some(i => i.id === issue.id)) data.issues.push({...issue});
 }
 
 // Every issue ID a run names must be in data.issues.

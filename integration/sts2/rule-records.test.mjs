@@ -139,7 +139,7 @@ test('only jev_facts_v3 (jev-compact-v3.2 on) applies the majority rule, after t
  assert.equal(calls,2,'the shop review runs first');
  assert.equal(r.answers.move.choice,buy);assert.equal(r.answers.move.jev_choice,out);assert.deepEqual(r.answers.move.probabilities,p);
  assert.deepEqual(r.deliberation.override,{kind:'majority_leave',p_leave:.35,jev_choice:out,chosen:buy,p_chosen:.4,price:60,gold:150});
- assert.equal(r.deliberation.version,'jev-compact-v3.3');assert.equal(r.deliberation.changed,false);
+ assert.equal(r.deliberation.version,'jev-compact-v3.4');assert.equal(r.deliberation.changed,false);
  for(const opts of [{factsPolicy:STRATEGY_FACTS_POLICY},{factsPolicy:FACTS_POLICY,resourceReviews:false},{factsPolicy:FACTS_V3_POLICY,strategy:{summary:'x'}},{facts:null,resourceReviews:false}]){
   const {r}=await run(opts);
   assert.equal(r.answers.move.choice,out,JSON.stringify(opts));assert.equal(r.deliberation.override,undefined);
