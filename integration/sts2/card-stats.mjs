@@ -14,25 +14,27 @@ export const baseCard = name => String(name ?? '').replace(/\s+[—-]\s+\d+\s+go
 // seeds: {runId: seed} for seeded runs; other runs count as their own seed.
 export function newCardStats(seeds = {}) { return {runs: {}, cards: {}, seeds}; }
 
-const pick = (stats, r, name, floor) => { (stats.cards[name] ??= {offered: 0, picked: 0}).picked++; r.picks[name] ??= floor; };
-const offer = (stats, name) => { (stats.cards[name] ??= {offered: 0, picked: 0}).offered++; };
+// Counts are kept overall (stats.cards) and per run (r.counts), so the seed boundary can drop a run's share.
+const count = (r, name) => r.counts[name] ??= {offered: 0, picked: 0};
+const pick = (stats, r, name, floor) => { (stats.cards[name] ??= {offered: 0, picked: 0}).picked++; count(r, name).picked++; r.picks[name] ??= floor; };
+const offer = (stats, r, name) => { (stats.cards[name] ??= {offered: 0, picked: 0}).offered++; count(r, name).offered++; };
 
 // Folds one logged decision into the stats.
 export function recordDecision(stats, e) {
  const s = e?.state, run = s?.run?.live_id;
  if (!run || e.kind !== 'decision' || e.outcome !== 'executed') return;
- const r = stats.runs[run] ??= {seed: stats.seeds?.[run] ?? run, floor: 0, act: 0, picks: {}, fights: new Set(), plays: {}};
+ const r = stats.runs[run] ??= {seed: stats.seeds?.[run] ?? run, floor: 0, act: 0, picks: {}, counts: {}, fights: new Set(), plays: {}};
  r.floor = Math.max(r.floor, s.run.floor ?? 0); r.act = Math.max(r.act, s.run.act ?? 0);
  if (s.state_type === 'card_reward') {
   const offered = (e.candidates ?? []).map(c => baseCard(c.label)).filter(n => n && !/^skip/i.test(n));
   const chosen = baseCard(e.chosen?.label);
-  for (const n of new Set(offered)) (stats.cards[n] ??= {offered: 0, picked: 0}).offered++;
+  for (const n of new Set(offered)) offer(stats, r, n);
   if (offered.includes(chosen)) pick(stats, r, chosen, s.run.floor ?? 0);
  }
  if (s.state_type === 'shop' && e.chosen?.command?.action === 'shop_purchase') {
   const item = (s.shop?.items ?? []).find(i => i.index === e.chosen.command.index);
   // A purchase counts as offered and picked, so picked never exceeds offered.
-  if (item?.category === 'card') { const n = baseCard(item.card_name ?? e.chosen.label); offer(stats, n); pick(stats, r, n, s.run.floor ?? 0); }
+  if (item?.category === 'card') { const n = baseCard(item.card_name ?? e.chosen.label); offer(stats, r, n); pick(stats, r, n, s.run.floor ?? 0); }
  }
  if (combat.has(s.state_type)) {
   const fight = `${s.run.act}:${s.run.floor}`; r.fights.add(fight);
@@ -47,11 +49,15 @@ const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 // Summary for one card name: offered/picked counts, then per-seed averages of plays per fight
 // after the pick (a card reward follows its floor's fight, so fights from the next floor on)
 // and of the floor reached.
-export function cardSummary(stats, name) {
- const n = baseCard(name), c = stats.cards[n];
+// keepRun(runId): the seed boundary's filter; counts then come from the kept runs only.
+export const cardRuns = (stats, name) => Object.entries(stats.runs).filter(([, r]) => r.counts?.[baseCard(name)]);
+export function cardSummary(stats, name, keepRun = null) {
+ const n = baseCard(name);
+ const kept = keepRun ? cardRuns(stats, n).filter(([id]) => keepRun(id)).map(([, r]) => r) : Object.values(stats.runs);
+ const c = !keepRun ? stats.cards[n] : kept.length ? kept.reduce((a, r) => ({offered: a.offered + r.counts[n].offered, picked: a.picked + r.counts[n].picked}), {offered: 0, picked: 0}) : null;
  if (!c) return null;
  const bySeed = new Map();
- for (const r of Object.values(stats.runs)) {
+ for (const r of kept) {
   if (r.picks[n] == null) continue;
   const fights = [...r.fights].filter(f => Number(f.split(':')[1]) > r.picks[n]).length;
   const plays = [...(r.plays[n] ?? [])].filter(p => Number(p.split(':')[1]) > r.picks[n]).length;
