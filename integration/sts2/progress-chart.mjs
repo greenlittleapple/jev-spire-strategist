@@ -7,7 +7,7 @@
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {readLogs, scoreLogged, refreshRun, addRuns, addToolIssues, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows, mixedModRows} from './progress-data.mjs';
+import {readLogs, scoreLogged, refreshRun, memoryIssues, addRuns, addToolIssues, checkIssues, seriesRows, finishedRuns, winRate, winRateText, mixedCommitRows, mixedModRows} from './progress-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const dataFile = resolve(root, 'docs/progress/data.json');
@@ -198,6 +198,7 @@ export async function refresh(data, {add = false, logs} = {}) {
  const scored = scoreLogged(logs);
  const report = add ? addRuns(data, scored) : null;
  for (const v of data.versions) for (const r of v.runs) refreshRun(v, r, scored.get(r.run));
+ memoryIssues(data, scored);
  addToolIssues(data);
  const pace = paceGroups(logs.events);
  for (const g of data.pace.groups) Object.assign(g, pace[g.id] ?? {runs: 0, moves: 0, median_s: null});

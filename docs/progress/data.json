@@ -15,7 +15,10 @@
   {"id": "potion-reserve-carryover", "label": "The first plan of the run kept the previous run's potion reserve, which held potions back in hallway fights down to 1 HP.", "fixed": "470cf3c"},
   {"id": "transform-preview-stall", "label": "The runner stalled for 12 minutes on a card transform screen whose preview kept changing; the run then continued where it stopped.", "fixed": "b04c7ae"},
   {"id": "event-answer-repeat", "label": "An event answer carried over to the event's later pages: at Abyssal Baths the runner chose Linger eight times, from 69 to 25 HP.", "fixed": "d658e6f"},
-  {"id": "game-crash", "label": "The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.", "fixed": "-"}
+  {"id": "game-crash", "label": "The game crashed during the Act 1 boss fight; the run resumed from the game's save 12 hours later, which restarted the fight.", "fixed": "-"},
+  {"id": "character-mod-cards", "label": "A card from the Hornet or Cloud character mod entered the deck.", "fixed": "both mods were disabled in the game's mod settings on 2026-09-30"},
+  {"id": "strategist-memory", "label": "The strategist was the orchestrating session, which had earlier runs in its context.", "fixed": "from Strategist v3.17 each run gets a new strategist agent"},
+  {"id": "same-seed-history", "label": "The strategist's brief could show fights from an earlier run on the same seed.", "fixed": "-"}
  ],
  "versions": [
   {
@@ -65,7 +68,7 @@
    "runs": [
     {"run": "1790807077", "seed": "JEV21", "result": "lost", "act": 1, "floor": 14, "moves": 192, "tokens": 1516479, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
     {"run": "1790807355", "seed": "JEV22", "result": "lost", "act": 1, "floor": 17, "moves": 173, "tokens": 1097290, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
-    {"run": "1790807614", "seed": "JEV23", "result": "lost", "act": 2, "floor": 31, "moves": 473, "tokens": 4231650, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
+    {"run": "1790807614", "seed": "JEV23", "result": "lost", "act": 2, "floor": 31, "moves": 473, "tokens": 4231650, "lab_commit": "d329716c176027258fb75dc698691eec26295519", "issues": ["character-mod-cards"]},
     {"run": "1790808279", "seed": "JEV24", "result": "lost", "act": 1, "floor": 8, "moves": 110, "tokens": 844040, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
     {"run": "1790808437", "seed": "JEV25", "result": "lost", "act": 1, "floor": 8, "moves": 125, "tokens": 976892, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
    ]
@@ -84,6 +87,7 @@
     {"run": "1790813287", "seed": "JEV25", "result": "lost", "act": 1, "floor": 12, "moves": 180, "tokens": 1419086, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"}
    ]
   },
+  {"name": "Jev v3.4", "policy": "jev-compact-v3.4", "group": "jev", "mode": "jev_facts_v3", "added": "17 more forecast mechanics; elite paths removed when recent hallway losses and few potions show an elite is not ready", "runs": []},
   {
    "name": "Strategist v2",
    "policy": "claude-strategy-v2",
@@ -91,8 +95,8 @@
    "mode": "claude",
    "added": "Claude writes the run plan at key moments; map moves follow its chosen act route",
    "runs": [
-    {"run": "1790578663", "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 456, "tokens": 4344924, "issues": ["multi-hit-intents"]},
-    {"run": "1790582151", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 792, "tokens": 7390515, "issues": ["multi-hit-intents"]}
+    {"run": "1790578663", "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 456, "tokens": 4344924, "issues": ["multi-hit-intents", "strategist-memory"]},
+    {"run": "1790582151", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 792, "tokens": 7390515, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -102,8 +106,8 @@
    "mode": "claude",
    "added": "Enforced combat rules: no fatal play if one survives, potion HP floor, focus target",
    "runs": [
-    {"run": "1790618954", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 224, "tokens": 1706573, "issues": ["multi-hit-intents"]},
-    {"run": "1790619864", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 782, "tokens": 6874153, "issues": ["multi-hit-intents"]}
+    {"run": "1790618954", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 224, "tokens": 1706573, "issues": ["multi-hit-intents", "strategist-memory"]},
+    {"run": "1790619864", "seed": "JEV2", "result": "lost", "act": 3, "floor": 48, "moves": 782, "tokens": 6874153, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -113,7 +117,7 @@
    "mode": "claude",
    "added": "Claude picks rewards, shop buys, events and rest sites; fight plans saved per encounter",
    "runs": [
-    {"run": "1790622821", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 210, "tokens": 1505728, "issues": ["multi-hit-intents"]}
+    {"run": "1790622821", "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 210, "tokens": 1505728, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -123,7 +127,7 @@
    "mode": "claude",
    "added": "Forecasts for exhaust and finishing cards like Fiend Fire; forecast wins are taken",
    "runs": [
-    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226, "tokens": 1429430, "issues": ["multi-hit-intents"]}
+    {"run": "1790625284", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 226, "tokens": 1429430, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -133,7 +137,7 @@
    "mode": "claude",
    "added": "No ending a turn with a playable Beckon; least HP loss while enemies are Intangible",
    "runs": [
-    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209, "tokens": 1306588, "issues": ["multi-hit-intents"]}
+    {"run": "1790626491", "replay": true, "seed": "JEV1", "result": "lost", "act": 1, "floor": 17, "moves": 209, "tokens": 1306588, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -143,7 +147,7 @@
    "mode": "claude",
    "added": "Moves wait for the game's ready signal instead of fixed delays (about 4x faster)",
    "runs": [
-    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444, "tokens": 2961920, "issues": ["multi-hit-intents"]}
+    {"run": "1790627417", "replay": true, "seed": "JEV1", "result": "lost", "act": 2, "floor": 33, "moves": 444, "tokens": 2961920, "issues": ["multi-hit-intents", "strategist-memory"]}
    ]
   },
   {
@@ -153,7 +157,7 @@
    "mode": "claude",
    "added": "Briefs add enemy patterns, past card picks and fight results; potions saved for bosses",
    "runs": [
-    {"run": "1790633009", "seed": "JEV1", "result": "lost", "act": 3, "floor": 48, "moves": 676, "tokens": 4958146}
+    {"run": "1790633009", "seed": "JEV1", "result": "lost", "act": 3, "floor": 48, "moves": 676, "tokens": 4958146, "issues": ["strategist-memory", "same-seed-history"]}
    ]
   },
   {
@@ -163,9 +167,9 @@
    "mode": "claude",
    "added": "A second look when Jev's line loses far more HP than the best surviving line",
    "runs": [
-    {"run": "1790636473", "seed": "JEV3", "result": "lost", "act": 2, "floor": 33, "moves": 361, "tokens": 1789633},
-    {"run": "1790637679", "seed": "JEV4", "result": "won", "act": 3, "floor": 48, "moves": 749, "tokens": 5542733},
-    {"run": "1790639994", "seed": "JEV5", "result": "lost", "act": 1, "floor": 17, "moves": 356, "tokens": 2363044, "issues": ["potion-reserve-carryover"]}
+    {"run": "1790636473", "seed": "JEV3", "result": "lost", "act": 2, "floor": 33, "moves": 361, "tokens": 1789633, "issues": ["strategist-memory"]},
+    {"run": "1790637679", "seed": "JEV4", "result": "won", "act": 3, "floor": 48, "moves": 749, "tokens": 5542733, "issues": ["strategist-memory"]},
+    {"run": "1790639994", "seed": "JEV5", "result": "lost", "act": 1, "floor": 17, "moves": 356, "tokens": 2363044, "issues": ["potion-reserve-carryover", "strategist-memory"]}
    ]
   },
   {
@@ -175,7 +179,7 @@
    "mode": "claude",
    "added": "Win forecasts distrust unmodeled debuffs; the boss potion reserve yields at low HP",
    "runs": [
-    {"run": "1790645754", "seed": "JEV6", "result": "lost", "act": 1, "floor": 17, "moves": 199, "tokens": 1082178}
+    {"run": "1790645754", "seed": "JEV6", "result": "lost", "act": 1, "floor": 17, "moves": 199, "tokens": 1082178, "issues": ["character-mod-cards", "strategist-memory"]}
    ]
   },
   {
@@ -185,7 +189,7 @@
    "mode": "claude",
    "added": "No healing potion that would mostly overheal; route plans start fresh each run",
    "runs": [
-    {"run": "1790647745", "seed": "JEV7", "result": "lost", "act": 2, "floor": 33, "moves": 488, "tokens": 3946710}
+    {"run": "1790647745", "seed": "JEV7", "result": "lost", "act": 2, "floor": 33, "moves": 488, "tokens": 3946710, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -195,8 +199,8 @@
    "mode": "claude",
    "added": "Incoming-damage forecasts account for Weak and Vulnerable; costly forced plays yield",
    "runs": [
-    {"run": "1790650601", "seed": "JEV8", "result": "won", "act": 3, "floor": 48, "moves": 615, "tokens": 4439421},
-    {"run": "1790652220", "seed": "JEV9", "result": "lost", "act": 2, "floor": 33, "moves": 373, "tokens": 1988026}
+    {"run": "1790650601", "seed": "JEV8", "result": "won", "act": 3, "floor": 48, "moves": 615, "tokens": 4439421, "issues": ["strategist-memory"]},
+    {"run": "1790652220", "seed": "JEV9", "result": "lost", "act": 2, "floor": 33, "moves": 373, "tokens": 1988026, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -206,7 +210,7 @@
    "mode": "claude",
    "added": "Frantic Escape forecast; a forced escape yields when it dies and a block line survives",
    "runs": [
-    {"run": "1790653522", "seed": "JEV10", "result": "lost", "act": 3, "floor": 42, "moves": 550, "tokens": 3497348}
+    {"run": "1790653522", "seed": "JEV10", "result": "lost", "act": 3, "floor": 42, "moves": 550, "tokens": 3497348, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -216,7 +220,7 @@
    "mode": "claude",
    "added": "Hallway potions only when the turn would drop HP under the floor; Paper Cuts forecast",
    "runs": [
-    {"run": "1790657346", "seed": "JEV11", "result": "lost", "act": 1, "floor": 17, "moves": 290, "tokens": 2006300}
+    {"run": "1790657346", "seed": "JEV11", "result": "lost", "act": 1, "floor": 17, "moves": 290, "tokens": 2006300, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -226,7 +230,7 @@
    "mode": "claude",
    "added": "Potions with effects the forecast can't show stay usable; briefs name a small draw pile",
    "runs": [
-    {"run": "1790658147", "seed": "JEV12", "result": "lost", "act": 1, "floor": 17, "moves": 215, "tokens": 1227893, "issues": ["transform-preview-stall", "event-answer-repeat"]}
+    {"run": "1790658147", "seed": "JEV12", "result": "lost", "act": 1, "floor": 17, "moves": 215, "tokens": 1227893, "issues": ["transform-preview-stall", "event-answer-repeat", "strategist-memory"]}
    ]
   },
   {
@@ -236,7 +240,7 @@
    "mode": "claude",
    "added": "Fixes for multi-page events and transform screens; no play that starves a held Beckon",
    "runs": [
-    {"run": "1790659703", "seed": "JEV13", "result": "lost", "act": 2, "floor": 25, "moves": 350, "tokens": 2226416}
+    {"run": "1790659703", "seed": "JEV13", "result": "lost", "act": 2, "floor": 25, "moves": 350, "tokens": 2226416, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -246,8 +250,8 @@
    "mode": "claude",
    "added": "Orichalcum forecast; route facts give the fewest elites before the first rest",
    "runs": [
-    {"run": "1790663063", "seed": "JEV14", "result": "lost", "act": 1, "floor": 17, "moves": 221, "tokens": 1205027},
-    {"run": "1790663721", "seed": "JEV15", "result": "won", "act": 3, "floor": 48, "moves": 733, "tokens": 5659949}
+    {"run": "1790663063", "seed": "JEV14", "result": "lost", "act": 1, "floor": 17, "moves": 221, "tokens": 1205027, "issues": ["strategist-memory"]},
+    {"run": "1790663721", "seed": "JEV15", "result": "won", "act": 3, "floor": 48, "moves": 733, "tokens": 5659949, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -257,7 +261,7 @@
    "mode": "claude",
    "added": "Asks again before a low-HP route commits to an avoidable elite; guidance on Act 1 rewards, elites and resting",
    "runs": [
-    {"run": "1790666215", "seed": "JEV16", "result": "lost", "act": 1, "floor": 17, "moves": 275, "tokens": 1799194}
+    {"run": "1790666215", "seed": "JEV16", "result": "lost", "act": 1, "floor": 17, "moves": 275, "tokens": 1799194, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -267,8 +271,8 @@
    "mode": "claude",
    "added": "Block cards with scaling or energy-refund text count as pure block on a turn with nothing incoming",
    "runs": [
-    {"run": "1790667548", "seed": "JEV17", "result": "lost", "act": 2, "floor": 27, "moves": 450, "tokens": 3062360, "issues": ["game-crash"]},
-    {"run": "1790711902", "seed": "JEV18", "result": "lost", "act": 1, "floor": 17, "moves": 200, "tokens": 1100861}
+    {"run": "1790667548", "seed": "JEV17", "result": "lost", "act": 2, "floor": 27, "moves": 450, "tokens": 3062360, "issues": ["game-crash", "strategist-memory"]},
+    {"run": "1790711902", "seed": "JEV18", "result": "lost", "act": 1, "floor": 17, "moves": 200, "tokens": 1100861, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -278,7 +282,7 @@
    "mode": "claude",
    "added": "In the last 6 floors before the Act 1 boss, an optional elite only near full HP",
    "runs": [
-    {"run": "1790712713", "seed": "JEV19", "result": "lost", "act": 2, "floor": 30, "moves": 360, "tokens": 2413014}
+    {"run": "1790712713", "seed": "JEV19", "result": "lost", "act": 2, "floor": 30, "moves": 360, "tokens": 2413014, "issues": ["strategist-memory"]}
    ]
   },
   {
@@ -288,8 +292,8 @@
    "mode": "claude",
    "added": "Plans state the run summary and an exit for no-kill fights; potion swaps on a full belt; log-review fixes",
    "runs": [
-    {"run": "1790808872", "seed": "JEV21", "result": "lost", "act": 2, "floor": 33, "moves": 408, "tokens": 2580867, "lab_commit": "d329716c176027258fb75dc698691eec26295519"},
-    {"run": "1790809860", "seed": "JEV22", "result": "lost", "act": 1, "floor": 11, "moves": 159, "tokens": 797022, "lab_commit": "d329716c176027258fb75dc698691eec26295519"}
+    {"run": "1790808872", "seed": "JEV21", "result": "lost", "act": 2, "floor": 33, "moves": 408, "tokens": 2580867, "lab_commit": "d329716c176027258fb75dc698691eec26295519", "issues": ["same-seed-history"]},
+    {"run": "1790809860", "seed": "JEV22", "result": "lost", "act": 1, "floor": 11, "moves": 159, "tokens": 797022, "lab_commit": "d329716c176027258fb75dc698691eec26295519", "issues": ["same-seed-history"]}
    ]
   },
   {
@@ -299,13 +303,14 @@
    "mode": "claude",
    "added": "Mid-fight plans stay in their fight; routes flag two elites without a rest; the v3.3 forecast; input fixes",
    "runs": [
-    {"run": "1790813491", "seed": "JEV21", "result": "lost", "act": 3, "floor": 48, "moves": 619, "tokens": 4795381, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
-    {"run": "1790815043", "seed": "JEV22", "result": "lost", "act": 2, "floor": 24, "moves": 297, "tokens": 1776824, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
-    {"run": "1790815694", "seed": "JEV23", "result": "lost", "act": 2, "floor": 23, "moves": 348, "tokens": 2286190, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
-    {"run": "1790816753", "seed": "JEV24", "result": "lost", "act": 1, "floor": 17, "moves": 195, "tokens": 1006394, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"},
-    {"run": "1790817197", "seed": "JEV25", "result": "lost", "act": 2, "floor": 33, "moves": 439, "tokens": 2927586, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24"}
+    {"run": "1790813491", "seed": "JEV21", "result": "lost", "act": 3, "floor": 48, "moves": 619, "tokens": 4795381, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]},
+    {"run": "1790815043", "seed": "JEV22", "result": "lost", "act": 2, "floor": 24, "moves": 297, "tokens": 1776824, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]},
+    {"run": "1790815694", "seed": "JEV23", "result": "lost", "act": 2, "floor": 23, "moves": 348, "tokens": 2286190, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]},
+    {"run": "1790816753", "seed": "JEV24", "result": "lost", "act": 1, "floor": 17, "moves": 195, "tokens": 1006394, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]},
+    {"run": "1790817197", "seed": "JEV25", "result": "lost", "act": 2, "floor": 33, "moves": 439, "tokens": 2927586, "lab_commit": "2f4de82d3aa6cb28f696bdaf52c2bcac47b66a24", "issues": ["same-seed-history"]}
    ]
-  }
+  },
+  {"name": "Strategist v3.19", "policy": "claude-strategy-v3", "group": "strategist", "mode": "claude", "added": "Elite readiness checks in Acts 1 and 2; 17 more forecast mechanics; a potion discard claims the potion it made room for", "runs": []}
  ],
  "excluded": [
   {"run": "1790713810", "reason": "JEV20 (Strategist v3.16), abandoned at Act 1 floor 3 after 33 moves on 2026-09-30, when the code moved to v3.17"}
