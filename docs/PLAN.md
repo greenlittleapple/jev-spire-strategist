@@ -2,7 +2,7 @@
 
 The current plan for the Slay the Spire 2 lab. Update this file whenever the plan changes, so any AI session (Claude or Codex) can continue from here. Results are in `docs/progress/data.json` and the README chart; setup, design and commands in [STS2.md](STS2.md); live evidence in [STS2-VERIFICATION.md](STS2-VERIFICATION.md); the strategist's brief in [STS2-STRATEGIST.md](STS2-STRATEGIST.md).
 
-Last updated: 2026-10-07 (method review; the order of next steps).
+Last updated: 2026-10-07 (method review; the order of next steps; v3.19 released, no run started).
 
 ## Goal
 
@@ -48,7 +48,7 @@ The product of the strategist arm's survival rates is about 10%, in line with it
 
 1. **Versions changed faster than they were measured.** 54 runs went to 26 versions, and 18 strategist versions had 1 to 5 runs each, most of them one. At a 10% win rate a version wins none of 5 runs about 59% of the time, so 0 of 5 against 0 of 5 can't separate two versions, and a change made after a single loss usually answers that run's particulars.
 2. **No fight ends every run, so every act matters.** Unlike the BTD6 lab's round 95, which ended all 43 matches that reached it, the Act 1 boss, the Act 2 hallways and elites, and the Act 2 and 3 bosses each end 25 to 57% of the runs that reach them.
-3. **The release stalled.** Since 2026-10-01 the next version (integration branch `v319`: 35 commits ahead of main, merged from ten branches, plus uncommitted label and plan-cap work in the `w7-release` and `w6-live` worktrees) has waited unreleased. Main's bridge pin (0.4.0-jev.1) no longer matches the installed bridge (0.4.0-jev.2), so a run on main pauses at its first check.
+3. **The release stalled.** Since 2026-10-01 the next version (integration branch `v319`: 35 commits ahead of main, merged from ten branches, plus uncommitted label and plan-cap work in the `w7-release` and `w6-live` worktrees) has waited unreleased. Main's bridge pin (0.4.0-jev.1) no longer matched the installed bridge (0.4.0-jev.2), so a run on main would have paused at its first check. Released on 2026-10-07 (next steps, step 1).
 4. **The game's own engine runs offline.** The headless worker replays real fights with every game checksum matching (step 7), so fights can be played many times from logged start states without the live game.
 
 **Changes (decided 2026-10-07):**
@@ -117,11 +117,18 @@ Decided (main session, 2026-10-01):
 
 ## Next steps, in order
 
-**Order from 2026-10-07** (work has been paused since Marcus's word on 2026-10-01; every step that touches the runner or the game waits for him):
-1. **Release v3.19.** Finish the labels (`w7-release`: `jev-compact-v3.4`, the `+engine` policy suffix, the progress rows and README) and the 64-plan cap (`w6-live`), review both diffs, merge main into `v319`, fast-forward main to it, build `integration/sts2-sim` (Release) in the main checkout, restart the runner (it restores paused), and stop there. Then remove the merged worktrees.
-2. **Continuous score and per-act hazards** in `sts2:progress` and the scorecard (Medium agent), reported for every logged run so far.
+**Order from 2026-10-07** (runs have been paused since Marcus's word on 2026-10-01; every step that touches the runner or the game waits for him):
+1. **Release v3.19: done 2026-10-07** (Marcus approved the release, stopping before any run). Main b423a88 (public 0cd2b69) holds:
+   - the labels: Jev-only runs record `jev-compact-v3.4`, and live engine forecasts add `+engine` to the recorded policy;
+   - the 64-plan cap re-applied after engine pruning;
+   - the seed boundary: the strategist's inputs from earlier runs skip runs on the current seed, and `strategy_request` events record what was removed (for a new JEV21 run: 95 of 790 move-pattern entries, 56 of 687 encounter results, 105 of 1,456 card-stat entries, 9 of 78 saved plans);
+   - the progress tags `strategist-memory` (26 runs, every strategist run before v3.17) and `same-seed-history` (11 runs: JEV1 on v3.1 to v3.4, JEV21 and JEV22 on v3.17, JEV21 to JEV25 on v3.18), and the empty rows Strategist v3.19 and Jev v3.4;
+   - everything else that was on `v319` (elite readiness, forecast coverage, potion claim, mod provenance, strategist fixes, the engine worker, shadow and live modes, the bridge 0.4.0-jev.2 pin).
+
+   Tests: 329 and 248 pass. `integration/sts2-sim` is built in Release in the main checkout, and its worker check passes on a saved replay. The runner wasn't started: the game is closed and nothing is running, so the next run starts it fresh on this code (it restores paused). Every merged worktree is removed.
+2. **Continuous score and per-act hazards:** `npm run sts2:walls`, being built on branch `sts2-walls` (worktree `w9-walls`); merge it after review.
 3. **Offline fight benchmark** on the engine worker (Medium agents), with the logged boss and elite fights as its first set.
-4. **The v3.19 series** under a rule fixed before its first run (step 4 below, with the continuous score), shadow mode on (step 7), then the ascension ladder (step 8).
+4. **The v3.19 series**, under a rule fixed in this file before its first run. Proposal, to settle then: both arms (Strategist v3.19 and Jev v3.4) on ten new development seeds that no run has played (not JEV26 onward, which stay held out for the 9-of-10 test), alternating arms seed by seed, shadow mode on; judged on the difference in mean score with its bootstrap interval and on the per-act hazards, and the shadow-mode accuracy checked against the 100% bar before live engine forecasts (step 7). Then the ascension ladder (step 8).
 
 The items below are the plan as it stood on 2026-10-01; steps 1 to 5 are done or superseded by the order above.
 
