@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "sts2"],
       "port": 4317
+    },
+    {
+      "name": "btd6-dashboard",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "../JEVLAB~1", "run", "btd6:dashboard"],
+      "port": 4319
     }
   ]
 }
