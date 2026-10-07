@@ -4,7 +4,8 @@ import {computedFacts,currentMap,distinctRoutes,mapNodeKeys,eliteReadiness,FACTS
 import {STRATEGIST_INSTRUCTIONS,PLAN_SCHEMA,screenKey,replanReason,escalationReason,isOwnedScreen,eventNote,
  strategistBrief,requestStamp,stampPlan,constrainCandidates,strategyContext,deathCountdown,swapPending,swapClaim,eliteReadyConstraint} from './strategy.mjs';
 import {patternFor} from './movesets.mjs';
-import {cardSummary} from './card-stats.mjs';
+import {cardSummary,cardRuns} from './card-stats.mjs';
+import {seedBoundary,newBoundaryRecord,bound,fightRun} from './seed-boundary.mjs';
 import {currentEncounter,fightId,FIGHT_START_REASONS,planForRun,activeFightPlan} from './playbook.mjs';
 import {encounterResults,planNeedsReview} from './fight-results.mjs';
 import {unknownMechanics,mechanicsToAsk,mechanicText,presentNames,mechanicKey} from './mechanics.mjs';
@@ -61,6 +62,13 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   return {...await efficientDeliberate({state,candidates,ask,recent,onStage,facts,factsPolicy,resourceReviews}),...(eliteRule?{constraint:eliteRule.constraint}:{}),strategyEvents:events};
  }
  const {channel,status,playbook=null,glossary=null,movesets=null}=strategist;
+ // Seed boundary (seed-boundary.mjs): memory from other runs on this run's seed is skipped. runSeeds maps run
+ // ids to seeds; refreshSeeds (optional) re-reads them when this run's seed is not known yet.
+ if(strategist.refreshSeeds&&state.run?.live_id&&!strategist.runSeeds?.[state.run.live_id])await strategist.refreshSeeds();
+ const boundary=seedBoundary(strategist.runSeeds??{},state.run?.live_id);
+ const keepResult=boundary.active?f=>boundary.keep(f.run):null;
+ // A saved fight plan written on this seed by another run is not offered, used or reviewed here.
+ const savedPlan=entry=>entry&&boundary.check(entry.run)==='same'?null:entry;
  const cardStats=()=>strategist.cardStats??null;
  const fightResults=()=>strategist.fightResults??null;
  const mechanics=strategist.mechanics??null;
@@ -119,7 +127,10 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  const consult=async reason=>{
   const key=`${reason}:${screenKey(state)}`,current=await channel.current();
   if(current?.key!==key){
-   const fight=playbook&&encounter?await playbook.get(encounter):null;
+   // Counts of what the boundary removed (and of entries with no known seed), logged with the request.
+   const memoryBoundary=newBoundaryRecord(boundary);
+   const boundPlan=entry=>entry?bound(memoryBoundary,boundary,'plans',[entry],e=>e.run)[0]??null:null;
+   const fight=playbook&&encounter?boundPlan(await playbook.get(encounter)):null;
    // Route nodes go into the stamp only when the brief lists routes: a consult off the map
    // (the act's opening event) must not count as having seen this act's routes.
    const routes=distinctRoutes(map,position);
@@ -127,16 +138,21 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    const brief=strategistBrief(state,candidates,reason,status.plan,{routes,facts,goldUnclaimed,lastEvent:!state.event&&sameFloor?status.lastEvent:null});
    const runId=state.run?.live_id;
    if(encounter){brief.encounter=encounter;if(fight)brief.saved_fight_plan=planForRun(fight,runId);
-    else{const similar=playbook?await playbook.similar(encounter):null;if(similar)brief.similar_fight_plan=planForRun(similar,runId);}
+    else{const similar=playbook?boundPlan(await playbook.similar(encounter)):null;if(similar)brief.similar_fight_plan=planForRun(similar,runId);}
     // A plan given earlier in this fight by a mid-fight consult.
     const own=status.fightPlan?.fight_id===fightId(state)?status.fightPlan:null;
     if(own)brief.current_fight_plan={plan:own.plan,target_priority:own.target_priority,...(own.play_first?{play_first:own.play_first}:{}),source:own.source};
     // How this encounter went before (HP, rounds, win), marking fights played since the saved plan.
-    const results=fightResults()&&encounterResults(fightResults(),encounter,fight?.updatedAt??null);if(results)brief.encounter_results=results;}
+    if(fightResults()&&boundary.active)bound(memoryBoundary,boundary,'encounter_results',fightResults().encounters?.[encounter]??[],f=>f.run);
+    const results=fightResults()&&encounterResults(fightResults(),encounter,fight?.updatedAt??null,keepResult);if(results)brief.encounter_results=results;}
    // Intents each enemy showed round by round in recent fights (this one included).
-   if(movesets&&brief.enemies)for(const e of brief.enemies){const seen=patternFor(movesets,e.name);if(seen.length)e.seen_pattern=seen;}
+   if(movesets&&brief.enemies)for(const e of brief.enemies){
+    const entries=bound(memoryBoundary,boundary,'patterns',movesets[e.name]??[],x=>fightRun(x.fight));
+    const seen=patternFor(movesets,e.name,null,entries);if(seen.length)e.seen_pattern=seen;}
    // Earlier runs: how often an offered card was taken, played per fight afterwards, and run depth.
-   if(cardStats()&&['card_reward','shop','card_select'].includes(state.state_type))for(const o of brief.current_options??[]){const past=cardSummary(cardStats(),o.label);if(past)o.past_runs=past;}
+   if(cardStats()&&['card_reward','shop','card_select'].includes(state.state_type))for(const o of brief.current_options??[]){
+    if(boundary.active)bound(memoryBoundary,boundary,'card_stats',cardRuns(cardStats(),o.label),([id])=>id);
+    const past=cardSummary(cardStats(),o.label,boundary.active?boundary.keep:null);if(past)o.past_runs=past;}
    if(reason==='unknown_mechanic')brief.unknown_mechanics=unknownHere.map(([name,kind])=>({name,kind,text:mechanicText(state,name)}));
    // Descriptions for named cards and relics the options mention but do not explain.
    if(glossary)await glossary(brief);
@@ -156,7 +172,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
    status.requests++;
    // Logged when posted, with the brief the strategist is shown.
    await emit({kind:'strategy_request',reason,request_id:request.id,key,run_id:state.run?.live_id??null,state_type:state.state_type,
-    act:state.run?.act??null,floor:state.run?.floor??null,createdAt:request.createdAt,brief});
+    act:state.run?.act??null,floor:state.run?.floor??null,createdAt:request.createdAt,brief,memory_boundary:memoryBoundary});
   }
   // Claude strategy mode never falls back to Jev: play waits for the answer until
   // it arrives or the operator pauses (which cancels the decision).
@@ -173,7 +189,7 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
   // runner's own filters (actionsFor), and the game may allow other actions.
   if(isOwnedScreen(state)&&candidates.length===1&&status.ownScreens!==false)return direct('filtered',null,candidates[0]);
   // The plan from a consult during this fight, else the saved plan (play_first only from this run).
-  const fight=encounter?activeFightPlan(state,status,playbook?await playbook.get(encounter):null):null;
+  const fight=encounter?activeFightPlan(state,status,playbook?savedPlan(await playbook.get(encounter)):null):null;
   const {candidates:options,constraint:planned}=constrainCandidates(state,candidates,status.plan,status.mode,{fight,ownScreens:status.ownScreens!==false,screenChoices:status.screenChoices});
   // With the plan's route also applied, both are recorded as rules in order under the plan's kind.
   const constraint=!eliteRule?planned:!planned?eliteRule.constraint:{...planned,removed:eliteRule.constraint.removed+planned.removed,
@@ -224,8 +240,8 @@ export async function hierarchicalDeliberate({state,candidates,ask,recent={},onS
  // A saved plan that went badly since it was written (a loss, or a quarter of max HP lost on average)
  // is reviewed once per fight.
  if(!trigger&&state.state_type==='monster'&&playbook&&encounter&&!status.encountersAsked.includes(fightId(state))){
-  const saved=await playbook.get(encounter);
-  const next=!saved?'new_encounter':planNeedsReview(fightResults(),encounter,saved)?'review_encounter':null;
+  const saved=savedPlan(await playbook.get(encounter));
+  const next=!saved?'new_encounter':planNeedsReview(fightResults(),encounter,saved,keepResult)?'review_encounter':null;
   if(next){
    status.encountersAsked.push(fightId(state));
    if(status.encountersAsked.length>100)status.encountersAsked.shift();

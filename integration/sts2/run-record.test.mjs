@@ -113,7 +113,9 @@ test('enabled mods come from the newest profile settings.save, sorted, with no p
 
 test('the runner logs run_start once per run before its first decision, and start-run records the commit', async () => {
   const server = await readFile(join(root, 'vendor/jev-the-spire/spire-demo/server.mjs'), 'utf8');
-  const start = server.indexOf('await log(runStartRecord(');
+  // The record is built, its seed noted for the strategist's seed boundary, then logged.
+  const start = server.indexOf('const startRecord = runStartRecord(');
+  assert.ok(server.indexOf('await log(startRecord);', start) > start, 'the built record is logged');
   assert.ok(start > 0, 'server.mjs logs a run_start record');
   assert.ok(server.indexOf("kind: 'decision'", start) > start, 'run_start is logged before the decision record in step()');
   assert.match(server, /view\.runStartFor !== s\.run\.live_id/);

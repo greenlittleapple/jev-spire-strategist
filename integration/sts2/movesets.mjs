@@ -5,7 +5,9 @@ import {createReadStream} from 'node:fs';
 import {createInterface} from 'node:readline';
 
 const combat = new Set(['monster', 'elite', 'boss']);
-const FIGHTS_PER_ENEMY = 3, ROUNDS_PER_FIGHT = 12;
+// Up to FIGHTS_KEPT entries are kept per enemy so the seed boundary (seed-boundary.mjs) can skip some
+// and still show the latest FIGHTS_PER_ENEMY.
+const FIGHTS_PER_ENEMY = 3, FIGHTS_KEPT = 12, ROUNDS_PER_FIGHT = 12;
 
 export const intentSummary = intents => (intents ?? []).map(i => [i.type ?? i.title, i.label].filter(Boolean).join(' ')).filter(Boolean).join(' + ') || '?';
 
@@ -22,7 +24,7 @@ export function recordIntents(memory, state) {
   const n = e.entity_id ?? (seen.get(e.name) ?? 0) + 1; seen.set(e.name, (seen.get(e.name) ?? 0) + 1);
   const list = memory[e.name] ??= [];
   let entry = list.find(x => x.fight === fight && x.slot === n);
-  if (!entry) { entry = {fight, slot: n, moves: {}}; list.push(entry); if (list.length > FIGHTS_PER_ENEMY) list.shift(); }
+  if (!entry) { entry = {fight, slot: n, moves: {}}; list.push(entry); if (list.length > FIGHTS_KEPT) list.shift(); }
   if (entry.moves[round] || round > ROUNDS_PER_FIGHT) continue;
   entry.moves[round] = intentSummary(e.intents); changed = true;
  }
@@ -30,8 +32,9 @@ export function recordIntents(memory, state) {
 }
 
 // One line per recent fight, newest first: "r1 Debuff, r2 Attack 12, ...".
-export function patternFor(memory, name, currentFight = null) {
- return (memory[name] ?? []).filter(x => x.fight !== currentFight).slice().reverse()
+// entries: this enemy's entries to use (the seed boundary's kept ones), default all.
+export function patternFor(memory, name, currentFight = null, entries = memory[name] ?? []) {
+ return entries.filter(x => x.fight !== currentFight).slice(-FIGHTS_PER_ENEMY).reverse()
   .map(x => Object.entries(x.moves).sort(([a], [b]) => a - b).map(([r, m]) => `r${r} ${m}`).join(', '))
   .filter(Boolean);
 }

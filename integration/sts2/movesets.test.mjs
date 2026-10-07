@@ -13,12 +13,12 @@ test('intents are recorded once per round per fight and shown newest fight first
  assert.equal(intentSummary([{type:'Attack',label:'11'},{type:'Heal'}]),'Attack 11 + Heal');
 });
 
-test('same-name enemies in one fight are kept apart and only the last three fights are kept',()=>{
+test('same-name enemies in one fight are kept apart and only the last three fights are shown',()=>{
  const m={};
  recordIntents(m,state(5,1,[{name:'Bug',hp:5,intents:[{type:'Attack',label:'3'}]},{name:'Bug',hp:5,intents:[{type:'Buff'}]}]));
  assert.equal(patternFor(m,'Bug').length,2);
  for(const f of [6,7,8])recordIntents(m,state(f,1,[{name:'Bug',hp:5,intents:[{type:'Buff'}]}]));
- assert.equal(m.Bug.length,3);
+ assert.equal(patternFor(m,'Bug').length,3);
  assert.equal(recordIntents({},{...state(9,1,[]),battle:{round:1,turn:'enemy',enemies:[]}}),false,'enemy turns are not recorded');
 });
 

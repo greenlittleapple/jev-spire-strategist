@@ -9,7 +9,9 @@ import {encounterKey} from './playbook.mjs';
 const combat = new Set(['monster', 'elite', 'boss']);
 // Screens that mean the fight is over (won); in-fight choice screens (hand_select) are neutral.
 const after = new Set(['rewards', 'card_reward', 'map', 'event', 'rest_site', 'shop', 'treasure']);
-const RESULTS_PER_ENCOUNTER = 6;
+// Up to RESULTS_KEPT are kept so the seed boundary (seed-boundary.mjs) can skip some and still use
+// the latest RESULTS_PER_ENCOUNTER.
+const RESULTS_PER_ENCOUNTER = 6, RESULTS_KEPT = 24;
 
 export function newFightResults() { return {open: {}, encounters: {}}; }
 
@@ -20,7 +22,7 @@ const close = (memory, run, result, time) => {
  if (!f) return;
  const list = memory.encounters[f.key] ??= [];
  list.push({...f, ...result, time: time ?? f.time});
- if (list.length > RESULTS_PER_ENCOUNTER) list.shift();
+ if (list.length > RESULTS_KEPT) list.shift();
 };
 
 // Folds one observed state into the results. time: when the state was observed.
@@ -47,8 +49,10 @@ export function recordFight(memory, state, time = new Date().toISOString()) {
 
 // Recent results for one encounter, newest first, plus the average HP lost.
 // since: an ISO time; results from fights that ended later are marked after_plan.
-export function encounterResults(memory, key, since = null) {
- const list = (memory?.encounters?.[key] ?? []).slice().reverse();
+// keep(result): the seed boundary's filter (results carry their run), default all.
+const latest = (memory, key, keep) => (memory?.encounters?.[key] ?? []).filter(f => !keep || keep(f)).slice(-RESULTS_PER_ENCOUNTER);
+export function encounterResults(memory, key, since = null, keep = null) {
+ const list = latest(memory, key, keep).reverse();
  if (!list.length) return null;
  const lost = f => f.hp_start != null && f.hp_end != null ? Math.max(0, f.hp_start - f.hp_end) : null;
  const losses = list.map(lost).filter(n => n != null);
@@ -62,9 +66,9 @@ export function encounterResults(memory, key, since = null) {
 
 // True when the saved plan has been used since it was written and went badly:
 // a loss, or an average loss of at least a quarter of max HP.
-export function planNeedsReview(memory, key, plan) {
+export function planNeedsReview(memory, key, plan, keep = null) {
  if (!plan?.updatedAt) return false;
- const used = (memory?.encounters?.[key] ?? []).filter(f => f.time > plan.updatedAt);
+ const used = latest(memory, key, keep).filter(f => f.time > plan.updatedAt);
  if (!used.length) return false;
  if (used.some(f => !f.won)) return true;
  const share = used.map(f => f.max_hp ? Math.max(0, f.hp_start - f.hp_end) / f.max_hp : 0);

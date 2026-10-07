@@ -12,6 +12,7 @@ import {loadMovesets,recordIntents} from '../../../integration/sts2/movesets.mjs
 import {loadFightResults,recordFight} from '../../../integration/sts2/fight-results.mjs';
 import {fileMechanics} from '../../../integration/sts2/mechanics.mjs';
 import {loadCardStats} from '../../../integration/sts2/card-stats.mjs';
+import {loadRunSeeds,loadSeriesSeeds,recordRunSeed} from '../../../integration/sts2/seed-boundary.mjs';
 import {replayer} from '../../../integration/sts2/replay.mjs';
 import {addToHistory,loadHistory} from '../../../integration/sts2/strategy-history.mjs';
 import {fileChannel} from '../../../integration/sts2/strategy-channel.mjs';
@@ -82,7 +83,7 @@ const strategyAvailable=process.env.CLAUDE_STRATEGIST!=='off'&&!lunaEnabled&&!pl
 const strategyDir=process.env.STRATEGY_DIR??resolve(logDir,'../strategy');
 // Replay mode: .private/sts2/replay.json {source_run, target_run} (written by start-run --replay-from).
 const replaySource=replayer({configPath:resolve(logDir,'../replay.json'),runsDir:logDir});
-const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),mechanics:fileMechanics(strategyDir),glossary:makeGlossary(bridgeLookup(bridge),{notes:fileMechanics(strategyDir)}),movesets:{},
+const strategist=strategyAvailable?{channel:fileChannel(strategyDir),playbook:filePlaybook(strategyDir),mechanics:fileMechanics(strategyDir),glossary:makeGlossary(bridgeLookup(bridge),{notes:fileMechanics(strategyDir)}),movesets:{},runSeeds:{},
   status:{...newStrategyStatus({enabled:view.strategy?.enabled??false,mode:process.env.CLAUDE_PLAN_MODE??'constrained',
     threshold:Number(process.env.CLAUDE_ESCALATE_BELOW??0.35),waitMs:1000*Number(process.env.CLAUDE_WAIT_SECONDS??300)}),
    plan:view.strategy?.plan??null,requests:view.strategy?.requests??0,answers:view.strategy?.answers??0,timeouts:view.strategy?.timeouts??0,
@@ -98,6 +99,13 @@ if(strategist)loadMovesets(logFile).then(m=>{for(const [k,v] of Object.entries(m
 if(strategist)loadCardStats(logFile).then(c=>{strategist.cardStats=c;});
 // How each encounter went, shown with its saved plan and used to re-review plans that did badly.
 if(strategist)loadFightResults(logFile).then(r=>{strategist.fightResults=r;});
+// Each logged run's seed (series.jsonl and run_start records), for the strategist memory's seed boundary
+// (integration/sts2/seed-boundary.mjs). A run whose seed is not known yet re-reads series.jsonl, at most every 20 s.
+if(strategist){
+  loadRunSeeds(logFile).then(s=>{for(const [k,v] of Object.entries(s))strategist.runSeeds[k]??=v;});
+  let seedsReadAt=0;
+  strategist.refreshSeeds=async()=>{if(Date.now()-seedsReadAt<20000)return;seedsReadAt=Date.now();await loadSeriesSeeds(logFile,strategist.runSeeds);};
+}
 const DECISION_MODES=['jev','jev_facts','jev_facts_v3','claude'];
 view.decisionMode=DECISION_MODES.includes(view.decisionMode)?view.decisionMode:view.strategy?.enabled?'claude':'jev';
 if(view.decisionMode==='claude'&&!strategist)view.decisionMode='jev_facts';
@@ -289,11 +297,14 @@ async function step(token, preview = false) {
       // Two retries, so one slow greeting can't fail the pinned build check below.
       let bridgeInfo = null;
       for (let i = 0; i < 3 && !bridgeInfo; i++) bridgeInfo = await fetchBridgeVersion(bridge + '/');
-      await log(runStartRecord({state: s, git: labGitInfo, policy: currentPolicy(), decisionMode: view.decisionMode, model: JEV_MODEL,
+      const startRecord = runStartRecord({state: s, git: labGitInfo, policy: currentPolicy(), decisionMode: view.decisionMode, model: JEV_MODEL,
         bridge: bridgeInfo,
         content: {playbook: await fileSha256(resolve(strategyDir, 'playbook.json')), mechanics: await fileSha256(resolve(strategyDir, 'mechanics.json'))},
         caps: {maxDecisions: MAX_DECISIONS, maxInputTokens: MAX_INPUT_TOKENS}, mods: await enabledMods(),
-        save: checkpoint?.checkpoint?.run_id === s.run.live_id ? checkpoint.data : null}));
+        save: checkpoint?.checkpoint?.run_id === s.run.live_id ? checkpoint.data : null});
+      // The save's seed sets the strategist memory's seed boundary for this run.
+      if (strategist) recordRunSeed(strategist.runSeeds, startRecord);
+      await log(startRecord);
       if (token !== generation) return;
       // A run on another bridge build or game version pauses before its first decision (integration/sts2/pins.mjs);
       // resuming repeats the check and the run_start record.
