@@ -46,15 +46,17 @@ export const MOD_CARD_ISSUE = {id: 'character-mod-cards', label: 'A card from th
  fixed: "both mods were disabled in the game's mod settings on 2026-09-30"};
 
 // Strategist runs with memory beyond their brief. Until Strategist v3.17 the orchestrating session answered
-// strategy requests itself, run after run, with earlier runs in its context. From Strategist v3.4 (enemy move
-// patterns, past card picks and fight results in the brief) to before v3.19 (which skips earlier runs on the
-// current seed) the brief's cross-run inputs had no seed boundary, so a run on a seed an earlier logged run had
-// played could see that seed's fights. Both tags keep counting toward win rates.
+// strategy requests itself, run after run, with earlier runs in its context. From Strategist v3.1 (fight plans
+// saved per encounter by v3; from v3.4 also enemy move patterns, past card picks and fight results) to before
+// v3.19 (which skips earlier runs on the current seed) the strategist's cross-run inputs had no seed boundary,
+// so a run on a seed an earlier logged run had played could see that seed's fights or fight plans. Both tags
+// keep counting toward win rates.
 export const STRATEGIST_MEMORY_ISSUE = {id: 'strategist-memory', label: 'The strategist was the orchestrating session, which had earlier runs in its context.',
  fixed: 'from Strategist v3.17 each run gets a new strategist agent'};
-export const SAME_SEED_ISSUE = {id: 'same-seed-history', label: "The strategist's brief could show fights from an earlier run on the same seed.", fixed: '-'};
+export const SAME_SEED_ISSUE = {id: 'same-seed-history', label: "The strategist's inputs could show fights or fight plans from an earlier run on the same seed.",
+ fixed: "v3.19: the strategist's inputs from earlier runs (enemy move patterns, encounter results and the review check, card stats, saved fight plans) skip runs on the current seed; strategy_request events record what was removed"};
 export const MEMORY_ISSUES = [STRATEGIST_MEMORY_ISSUE, SAME_SEED_ISSUE];
-const FRESH_AGENT_FROM = [3, 17], SEED_HISTORY_FROM = [3, 4], SEED_BOUNDARY_FROM = [3, 19];
+const FRESH_AGENT_FROM = [3, 17], SEED_HISTORY_FROM = [3, 1], SEED_BOUNDARY_FROM = [3, 19];
 // A version name's number ("Strategist v3.17" -> [3, 17]) and an ordering of such numbers.
 export const versionNumber = name => /v(\d+(?:\.\d+)*)/.exec(name ?? '')?.[1].split('.').map(Number) ?? null;
 const before = (a, b) => { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] ?? 0) - (b[i] ?? 0); if (d) return d < 0; } return false; };
@@ -164,12 +166,15 @@ export function addRuns(data, scored) {
  return out;
 }
 
-// Issues the progress tool tags itself go into data.issues once a run names them. Mutates data.
+// Issues the progress tool tags itself go into data.issues once a run names them, and an entry already there
+// takes the tool's current label and fix text. Mutates data.
 export function addToolIssues(data) {
  const named = new Set(data.versions.flatMap(v => v.runs.flatMap(r => r.issues ?? [])));
  data.issues ??= [];
- for (const issue of [MOD_CARD_ISSUE, ...MEMORY_ISSUES])
-  if (named.has(issue.id) && !data.issues.some(i => i.id === issue.id)) data.issues.push({...issue});
+ for (const issue of [MOD_CARD_ISSUE, ...MEMORY_ISSUES]) {
+  const known = data.issues.find(i => i.id === issue.id);
+  if (known) Object.assign(known, issue); else if (named.has(issue.id)) data.issues.push({...issue});
+ }
 }
 
 // Every issue ID a run names must be in data.issues.

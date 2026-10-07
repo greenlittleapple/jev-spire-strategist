@@ -189,22 +189,25 @@ test('strategist-memory tags every claude-mode run before Strategist v3.17, and 
  assert.deepEqual(data.issues.map(i => i.id), ['crash', STRATEGIST_MEMORY_ISSUE.id]);
 });
 
-test('same-seed-history tags claude-mode runs from v3.4 to before v3.19 on a seed an earlier logged run played', () => {
+test('same-seed-history tags claude-mode runs from v3.1 to before v3.19 on a seed an earlier logged run played', () => {
  const run = (id, seed, mode) => ({run: id, seed, result: 'lost', floor: 17, ...(mode ? {mode} : {})});
  const data = {issues: [], versions: [
-  version('Strategist v3.3', 'claude-strategy-v3', 'claude', [run('1', 'JEV1')]),
-  version('Strategist v3.4', 'claude-strategy-v3', 'claude', [run('2', 'JEV1')]),
+  version('Strategist v3', 'claude-strategy-v3', 'claude', [run('1', 'JEV1')]),
+  version('Strategist v3.1', 'claude-strategy-v3', 'claude', [run('2', 'JEV1')]),
   version('Jev v3.2', 'jev-compact-v3.2', 'jev_facts_v3', [run('3', 'JEV21'), run('4', 'JEV21')]),
   version('Strategist v3.18', 'claude-strategy-v3', 'claude', [run('5', 'JEV21'), run('6', 'JEV22'), run('7', 'JEV21', 'jev_facts_v3')]),
   version('Strategist v3.19', 'claude-strategy-v3', 'claude', [run('8', 'JEV21')]),
  ]};
- // Start order: 1 (JEV1 v3.3, before any memory), 2, 3, 4, 5, 6, 7, 8; run 9 is a logged run on JEV22 that
+ // Start order: 1 (JEV1 v3, before the bound), 2, 3, 4, 5, 6, 7, 8; run 9 is a logged run on JEV22 that
  // started after run 6 and isn't listed, so it doesn't count as earlier.
  const seeds = {1: 'JEV1', 2: 'JEV1', 3: 'JEV21', 4: 'JEV21', 5: 'JEV21', 6: 'JEV22', 7: 'JEV21', 8: 'JEV21', 9: 'JEV22'};
  const scored = new Map(Object.entries(seeds).map(([id, seed]) => [id, scoredRun(id, {seed, started: `2026-09-30T0${id}:00:00Z`})]));
+ // An earlier JEV1 run (v2.1, say) doesn't tag v3, which is before the bound.
+ scored.set('x', scoredRun('x', {seed: 'JEV1', started: '2026-09-29T00:00:00Z'}));
  memoryIssues(data, scored);
  assert.deepEqual(data.versions.flatMap(v => v.runs.filter(r => r.issues).map(r => [r.run, r.issues])),
   [['1', ['strategist-memory']], ['2', ['strategist-memory', 'same-seed-history']], ['5', ['same-seed-history']]]);
+ scored.delete('x');
  // An earlier run on the seed, even one left out of the data, tags it; the tag is recomputed on each refresh.
  scored.set('0', scoredRun('0', {seed: 'JEV22', started: '2026-09-29T00:00:00Z'}));
  memoryIssues(data, scored);
@@ -214,4 +217,7 @@ test('same-seed-history tags claude-mode runs from v3.4 to before v3.19 on a see
  assert.deepEqual(data.versions.flatMap(v => v.runs.filter(r => r.issues?.includes(SAME_SEED_ISSUE.id)).map(r => r.run)), ['5']);
  addToolIssues(data);
  assert.deepEqual(data.issues.map(i => i.id), [STRATEGIST_MEMORY_ISSUE.id, SAME_SEED_ISSUE.id]);
+ // A stored entry takes the tool's current text.
+ data.issues[1].fixed = '-'; addToolIssues(data);
+ assert.deepEqual(data.issues[1], SAME_SEED_ISSUE);
 });
